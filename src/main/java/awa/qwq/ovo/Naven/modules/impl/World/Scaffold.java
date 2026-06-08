@@ -1,5 +1,6 @@
 package awa.qwq.ovo.Naven.modules.impl.World;
 
+import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventClick;
@@ -106,7 +107,7 @@ public class Scaffold extends Module {
            .getBooleanValue();
 
    public BooleanValue sneak = ValueBuilder.create(this, "Sneak")
-           .setDefaultBooleanValue(false)
+           .setDefaultBooleanValue(true)
            .build()
            .getBooleanValue();
 
@@ -122,6 +123,12 @@ public class Scaffold extends Module {
 
    public BooleanValue clutch = ValueBuilder.create(this, "Clutch")
            .setDefaultBooleanValue(true)
+           .build()
+           .getBooleanValue();
+
+   public BooleanValue multiPlace = ValueBuilder.create(this, "MultiPlace")
+           .setDefaultBooleanValue(false)
+           .setVisibility(() -> this.clutch.getCurrentValue())
            .build()
            .getBooleanValue();
 
@@ -155,7 +162,7 @@ public class Scaffold extends Module {
            .build()
            .getFloatValue();
 
-   public FloatValue clutchTicks = ValueBuilder.create(this, "Clutch Ticks")
+   public FloatValue clutchTicks = ValueBuilder.create(this, "Skip Ticks")
            .setDefaultFloatValue(3.0F)
            .setMinFloatValue(1.0F)
            .setMaxFloatValue(10.0F)
@@ -178,6 +185,8 @@ public class Scaffold extends Module {
    private int tellyStopTicks;
    private boolean useLastTellyMovementYaw;
    private int emergencySneakTicks;
+   private boolean ignoreJumpDuringSkipTick;
+   private int multiPlaceDepth;
    private final CopyOnWriteArrayList<RenderedBlock> renderedBlocks = new CopyOnWriteArrayList<>();
 
    @Override
@@ -201,11 +210,16 @@ public class Scaffold extends Module {
       this.tellyStopTicks = 0;
       this.useLastTellyMovementYaw = false;
       this.emergencySneakTicks = 0;
+      this.ignoreJumpDuringSkipTick = false;
+      this.multiPlaceDepth = 0;
       this.renderedBlocks.clear();
    }
 
    @Override
    public void onDisable() {
+      Naven.skipTasks.clear();
+      this.ignoreJumpDuringSkipTick = false;
+      this.multiPlaceDepth = 0;
       if (mc.player == null) {
          return;
       }
@@ -276,7 +290,7 @@ public class Scaffold extends Module {
          }
       }
 
-      boolean holdingJump = InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getDefaultKey().getValue());
+      boolean holdingJump = isJumpHeld();
       boolean moving = PlayerUtils.movementInput();
       boolean tellyStopActive;
       if (!this.mode.isCurrentMode("Telly Bridge")) {
@@ -391,7 +405,10 @@ public class Scaffold extends Module {
       if (hitCenter.subtract(mc.player.getEyePosition()).lengthSqr() > 20.25D) {
          return;
       }
+      boolean clutchDanger = this.clutch.getCurrentValue() && (!reachable || this.bigVelocityTick > 0) && this.rotateCount < 8;
+      boolean multiPlaceActive = clutchDanger && this.multiPlace.getCurrentValue();
       if (this.placeDelayTicks.getCurrentValue() > 0.0F
+              && !multiPlaceActive
               && this.lastPlaceGameTick >= 0L
               && mc.level.getGameTime() - this.lastPlaceGameTick < (long) this.placeDelayTicks.getCurrentValue()) {
          return;
@@ -400,51 +417,69 @@ public class Scaffold extends Module {
       Vector2f placeRotation = new Vector2f(RotationManager.rotations != null ? RotationManager.rotations.x : this.rots.x,
               RotationManager.rotations != null ? RotationManager.rotations.y : this.rots.y);
 
-      if (this.clutch.getCurrentValue() && (!reachable || this.bigVelocityTick > 0) && this.rotateCount < 8) {
+      boolean skippedTick = false;
+      if (clutchDanger) {
          if (this.placeCount >= 7 || isBlockUnder()) {
             reachable = true;
             this.rotateCount = 0;
             return;
          }
+         int skippedTicks = (int) this.clutchTicks.getCurrentValue();
+         if (!this.multiPlace.getCurrentValue() || this.multiPlaceDepth == 0) {
+            Naven.skipTasks.clear();
+         }
+         for (int i = 0; i < skippedTicks; ++i) {
+            Naven.skipTasks.offer(() -> {
+            });
+         }
          direction *= -1;
+         placeRotation.set(this.rots.x, this.rots.y);
          placeRotation.setX(placeRotation.getX() + 0.0001F * direction);
          ++this.placeCount;
          ++this.rotateCount;
+         skippedTick = true;
+         this.ignoreJumpDuringSkipTick = true;
+
       } else {
          this.rotateCount = 0;
          this.placeCount = 0;
       }
 
       InteractionHand hand = getPlaceHand();
-      if (hand == null) {
-         return;
-      }
-      HitResult hit = RayTraceUtils.rayCast(1.0F, placeRotation);
-      if (!(hit instanceof BlockHitResult blockHit) || hit.getType() != HitResult.Type.BLOCK || !blockHit.getBlockPos().equals(this.pos)) {
-         return;
-      }
+      if (hand != null) {
+         HitResult hit = RayTraceUtils.rayCast(1.0F, placeRotation);
+         if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK && blockHit.getBlockPos().equals(this.pos)) {
+            boolean holdingJump = isJumpHeld();
+            boolean invalidUpHit = blockHit.getDirection() == Direction.UP
+                    && !mc.player.onGround()
+                    && PlayerUtils.movementInput()
+                    && !holdingJump
+                    && !this.mode.isCurrentMode("Normal")
+                    && !skippedTick;
+            if (!invalidUpHit && mc.gameMode.useItemOn(mc.player, hand, blockHit) == InteractionResult.SUCCESS) {
+               this.lastPlaceGameTick = mc.level.getGameTime();
+               if (this.swing.getCurrentValue()) {
+                  mc.player.swing(hand);
+               } else {
+                  NetworkUtils.sendPacket(new ServerboundSwingPacket(hand));
+               }
 
-      boolean holdingJump = InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getDefaultKey().getValue());
-      if (blockHit.getDirection() == Direction.UP
-              && !mc.player.onGround()
-              && PlayerUtils.movementInput()
-              && !holdingJump
-              && !this.mode.isCurrentMode("Normal")) {
-         return;
-      }
-
-      if (mc.gameMode.useItemOn(mc.player, hand, blockHit) == InteractionResult.SUCCESS) {
-         this.lastPlaceGameTick = mc.level.getGameTime();
-         if (this.swing.getCurrentValue()) {
-            mc.player.swing(hand);
-         } else {
-            NetworkUtils.sendPacket(new ServerboundSwingPacket(hand));
+               BlockPos placedPos = blockHit.getBlockPos().relative(blockHit.getDirection());
+               this.renderedBlocks.add(new RenderedBlock(placedPos));
+               while (this.renderedBlocks.size() > 2) {
+                  this.renderedBlocks.remove(0);
+               }
+            }
          }
+      }
 
-         BlockPos placedPos = blockHit.getBlockPos().relative(blockHit.getDirection());
-         this.renderedBlocks.add(new RenderedBlock(placedPos));
-         while (this.renderedBlocks.size() > 2) {
-            this.renderedBlocks.remove(0);
+      if (skippedTick && this.multiPlace.getCurrentValue() && this.placeCount < 7) {
+         ++this.multiPlaceDepth;
+         try {
+            this.onTick(new EventRunTicks(EventType.PRE));
+            this.onClick(event);
+         } finally {
+            --this.multiPlaceDepth;
          }
       }
    }
@@ -662,13 +697,23 @@ public class Scaffold extends Module {
    }
 
    private boolean isTower() {
-      boolean holdingJump = InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getDefaultKey().getValue());
+      boolean holdingJump = isJumpHeld();
       return holdingJump
               && !this.useLastTellyMovementYaw
               && !mc.options.keyUp.isDown()
               && !mc.options.keyDown.isDown()
               && !mc.options.keyLeft.isDown()
               && !mc.options.keyRight.isDown();
+   }
+
+   private boolean isJumpHeld() {
+      if (this.ignoreJumpDuringSkipTick) {
+         if (!Naven.skipTasks.isEmpty()) {
+            return false;
+         }
+         this.ignoreJumpDuringSkipTick = false;
+      }
+      return InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getDefaultKey().getValue());
    }
 
    private float currentMovementYaw() {
