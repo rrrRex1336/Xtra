@@ -1,0 +1,33 @@
+package awa.qwq.ovo.Naven.files.impl;
+
+import awa.qwq.ovo.Naven.files.ClientFile;
+import awa.qwq.ovo.Naven.ui.ClickGUI;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+
+public class DPositionFile extends ClientFile {
+    public DPositionFile() {
+        super("dragpos.cfg");
+    }
+
+    @Override
+    public void read(BufferedReader reader) throws IOException {
+        try {
+            ClickGUI.windowX = (float)Integer.parseInt(reader.readLine());
+            ClickGUI.windowY = (float)Integer.parseInt(reader.readLine());
+            ClickGUI.windowWidth = (float)Integer.parseInt(reader.readLine());
+            ClickGUI.windowHeight = (float)Integer.parseInt(reader.readLine());
+        } catch (Exception var3) {
+        }
+    }
+
+    @Override
+    public void save(BufferedWriter writer) throws IOException {
+        writer.write((int)ClickGUI.windowX + "\n");
+        writer.write((int)ClickGUI.windowY + "\n");
+        writer.write((int)ClickGUI.windowWidth + "\n");
+        writer.write((int)ClickGUI.windowHeight + "\n");
+    }
+}

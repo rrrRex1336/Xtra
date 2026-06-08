@@ -1,0 +1,314 @@
+package awa.qwq.ovo.Naven.ui.Island;
+
+import awa.qwq.ovo.Naven.Naven;
+import awa.qwq.ovo.Naven.auth.VerifyClient;
+import awa.qwq.ovo.Naven.modules.impl.Visual.Island;
+import awa.qwq.ovo.Naven.utils.FontIcons;
+import awa.qwq.ovo.Naven.utils.RenderUtils;
+import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
+import awa.qwq.ovo.Naven.utils.StencilUtils;
+import awa.qwq.ovo.Naven.utils.renderer.Fonts;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.multiplayer.ServerData;
+import org.apache.commons.lang3.StringUtils;
+
+import java.awt.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+public class IslandManager {
+    protected static final Minecraft mc = Minecraft.getInstance();
+
+    private static final Color CLIENT_NAME_COLOR = new Color(150, 45, 45, 255);
+    private static final Color PING_COLOR = new Color(50, 200, 50, 255);
+    private static final Color WHITE_COLOR = new Color(255, 255, 255, 255);
+
+    protected static final SmoothAnimationTimer animW = new SmoothAnimationTimer(
+            Fonts.opensans.getWidth(Naven.CLIENT_DISPLAY_NAME + " | Shiroko | 999ms to mc.hypixel.net | 999 FPS", 0.4f) + 30,
+            0.2f
+    );
+
+    protected static final SmoothAnimationTimer animH = new SmoothAnimationTimer(
+            (float) Fonts.opensans.getHeight(false, 0.4f) + 10,
+            0.2f
+    );
+
+    private final SmoothAnimationTimer posX = new SmoothAnimationTimer(0, 0.2f);
+    private final SmoothAnimationTimer posY = new SmoothAnimationTimer(0, 0.2f);
+
+    private final List<IslandContent> contents = new ArrayList<>();
+
+    public IslandManager() {
+    }
+
+    private float[] getOffsets() {
+        try {
+            Island islandModule =
+                    (Island) Naven.getInstance()
+                            .getModuleManager().getModule(Island.class);
+            if (islandModule != null) {
+                return new float[]{
+                        islandModule.xOffset.getCurrentValue(),
+                        islandModule.yOffset.getCurrentValue()
+                };
+            }
+        } catch (Exception ignored) {
+        }
+        return new float[]{0.0f, 0.0f};
+    }
+
+    public void addContent(IslandContent content) {
+        this.contents.add(content);
+    }
+
+    public void removeContent(IslandContent content) {
+        this.contents.remove(content);
+    }
+
+    private IslandContent getActiveContent() {
+        return contents.stream()
+                .filter(IslandContent::shouldDisplay)
+                .max(Comparator.comparingInt(IslandContent::getPriority))
+                .orElse(null);
+    }
+
+    private float[] getActiveDimensions() {
+        IslandContent activeContent = getActiveContent();
+
+        if (activeContent != null) {
+            return new float[]{activeContent.getWidth(), activeContent.getHeight()};
+        } else {
+            String username = "Shiroko";
+            try {
+                String verifiedName = VerifyClient.getUserName();
+                if (verifiedName != null && !verifiedName.isEmpty() && !verifiedName.equals("Shiroko")) {
+                    username = verifiedName;
+                }
+            } catch (Exception ex) {
+            }
+            String fpsText = StringUtils.split(mc.fpsString, " ")[0] + " FPS";
+            String serverIP = getCurrentServerIP();
+            String latencyText = getPingText();
+
+            String clientIcon = FontIcons.CLIENT;
+            String userIcon = FontIcons.PLER;
+            String connectIcon = FontIcons.CONNECT;
+
+            float fontSize = 0.4f;
+            float iconFontSize = 0.45f;
+
+            float totalWidth =
+                    Fonts.icons.getWidth(clientIcon, iconFontSize) +
+                            Fonts.opensans.getWidth(" ", fontSize) +
+                            Fonts.opensans.getWidth(Naven.CLIENT_DISPLAY_NAME, fontSize) +
+                            Fonts.opensans.getWidth(" · ", fontSize) +
+                            Fonts.icons.getWidth(userIcon, iconFontSize) +
+                            Fonts.opensans.getWidth(" ", fontSize) +
+                            Fonts.opensans.getWidth(username, fontSize) +
+                            Fonts.opensans.getWidth(" · ", fontSize) +
+                            Fonts.icons.getWidth(connectIcon, iconFontSize) +
+                            Fonts.opensans.getWidth(" ", fontSize) +
+                            Fonts.opensans.getWidth(latencyText, fontSize) +
+                            Fonts.opensans.getWidth(" to ", fontSize) +
+                            Fonts.opensans.getWidth(serverIP, fontSize) +
+                            Fonts.opensans.getWidth(" · ", fontSize) +
+                            Fonts.opensans.getWidth(fpsText, fontSize);
+
+            return new float[]{
+                    totalWidth + 40,
+                    (float) Fonts.opensans.getHeight(false, fontSize) + 10
+            };
+        }
+    }
+
+    public void renderShader(GuiGraphics graphics) {
+        IslandContent activeContent = getActiveContent();
+        if (activeContent == null) {
+            RenderUtils.drawRoundedRect(graphics.pose(), posX.value, posY.value, animW.value, animH.value, 10, new Color(0, 0, 0, 160).getRGB()); // 从8增加到12
+        } else {
+            RenderUtils.drawRoundedRect(graphics.pose(), posX.value, posY.value, animW.value, animH.value, 10, new Color(0, 0, 0, 160).getRGB()); // 从8增加到12
+        }
+    }
+
+    public void render(GuiGraphics graphics) {
+        int screenWidth = mc.getWindow().getGuiScaledWidth();
+        int screenHeight = mc.getWindow().getGuiScaledHeight();
+
+        float[] dimensions = getActiveDimensions();
+        float targetWidth = dimensions[0];
+        float targetHeight = dimensions[1];
+
+        animW.target = targetWidth;
+        animH.target = targetHeight;
+        animW.update(true);
+        animH.update(true);
+
+        float[] offsets = getOffsets();
+        float xOffset = offsets[0];
+        float yOffset = offsets[1];
+
+        float baseX = (screenWidth - animW.value) / 2.0f;
+        float baseY = screenHeight * 0.05f;
+
+        float x = baseX + xOffset;
+        float y = baseY + yOffset;
+
+        posX.target = x;
+        posY.target = y;
+        posX.speed = 0.9f;
+        posY.speed = 0.9f;
+        posX.update(true);
+        posY.update(true);
+
+        IslandContent activeContent = getActiveContent();
+
+        StencilUtils.write(false);
+        RenderUtils.drawRoundedRect(graphics.pose(), posX.value, posY.value, animW.value, animH.value, 10, 0xFFFFFFFF); // 从8增加到12
+        StencilUtils.erase(true);
+        RenderUtils.drawRoundedRect(graphics.pose(), posX.value, posY.value, animW.value, animH.value, 10, new Color(20, 20, 20, 160).getRGB()); // 从8增加到12
+
+        if (activeContent != null) {
+            activeContent.render(graphics, graphics.pose(), posX.value, posY.value);
+        } else {
+            renderDefaultContent(graphics.pose());
+        }
+
+        StencilUtils.dispose();
+    }
+
+    public String getCurrentServerIP() {
+        ServerData serverData = Minecraft.getInstance().getCurrentServer();
+        if (serverData != null) {
+            return serverData.ip;
+        }
+        return "SinglePlayer";
+    }
+
+    private String getPingText() {
+        if (mc.player == null || mc.player.connection == null) {
+            return "0ms";
+        }
+
+        try {
+            var playerList = mc.player.connection.getListedOnlinePlayers();
+            for (var playerInfo : playerList) {
+                if (playerInfo.getProfile().getId().equals(mc.player.getUUID())) {
+                    int ping = playerInfo.getLatency();
+                    if (ping < 0) {
+                        return "0ms";
+                    }
+                    return ping + "ms";
+                }
+            }
+        } catch (Exception e) {
+        }
+
+        return "0ms";
+    }
+
+    private void renderDefaultContent(PoseStack stack) {
+        String username = "Shiroko";
+        try {
+            String verifiedName = VerifyClient.getUserName();
+            if (verifiedName != null && !verifiedName.isEmpty() && !verifiedName.equals("Shiroko")) {
+                username = verifiedName;
+            }
+        } catch (Exception e) {
+        }
+
+        String fpsText = StringUtils.split(mc.fpsString, " ")[0] + " FPS";
+        String serverIP = getCurrentServerIP();
+        String latencyText = getPingText();
+
+        String clientIcon = FontIcons.CLIENT;
+        String userIcon = FontIcons.PLER;
+        String connectIcon = FontIcons.CONNECT;
+
+        float fontSize = 0.4f;
+        float iconFontSize = 0.45f;
+        float textHeight = (float) Fonts.opensans.getHeight(false, fontSize);
+        float iconHeight = (float) Fonts.icons.getHeight(false, iconFontSize);
+        float y = getPosY() + (animH.value - textHeight) / 2.0f;
+        float iconY = getPosY() + (animH.value - iconHeight) / 2.0f;
+
+        float totalWidth =
+                Fonts.icons.getWidth(clientIcon, iconFontSize) + Fonts.opensans.getWidth(" ", fontSize) +
+                        Fonts.opensans.getWidth(Naven.CLIENT_DISPLAY_NAME, fontSize) +
+                        Fonts.opensans.getWidth(" · ", fontSize) +
+                        Fonts.icons.getWidth(userIcon, iconFontSize) + Fonts.opensans.getWidth(" ", fontSize) +
+                        Fonts.opensans.getWidth(username, fontSize) +  // 使用动态用户名
+                        Fonts.opensans.getWidth(" · ", fontSize) +
+                        Fonts.icons.getWidth(connectIcon, iconFontSize) + Fonts.opensans.getWidth(" ", fontSize) +
+                        Fonts.opensans.getWidth(latencyText, fontSize) +
+                        Fonts.opensans.getWidth(" to ", fontSize) +
+                        Fonts.opensans.getWidth(serverIP, fontSize) +
+                        Fonts.opensans.getWidth(" · ", fontSize) +
+                        Fonts.opensans.getWidth(fpsText, fontSize);
+
+        float startX = getPosX() + (animW.value - totalWidth) / 2.0f;
+        float currentX = startX;
+
+        Fonts.icons.render(stack, clientIcon, currentX, iconY, CLIENT_NAME_COLOR, true, iconFontSize);
+        currentX += Fonts.icons.getWidth(clientIcon, iconFontSize);
+
+        Fonts.opensans.render(stack, " ", currentX, y, CLIENT_NAME_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(" ", fontSize);
+
+        Fonts.opensans.render(stack, Naven.CLIENT_DISPLAY_NAME, currentX, y, CLIENT_NAME_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(Naven.CLIENT_DISPLAY_NAME, fontSize);
+
+        Fonts.opensans.render(stack, " · ", currentX, y, WHITE_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(" · ", fontSize);
+
+        Fonts.icons.render(stack, userIcon, currentX, iconY, WHITE_COLOR, true, iconFontSize);
+        currentX += Fonts.icons.getWidth(userIcon, iconFontSize);
+
+        Fonts.opensans.render(stack, " ", currentX, y, WHITE_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(" ", fontSize);
+
+        Fonts.opensans.render(stack, username, currentX, y, WHITE_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(username, fontSize);
+
+        Fonts.opensans.render(stack, " · ", currentX, y, WHITE_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(" · ", fontSize);
+
+        Fonts.icons.render(stack, connectIcon, currentX, iconY, PING_COLOR, true, iconFontSize);
+        currentX += Fonts.icons.getWidth(connectIcon, iconFontSize);
+
+        Fonts.opensans.render(stack, " ", currentX, y, PING_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(" ", fontSize);
+
+        Fonts.opensans.render(stack, latencyText, currentX, y, PING_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(latencyText, fontSize);
+
+        Fonts.opensans.render(stack, " to ", currentX, y, WHITE_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(" to ", fontSize);
+
+        Fonts.opensans.render(stack, serverIP, currentX, y, WHITE_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(serverIP, fontSize);
+
+        Fonts.opensans.render(stack, " · ", currentX, y, WHITE_COLOR, true, fontSize);
+        currentX += Fonts.opensans.getWidth(" · ", fontSize);
+
+        Fonts.opensans.render(stack, fpsText, currentX, y, WHITE_COLOR, true, fontSize);
+    }
+
+    public float getPosX() {
+        return posX.value;
+    }
+
+    public float getPosY() {
+        return posY.value;
+    }
+
+    public static SmoothAnimationTimer getAnimW() {
+        return animW;
+    }
+
+    public static SmoothAnimationTimer getAnimH() {
+        return animH;
+    }
+}
