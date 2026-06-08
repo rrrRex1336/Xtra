@@ -67,7 +67,9 @@ public class RotationManager {
          active = true;
 
          if (autoMLG.isEnabled() && autoMLG.rotation) {
-            if (autoMLG.above != null && autoMLG.isCollectingWater()) {
+            if (autoMLG.getTargetRotation() != null) {
+               setRotations(autoMLG.getTargetRotation());
+            } else if (autoMLG.above != null && autoMLG.isCollectingWater()) {
                Vector2f lookAtRotation = autoMLG.calculateLookAt(autoMLG.above);
                setRotations(lookAtRotation);
             } else {
