@@ -20,8 +20,8 @@
 
 ## 📦 运行环境
 
-* **Minecraft**：1.20.1
-* **Mod Loader**：Fabric Loader 0.14+
+* **Minecraft**：1.20.4
+* **Mod Loader**：Fabric Loader 0.19.2
 * **Fabric API**：必须安装
 * **Java**：17+
 * **内存**：建议 4GB+
@@ -36,24 +36,6 @@
 2. 安装 Fabric Loader
 3. 安装 Fabric API
 
----
-
-### 构建步骤
-
-```bash
-# 克隆项目
-git clone https://github.com/FireFlyDeveloper54/Naven-Modern.git
-cd Naven-Modern
-
-# 构建项目
-./gradlew build
-```
-
-构建完成后，模组文件将位于：
-
-```
-build/libs/
-```
 
 ---
 
@@ -137,63 +119,7 @@ src/main/java/
 1. 在对应分类目录创建模块类
 2. 继承 `Module` 类并添加注解
 3. 注册至 `ModuleManager`
-
 ---
-
-## ⚖️ 许可证（GPL-3.0 强保护声明）
-
-本项目采用 **GNU General Public License v3.0 (GPL-3.0)**。
-
-根据 GPL-3.0 规定：
-
-### ✅ 允许
-
-* 使用
-* 修改
-* 分发
-* 商业用途（前提是遵守 GPL）
-
----
-
-### ❗ 强制要求（必须遵守）
-
-1. **强制开源**
-
-   * 任何分发的修改版本，必须公开完整源代码。
-   * 必须继续使用 GPL-3.0 协议。
-
-2. **必须署名原作者**
-
-   * 不得删除或修改原作者版权声明。
-   * 修改版本必须注明“基于 Naven-Modern Fabric 修改”。
-   * 必须保留原项目来源说明。
-
-3. **禁止闭源发布**
-
-   * 不得以闭源形式发布或分发本项目或其衍生版本。
-
-4. **禁止篡改协议**
-
-   * 不得将本项目改为 MIT、Apache 等更宽松协议。
-   * 不得移除 GPL 许可证文件。
-
----
-
-### ⚠️ 关于商业销售
-
-GPL-3.0 允许销售软件副本，但：
-
-* 必须同时提供完整源代码
-* 必须保留 GPL 协议
-* 必须保留原作者署名
-
-若违反以上条款，将构成侵权行为。
-
-协议全文：
-https://www.gnu.org/licenses/gpl-3.0.html
-
----
-
 ## ⚠️ 免责声明
 
 本模组仅供学习与研究目的使用。
