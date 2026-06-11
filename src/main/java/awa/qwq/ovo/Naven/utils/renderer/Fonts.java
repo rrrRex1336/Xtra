@@ -22,7 +22,7 @@ public class Fonts {
       harmony = new CustomTextRenderer("harmony", 32, 0, 65535, 16384);
       icons = new CustomTextRenderer("icon", 32, 59648, 59658, 512);
       edit_icons = new CustomTextRenderer("edit_icons", 32, 59648, 59659, 512);
-      misans = new CustomTextRenderer("misans", 18, 0, 255, 512);
+      misans = new CustomTextRenderer("misans", 18, 0, 10003, 4096);
       axiforma_regular = new CustomTextRenderer("axiforma_regular", 32, 0, 65535, 16384);
 
    }
