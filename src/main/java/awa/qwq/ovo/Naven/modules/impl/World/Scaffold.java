@@ -14,13 +14,7 @@ import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.modules.impl.Player.AutoMLG;
-import awa.qwq.ovo.Naven.utils.InventoryUtils;
-import awa.qwq.ovo.Naven.utils.MathHelper;
-import awa.qwq.ovo.Naven.utils.NetworkUtils;
-import awa.qwq.ovo.Naven.utils.PlayerUtils;
-import awa.qwq.ovo.Naven.utils.RayTraceUtils;
-import awa.qwq.ovo.Naven.utils.RenderUtils;
-import awa.qwq.ovo.Naven.utils.Vector2f;
+import awa.qwq.ovo.Naven.utils.*;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
@@ -77,6 +71,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
         category = Category.WORLD
 )
 public class Scaffold extends Module {
+   private static final double SKIP_TICK_PLACE_RANGE = 4.5D;
+   private static final double SKIP_TICK_PLACE_RANGE_SQR = SKIP_TICK_PLACE_RANGE * SKIP_TICK_PLACE_RANGE;
+   private static final double SKIP_TICK_CENTER_RANGE_SQR = 25.0D;
+
    public static final List<Block> blacklistedBlocks = Arrays.asList(
            Blocks.AIR, Blocks.WATER, Blocks.LAVA, Blocks.ENCHANTING_TABLE, Blocks.GLASS_PANE, Blocks.IRON_BARS,
            Blocks.SNOW, Blocks.COAL_ORE, Blocks.DIAMOND_ORE, Blocks.EMERALD_ORE, Blocks.CHEST, Blocks.TRAPPED_CHEST,
@@ -171,6 +169,12 @@ public class Scaffold extends Module {
            .build()
            .getFloatValue();
 
+   public ModeValue rotationMode = ValueBuilder.create(this, "Rotation Mode")
+           .setDefaultModeIndex(1)
+           .setModes("Keybind Yaw", "Strict")
+           .build()
+           .getModeValue();
+
    private int oldSlot;
    private BlockPos pos;
    private int lastSneakTicks;
@@ -194,7 +198,6 @@ public class Scaffold extends Module {
       if (mc.player == null) {
          return;
       }
-      setSuffix(this.mode.getCurrentMode());
       this.oldSlot = mc.player.getInventory().selected;
       this.rots.set(mc.player.getYRot(), mc.player.getXRot());
       this.lastRots.set(mc.player.yRotO, mc.player.xRotO);
@@ -202,7 +205,7 @@ public class Scaffold extends Module {
       this.bigVelocityTick = 0;
       this.rotateCount = 0;
       this.placeCount = 0;
-      reachable = true;
+      this.reachable = true;
       this.jumpKeyHeld = false;
       this.lastSneakTicks = 0;
       this.lastPlaceGameTick = -1L;
@@ -240,12 +243,10 @@ public class Scaffold extends Module {
 
    @EventTarget
    public void onPacket(EventPacket event) {
-      if (event.getType() == EventType.RECEIVE
-              && event.getPacket() instanceof ClientboundSetEntityMotionPacket velocity
-              && mc.player != null
-              && velocity.getId() == mc.player.getId()) {
+      if (event.getType() == EventType.RECEIVE && event.getPacket() instanceof ClientboundSetEntityMotionPacket velocity && mc.player != null && velocity.getId() == mc.player.getId()) {
          double strength = new Vec3(velocity.getXa() / 8000.0D, 0.0D, velocity.getZa() / 8000.0D).lengthSqr();
          if (strength >= 1.5D) {
+            ChatUtils.addChatMessage("你也是要飞了 " + strength);
             this.bigVelocityTick = 60;
          }
       }
@@ -259,7 +260,7 @@ public class Scaffold extends Module {
    }
 
    @EventTarget(1)
-   public void onTick(EventRunTicks event) {
+   public void onPreRunTick(EventRunTicks event) {
       if (mc.player == null || mc.level == null || mc.gameMode == null) {
          return;
       }
@@ -277,8 +278,6 @@ public class Scaffold extends Module {
       if (mc.screen != null) {
          return;
       }
-
-      setSuffix(this.mode.getCurrentMode());
 
       AutoMLG autoMLG = AutoMLG.INSTANCE;
       boolean mlgActive = autoMLG != null && autoMLG.isEnabled() && autoMLG.isMLGActive();
@@ -303,9 +302,7 @@ public class Scaffold extends Module {
          this.useLastTellyMovementYaw = false;
          tellyStopActive = false;
       } else {
-         tellyStopActive = holdingJump
-                 && this.tellyStopTicks > 0
-                 && (isOnBlockEdge(0.3F) || !isBlockUnder() || !mc.player.onGround());
+         tellyStopActive = holdingJump && this.tellyStopTicks > 0 && (isOnBlockEdge(0.3F) || !isBlockUnder() || !mc.player.onGround());
          this.useLastTellyMovementYaw = tellyStopActive;
          if (this.tellyStopTicks > 0) {
             --this.tellyStopTicks;
@@ -322,7 +319,6 @@ public class Scaffold extends Module {
             this.rots.setY(RotationUtils.rotateToPitch(this.rotationSpeed.getCurrentValue(), this.rots.getY(), this.correctRotation.getY()));
          }
       }
-
       this.jumpKeyHeld = holdingJump || tellyStopActive;
 
       if (this.sneak.getCurrentValue()) {
@@ -347,9 +343,7 @@ public class Scaffold extends Module {
          Vec3 motion = mc.player.getDeltaMovement();
          double factor = mc.player.onGround() ? 0.12D : 0.35D;
          mc.player.setDeltaMovement(motion.x * factor, motion.y, motion.z * factor);
-      } else if (this.emergencySneakTicks > 0
-              && --this.emergencySneakTicks == 0
-              && !(this.sneak.getCurrentValue() && this.lastSneakTicks >= 18 && this.lastSneakTicks < 21)) {
+      } else if (this.emergencySneakTicks > 0 && --this.emergencySneakTicks == 0 && !(this.sneak.getCurrentValue() && this.lastSneakTicks >= 18 && this.lastSneakTicks < 21)) {
          mc.options.keyShift.setDown(InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyShift.getDefaultKey().getValue()));
       }
 
@@ -401,25 +395,21 @@ public class Scaffold extends Module {
          }
       }
 
+      boolean clutchDanger = this.clutch.getCurrentValue() && (!reachable || this.bigVelocityTick > 0) && this.rotateCount < 8;
       Vec3 hitCenter = new Vec3(this.pos.getX() + 0.5D, this.pos.getY(), this.pos.getZ() + 0.5D);
-      if (hitCenter.subtract(mc.player.getEyePosition()).lengthSqr() > 20.25D) {
+      if (hitCenter.subtract(mc.player.getEyePosition()).lengthSqr() > (clutchDanger ? SKIP_TICK_CENTER_RANGE_SQR : 20.25D)) {
          return;
       }
-      boolean clutchDanger = this.clutch.getCurrentValue() && (!reachable || this.bigVelocityTick > 0) && this.rotateCount < 8;
       boolean multiPlaceActive = clutchDanger && this.multiPlace.getCurrentValue();
-      if (this.placeDelayTicks.getCurrentValue() > 0.0F
-              && !multiPlaceActive
-              && this.lastPlaceGameTick >= 0L
-              && mc.level.getGameTime() - this.lastPlaceGameTick < (long) this.placeDelayTicks.getCurrentValue()) {
+      if (this.placeDelayTicks.getCurrentValue() > 0.0F && !multiPlaceActive && this.lastPlaceGameTick >= 0L && mc.level.getGameTime() - this.lastPlaceGameTick < (long) this.placeDelayTicks.getCurrentValue()) {
          return;
       }
 
-      Vector2f placeRotation = new Vector2f(RotationManager.rotations != null ? RotationManager.rotations.x : this.rots.x,
-              RotationManager.rotations != null ? RotationManager.rotations.y : this.rots.y);
+      Vector2f placeRotation = new Vector2f(RotationManager.rotations != null ? RotationManager.rotations.x : this.rots.x, RotationManager.rotations != null ? RotationManager.rotations.y : this.rots.y);
 
       boolean skippedTick = false;
       if (clutchDanger) {
-         if (this.placeCount >= 7 || isBlockUnder()) {
+         if (this.placeCount >= 7 || bigVelocityTick >= 60 || isBlockUnder()) {
             reachable = true;
             this.rotateCount = 0;
             return;
@@ -434,29 +424,25 @@ public class Scaffold extends Module {
          }
          direction *= -1;
          placeRotation.set(this.rots.x, this.rots.y);
-         placeRotation.setX(placeRotation.getX() + 0.0001F * direction);
+         placeRotation.setX(placeRotation.getX() + 0.0002F * direction);
          ++this.placeCount;
          ++this.rotateCount;
          skippedTick = true;
          this.ignoreJumpDuringSkipTick = true;
-
       } else {
          this.rotateCount = 0;
          this.placeCount = 0;
       }
 
       InteractionHand hand = getPlaceHand();
+      boolean placed = false;
       if (hand != null) {
-         HitResult hit = RayTraceUtils.rayCast(1.0F, placeRotation);
+         HitResult hit = skippedTick ? RayTraceUtils.rayCast(SKIP_TICK_PLACE_RANGE, 1.0F, true, placeRotation) : RayTraceUtils.rayCast(1.0F, placeRotation);
          if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK && blockHit.getBlockPos().equals(this.pos)) {
             boolean holdingJump = isJumpHeld();
-            boolean invalidUpHit = blockHit.getDirection() == Direction.UP
-                    && !mc.player.onGround()
-                    && PlayerUtils.movementInput()
-                    && !holdingJump
-                    && !this.mode.isCurrentMode("Normal")
-                    && !skippedTick;
+            boolean invalidUpHit = blockHit.getDirection() == Direction.UP && !mc.player.onGround() && PlayerUtils.movementInput() && !holdingJump && !this.mode.isCurrentMode("Normal") && !skippedTick;
             if (!invalidUpHit && mc.gameMode.useItemOn(mc.player, hand, blockHit) == InteractionResult.SUCCESS) {
+               placed = true;
                this.lastPlaceGameTick = mc.level.getGameTime();
                if (this.swing.getCurrentValue()) {
                   mc.player.swing(hand);
@@ -472,11 +458,10 @@ public class Scaffold extends Module {
             }
          }
       }
-
-      if (skippedTick && this.multiPlace.getCurrentValue() && this.placeCount < 7) {
+      if (skippedTick && placed && this.multiPlace.getCurrentValue() && this.placeCount < 7 || bigVelocityTick >= 60) {
          ++this.multiPlaceDepth;
          try {
-            this.onTick(new EventRunTicks(EventType.PRE));
+            this.onPreRunTick(new EventRunTicks(EventType.PRE));
             this.onClick(event);
          } finally {
             --this.multiPlaceDepth;
@@ -503,10 +488,7 @@ public class Scaffold extends Module {
       for (RenderedBlock block : this.renderedBlocks) {
          AABB box = new AABB(block.position).inflate(0.002D);
          float alpha = block.getAlpha();
-         Color color = new Color(255, 0, 0);
-
-         RenderSystem.setShaderColor(color.getRed() / 255.0F, color.getGreen() / 255.0F, color.getBlue() / 255.0F, alpha * 0.45F);
-         RenderUtils.drawSolidBox(box, poseStack);
+         Color color = new Color(67, 87, 227);
          RenderSystem.setShaderColor(color.getRed() / 255.0F, color.getGreen() / 255.0F, color.getBlue() / 255.0F, alpha);
          RenderUtils.drawOutlineBox(box, poseStack);
       }
@@ -523,9 +505,17 @@ public class Scaffold extends Module {
          return new Vector2f(mc.player.getYRot() - 180.0F, 90.0F);
       }
 
-      float yaw = (this.mode.isCurrentMode("Telly Bridge") && this.useLastTellyMovementYaw ? this.lastMovementYaw : currentMovementYaw()) - 180.0F;
+      float yaw;
+
+      if (rotationMode.isCurrentMode("Keybind Yaw")) {
+         yaw = (this.mode.isCurrentMode("Telly Bridge") && this.useLastTellyMovementYaw ? this.lastMovementYaw : currentMovementYaw()) - 180.0F;
+      } else {
+         yaw = RotationUtils.getRotations(new Vec3(this.pos.getX() + 0.5, this.pos.getY() + 0.5, this.pos.getZ() + 0.5)).x;
+      }
+
       yaw += (float) (Math.random() * 0.5D - 0.25D);
       Vector2f rotations = new Vector2f(yaw, 82.0F);
+
       if (!shouldBuild() || isHitValid(RayTraceUtils.rayCast(1.0F, rotations))) {
          return rotations;
       }
@@ -543,7 +533,7 @@ public class Scaffold extends Module {
          return rotations;
       }
 
-      for (float yawLoop = 0.0F; yawLoop < 180.0F; yawLoop += 1.0F) {
+      for (float yawLoop = 0.0F; yawLoop < 360.0F; yawLoop += 1.0F) {
          float currentPitch = this.rots.y;
          for (float pitchLoop = 0.0F; pitchLoop < 25.0F; pitchLoop += 1.0F) {
             for (int i = 0; i < 2; ++i) {
@@ -590,23 +580,12 @@ public class Scaffold extends Module {
       }
       positions.sort(Comparator.comparingDouble(vec -> mc.player.distanceToSqr(vec.x, vec.y, vec.z)));
       BlockPos best = lookup.get(positions.get(0));
-      return isTower() && best.getY() != mc.player.getY() - 1.5D
-              ? BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.5D, mc.player.getZ())
-              : best;
+      return isTower() && best.getY() != mc.player.getY() - 1.5D ? BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.5D, mc.player.getZ()) : best;
    }
 
    public boolean isValidBlock(BlockPos blockPos) {
       Block block = mc.level.getBlockState(blockPos).getBlock();
-      return !(block instanceof LiquidBlock)
-              && !(block instanceof AirBlock)
-              && !(block instanceof ChestBlock)
-              && !(block instanceof FurnaceBlock)
-              && !(block instanceof EnderChestBlock)
-              && !(block instanceof TallGrassBlock)
-              && !(block instanceof SnowLayerBlock)
-              && !(block instanceof EnchantmentTableBlock)
-              && !(block instanceof AnvilBlock)
-              && !(block instanceof CraftingTableBlock);
+      return !(block instanceof LiquidBlock) && !(block instanceof AirBlock) && !(block instanceof ChestBlock) && !(block instanceof FurnaceBlock) && !(block instanceof EnderChestBlock) && !(block instanceof TallGrassBlock) && !(block instanceof SnowLayerBlock) && !(block instanceof EnchantmentTableBlock) && !(block instanceof AnvilBlock) && !(block instanceof CraftingTableBlock);
    }
 
    public static boolean isValidStack(ItemStack stack) {
@@ -623,20 +602,11 @@ public class Scaffold extends Module {
       }
 
       Block block = blockItem.getBlock();
-      return !(block instanceof FlowerBlock)
-              && !(block instanceof BushBlock)
-              && !(block instanceof FungusBlock)
-              && !(block instanceof CropBlock)
-              && !(block instanceof SlabBlock)
-              && !blacklistedBlocks.contains(block);
+      return !(block instanceof FlowerBlock) && !(block instanceof BushBlock) && !(block instanceof FungusBlock) && !(block instanceof CropBlock) && !(block instanceof SlabBlock) && !blacklistedBlocks.contains(block);
    }
 
    public static boolean isOnBlockEdge(float sensitivity) {
-      return mc.player != null
-              && mc.level != null
-              && !mc.level.getCollisions(mc.player, mc.player.getBoundingBox().move(0.0D, -0.5D, 0.0D).inflate(-sensitivity, 0.0D, -sensitivity))
-              .iterator()
-              .hasNext();
+      return mc.player != null && mc.level != null && !mc.level.getCollisions(mc.player, mc.player.getBoundingBox().move(0.0D, -0.5D, 0.0D).inflate(-sensitivity, 0.0D, -sensitivity)).iterator().hasNext();
    }
 
    public boolean isBlockUnder() {
@@ -673,10 +643,7 @@ public class Scaffold extends Module {
       if (!(hit instanceof BlockHitResult blockHit) || hit.getType() != HitResult.Type.BLOCK || this.pos == null) {
          return false;
       }
-      return isValidBlock(blockHit.getBlockPos())
-              && isNearbyBlockPos(blockHit.getBlockPos())
-              && blockHit.getDirection() != Direction.DOWN
-              && blockHit.getDirection() != Direction.UP;
+      return isValidBlock(blockHit.getBlockPos()) && isNearbyBlockPos(blockHit.getBlockPos()) && blockHit.getDirection() != Direction.DOWN && blockHit.getDirection() != Direction.UP;
    }
 
    private boolean isNearbyBlockPos(BlockPos blockPos) {
@@ -698,12 +665,7 @@ public class Scaffold extends Module {
 
    private boolean isTower() {
       boolean holdingJump = isJumpHeld();
-      return holdingJump
-              && !this.useLastTellyMovementYaw
-              && !mc.options.keyUp.isDown()
-              && !mc.options.keyDown.isDown()
-              && !mc.options.keyLeft.isDown()
-              && !mc.options.keyRight.isDown();
+      return holdingJump && !this.useLastTellyMovementYaw && !mc.options.keyUp.isDown() && !mc.options.keyDown.isDown() && !mc.options.keyLeft.isDown() && !mc.options.keyRight.isDown();
    }
 
    private boolean isJumpHeld() {
