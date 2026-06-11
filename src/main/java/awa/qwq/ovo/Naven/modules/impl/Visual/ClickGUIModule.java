@@ -3,6 +3,7 @@ package awa.qwq.ovo.Naven.modules.impl.Visual;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
+import awa.qwq.ovo.Naven.ui.AkarinClickGUI;
 import awa.qwq.ovo.Naven.ui.ClickGUI;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
@@ -13,12 +14,13 @@ import awa.qwq.ovo.Naven.values.impl.ModeValue;
    description = "The ClickGUI"
 )
 public class ClickGUIModule extends Module {
-   ModeValue style = ValueBuilder.create(this, "Style")
+   ModeValue mode = ValueBuilder.create(this, "Mode")
            .setDefaultModeIndex(0)
-           .setModes("Legacy")
+           .setModes("Naven", "Akarin")
            .build().getModeValue();
 
-   ClickGUI legacyGUI = null;
+   ClickGUI navenGUI = null;
+   AkarinClickGUI akarinGUI = null;
 
    @Override
    protected void initModule() {
@@ -28,11 +30,16 @@ public class ClickGUIModule extends Module {
 
    @Override
    public void onEnable() {
-      if (style.isCurrentMode("Legacy")) {
-         if (legacyGUI == null) {
-            legacyGUI = new ClickGUI();
+      if (mode.isCurrentMode("Akarin")) {
+         if (akarinGUI == null) {
+            akarinGUI = new AkarinClickGUI();
          }
-         mc.setScreen(legacyGUI);
+         mc.setScreen(akarinGUI);
+      } else {
+         if (navenGUI == null) {
+            navenGUI = new ClickGUI();
+         }
+         mc.setScreen(navenGUI);
       }
       this.toggle();
    }
