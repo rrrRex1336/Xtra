@@ -5,5 +5,7 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 
 @ModuleInfo(name = "Rotation", description = "In Client display Server rotation.", category = Category.VISUAL)
-public class  Rotation extends Module {
+public class Rotation extends Module {
+
+
 }
