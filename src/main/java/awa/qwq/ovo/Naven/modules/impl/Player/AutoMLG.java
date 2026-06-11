@@ -11,6 +11,7 @@ import awa.qwq.ovo.Naven.utils.Vector2f;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
+import lombok.Getter;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.Item;
@@ -58,6 +59,7 @@ public class AutoMLG extends Module {
             .build()
             .getBooleanValue();
 
+    @Getter
     public Vector2f targetRotation = null;
     public boolean rotation = false;
     public BlockPos above = null;
@@ -76,6 +78,7 @@ public class AutoMLG extends Module {
     private int postActionCooldown;
     private int extraCooldown;
     private boolean placingWater;
+    @Getter
     private boolean collectingWater;
 
     public AutoMLG() {
@@ -529,21 +532,8 @@ public class AutoMLG extends Module {
         return this.postPlaceCooldown > 0;
     }
 
-    public Vector2f getTargetRotation() {
-        return this.targetRotation;
-    }
-
-    public boolean isCollectingWater() {
-        return this.collectingWater;
-    }
-
     public boolean isMLGActive() {
-        return this.rotation
-                || this.placingWater
-                || this.collectingWater
-                || this.waterPlaced
-                || this.recoveryActive
-                || this.slotToRestore != null;
+        return this.rotation || this.placingWater || this.collectingWater || this.waterPlaced || this.recoveryActive || this.slotToRestore != null;
     }
 
     public boolean isPlacingWater() {
