@@ -179,17 +179,7 @@ public class Velocity extends Module {
 
         isFlushing = true;
         targets.clear();
-
-        while (!movePacketQueue.isEmpty()) {
-            Packet<?> p = movePacketQueue.poll();
-            if (p != null && mc.getConnection() != null)
-                ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
-        }
-        while (!packetQueue.isEmpty()) {
-            Packet<?> p = packetQueue.poll();
-            if (p != null && mc.getConnection() != null)
-                ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
-        }
+        releasePacket();
         if (clientboundSetEntityMotionPacket != null && mc.getConnection() != null) {
             clientboundSetEntityMotionPacket.handle(mc.getConnection());
             clientboundSetEntityMotionPacket = null;
@@ -208,7 +198,7 @@ public class Velocity extends Module {
             if (attacked) {
                 log("Sync, ticks used: " + suspendTicks + (smart.getCurrentValue() ? " calculated attack: " : " current attack: ") + totalAttacks);
             } else if (jump) {
-                log("Sync, ticks used: " + suspendTicks);
+                log("Sync, ticks used: " + suspendTicks + "jump 1 count");
             }
         }
     }
@@ -250,10 +240,7 @@ public class Velocity extends Module {
         if (mc.player.onClimbable() || mc.player.isSleeping()) {
             return true;
         }
-        if (mc.level.getBlockState(mc.player.blockPosition()).is(Blocks.COBWEB)) {
-            return true;
-        }
-        return false;
+        return mc.level.getBlockState(mc.player.blockPosition()).is(Blocks.COBWEB);
     }
 
     private Entity getCurrentTarget() {
@@ -293,13 +280,9 @@ public class Velocity extends Module {
         Entity combatTarget = getCombatModuleTarget();
         if (combatTarget != null && combatTarget.equals(target)) return true;
         double distance = getDistanceToEntity(target);
-        if (distance <= 3.5) return true;
+        if (distance <= 3.0) return true;
         Aura aura = (Aura) Naven.getInstance().getModuleManager().getModule(Aura.class);
-        if (aura != null && aura.isEnabled() && aura.working && distance <= aura.attackRange.getCurrentValue()) {
-            return true;
-        }
-
-        return false;
+        return aura != null && aura.isEnabled() && aura.working && distance <= aura.attackRange.getCurrentValue();
     }
 
     private boolean isTargetLost() {
@@ -646,7 +629,7 @@ public class Velocity extends Module {
                 doAttack(attackTarget);
                 attacksRemaining--;
                 attackCooldown = mode19Plus.getCurrentValue() ? Math.max(1, (int) (20 / mc.player.getCurrentItemAttackStrengthDelay())) : 1;
-                log("Reduce (target: " + attackTarget.getName().getString() + ")");
+                log("Reduce");
 
                 if (attacksRemaining <= 0) {
                     log("Hit complete");
@@ -658,17 +641,21 @@ public class Velocity extends Module {
         }
 
         if (shouldFlushMotion) {
-            while (!movePacketQueue.isEmpty()) {
-                Packet<?> p = movePacketQueue.poll();
-                if (p != null && mc.getConnection() != null)
-                    ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
-            }
-            while (!packetQueue.isEmpty()) {
-                Packet<?> p = packetQueue.poll();
-                if (p != null && mc.getConnection() != null)
-                    ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
-            }
+            releasePacket();
             shouldFlushMotion = false;
+        }
+    }
+
+    private void releasePacket() {
+        while (!movePacketQueue.isEmpty()) {
+            Packet<?> p = movePacketQueue.poll();
+            if (p != null && mc.getConnection() != null)
+                ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
+        }
+        while (!packetQueue.isEmpty()) {
+            Packet<?> p = packetQueue.poll();
+            if (p != null && mc.getConnection() != null)
+                ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
         }
     }
 
@@ -677,6 +664,7 @@ public class Velocity extends Module {
         if (jump) {
             if (mc.player != null) {
                 e.setJump(true);
+                ChatUtils.addChatMessage("Jump Reduce XZ");
             }
             jump = false;
         }
