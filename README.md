@@ -1,8 +1,8 @@
 # Naven-Modern (Fabric Edition)
 
-一个基于 Minecraft 1.20.1 Fabric 的现代化模组客户端，提供丰富的游戏增强功能。
+一个基于 Minecraft 1.20.4 Fabric 的现代化模组客户端，提供丰富的游戏增强功能。
 
-> 本项目由原 Naven-Modern Forge 版本移植至 Fabric 生态。
+> 本项目由原 Naven-Modern Forge 1.20.1 版本移植至 Fabric 1.20.4 生态。
 
 ---
 
