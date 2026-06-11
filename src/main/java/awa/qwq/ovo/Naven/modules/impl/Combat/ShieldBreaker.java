@@ -67,7 +67,7 @@ public class ShieldBreaker extends Module {
 
         if (this.originalSlot != -1) {
             if ((float) (ShieldBreaker.mc.player.tickCount - this.attackTick) >= this.switchBackDelay.getCurrentValue()) {
-                ShieldBreaker.mc.player.getInventory().selected = this.originalSlot;
+                    ShieldBreaker.mc.player.getInventory().selected = this.originalSlot;
                 this.originalSlot = -1;
                 this.attackTick = -1L;
             }
