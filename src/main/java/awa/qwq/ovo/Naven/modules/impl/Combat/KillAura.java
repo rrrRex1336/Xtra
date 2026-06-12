@@ -66,7 +66,7 @@ public class KillAura extends Module {
    public static Entity target;
    public static Entity aimingTarget;
    public static List<Entity> targets = new ArrayList<>();
-   public Vector2f rotation;
+   public static Vector2f rotation;
    BooleanValue targetHud = ValueBuilder.create(this, "Target Interface").setDefaultBooleanValue(true).build().getBooleanValue();
    BooleanValue targetEsp = ValueBuilder.create(this, "Target ESP").setDefaultBooleanValue(true).build().getBooleanValue();
    BooleanValue attackPlayer = ValueBuilder.create(this, "Attack Player").setDefaultBooleanValue(true).build().getBooleanValue();
