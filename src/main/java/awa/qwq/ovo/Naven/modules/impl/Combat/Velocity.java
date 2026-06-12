@@ -5,13 +5,13 @@ import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.*;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
+import awa.qwq.ovo.Naven.managers.rotation.utils.Rotation;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
+import awa.qwq.ovo.Naven.modules.impl.Movement.LongJump;
 import awa.qwq.ovo.Naven.modules.impl.Movement.Stuck;
-import awa.qwq.ovo.Naven.utils.ChatUtils;
-import awa.qwq.ovo.Naven.utils.RenderUtils;
-import awa.qwq.ovo.Naven.utils.Vector2f;
+import awa.qwq.ovo.Naven.utils.*;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.utils.renderer.text.CustomTextRenderer;
 import awa.qwq.ovo.Naven.utils.vector.Vector3d;
@@ -19,26 +19,34 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.AddonsValue;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
+import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.gui.screens.DeathScreen;
+import net.minecraft.client.gui.screens.ProgressScreen;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.*;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Rot;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.EnderpearlItem;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.*;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
+import org.mixin.accessors.LocalPlayerAccessor;
 
 import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.LinkedBlockingDeque;
 
 @ModuleInfo(
         name = "Velocity",
@@ -49,30 +57,39 @@ public class Velocity extends Module {
 
     public static final int mainColor = new Color(150, 45, 45, 255).getRGB();
 
+    public final ModeValue mode = ValueBuilder.create(this, "Mode")
+            .setDefaultModeIndex(0)
+            .setModes("Buffer", "Interact Block")
+            .setOnUpdate(value -> reset())
+            .build()
+            .getModeValue();
+
     public final BooleanValue debug = ValueBuilder.create(this, "Verbose Output")
             .setDefaultBooleanValue(false)
             .build()
             .getBooleanValue();
 
     public final AddonsValue reduceAddons = ValueBuilder.create(this, "Reduce Addons")
+            .setVisibility(() -> isBufferMode())
             .setAddonsModes("Jump reset", "Rotate", "Movement override", "Auto sprint")
             .setDefaultSelectedAddons(false, false, false, false)
             .build()
             .getAddonsValue();
 
     private final BooleanValue mode19Plus = ValueBuilder.create(this, "1.9+ Mode")
+            .setVisibility(() -> isBufferMode())
             .setDefaultBooleanValue(false)
             .build()
             .getBooleanValue();
 
     private final BooleanValue smart = ValueBuilder.create(this, "Calculate attack amount")
-            .setVisibility(() -> !mode19Plus.getCurrentValue())
+            .setVisibility(() -> isBufferMode() && !mode19Plus.getCurrentValue())
             .setDefaultBooleanValue(false)
             .build()
             .getBooleanValue();
 
     private final FloatValue attack = ValueBuilder.create(this, "Attack amount")
-            .setVisibility(() -> !smart.getCurrentValue() && !mode19Plus.getCurrentValue())
+            .setVisibility(() -> isBufferMode() && !smart.getCurrentValue() && !mode19Plus.getCurrentValue())
             .setDefaultFloatValue(5F)
             .setFloatStep(1F)
             .setMinFloatValue(1F)
@@ -81,7 +98,7 @@ public class Velocity extends Module {
             .getFloatValue();
 
     private final FloatValue targetMotion = ValueBuilder.create(this, "Target Motion")
-            .setVisibility(() -> smart.getCurrentValue() || mode19Plus.getCurrentValue())
+            .setVisibility(() -> isBufferMode() && (smart.getCurrentValue() || mode19Plus.getCurrentValue()))
             .setDefaultFloatValue(0.10F)
             .setFloatStep(0.05F)
             .setMinFloatValue(0.05F)
@@ -90,29 +107,51 @@ public class Velocity extends Module {
             .getFloatValue();
 
     private final AddonsValue ignoreState = ValueBuilder.create(this, "Ignore state")
+            .setVisibility(() -> isBufferMode())
             .setDefaultSelectedAddons(false, true, true, false)
             .setAddonsModes("No Sprinting", "In Lava", "In Water", "On Fire", "S08 Cooldown")
             .build()
             .getAddonsValue();
 
     private final BooleanValue delayTillGround = ValueBuilder.create(this, "Delay till ground")
+            .setVisibility(() -> isBufferMode())
             .setDefaultBooleanValue(true)
             .build()
             .getBooleanValue();
 
     private final BooleanValue multiTarget = ValueBuilder.create(this, "Multi target")
+            .setVisibility(() -> isBufferMode())
             .setDefaultBooleanValue(true)
             .build()
             .getBooleanValue();
 
     private final BooleanValue renderServerPos = ValueBuilder.create(this, "Render Server Pos")
+            .setVisibility(() -> isBufferMode())
             .setDefaultBooleanValue(true)
             .build()
             .getBooleanValue();
+    private final FloatValue landDelay = ValueBuilder.create(this, "Land Delay")
+            .setVisibility(() -> isInteractBlockMode())
+            .setDefaultFloatValue(2F)
+            .setFloatStep(1F)
+            .setMinFloatValue(0F)
+            .setMaxFloatValue(6F)
+            .build()
+            .getFloatValue();
+
+    private final FloatValue packetHoldTime = ValueBuilder.create(this, "Packet Hold")
+            .setVisibility(() -> isInteractBlockMode())
+            .setDefaultFloatValue(40F)
+            .setFloatStep(5F)
+            .setMinFloatValue(10F)
+            .setMaxFloatValue(80F)
+            .build()
+            .getFloatValue();
 
     private final Queue<Packet<?>> packetQueue = new ConcurrentLinkedQueue<>();
     private final Queue<Packet<?>> movePacketQueue = new ConcurrentLinkedQueue<>();
     private final Map<Entity, Vector3d> targets = new HashMap<>();
+    private final LinkedBlockingDeque<Packet<ClientGamePacketListener>> interactInbound = new LinkedBlockingDeque<>();
 
     private boolean isSuspending = false;
     private int suspendTicks = 0;
@@ -127,6 +166,19 @@ public class Velocity extends Module {
     private boolean jump = false;
     private int stuckCooldown = 0;
     private int s08Cooldown = 0;
+    private InteractStage interactStage = InteractStage.IDLE;
+    private int interactGrimTick = -1;
+    private int interactDebugTick = 10;
+    private BlockHitResult interactResult = null;
+    private int interactAirTicks = 0;
+
+    private boolean isBufferMode() {
+        return this.mode.isCurrentMode("Buffer");
+    }
+
+    private boolean isInteractBlockMode() {
+        return this.mode.isCurrentMode("Interact Block");
+    }
 
     private void log(String message) {
         if (this.debug.getCurrentValue()) {
@@ -188,10 +240,6 @@ public class Velocity extends Module {
         shouldFlushMotion = true;
         isFlushing = false;
 
-        if (!attacked && !jump) {
-            return;
-        }
-
         if (mode19Plus.getCurrentValue()) {
             log("Sync, ticks used: " + suspendTicks);
         } else {
@@ -199,6 +247,8 @@ public class Velocity extends Module {
                 log("Sync, ticks used: " + suspendTicks + (smart.getCurrentValue() ? " calculated attack: " : " current attack: ") + totalAttacks);
             } else if (jump) {
                 log("Sync, ticks used: " + suspendTicks + "jump 1 count");
+            } else {
+                log("Sync, ticks used: " + suspendTicks);
             }
         }
     }
@@ -353,8 +403,50 @@ public class Velocity extends Module {
                 && ((ClientboundAnimatePacket) packet).getId() != mc.player.getId());
     }
 
+    private void processInteractPackets() {
+        ClientPacketListener connection = mc.getConnection();
+        if (connection == null) {
+            this.interactInbound.clear();
+            return;
+        }
+
+        Packet<ClientGamePacketListener> packet;
+        while ((packet = this.interactInbound.poll()) != null) {
+            try {
+                packet.handle(connection);
+            } catch (Exception exception) {
+                exception.printStackTrace();
+                this.interactInbound.clear();
+                break;
+            }
+        }
+    }
+
+    private void resetInteractBlock() {
+        this.interactStage = InteractStage.IDLE;
+        this.interactGrimTick = -1;
+        this.interactDebugTick = 0;
+        this.interactResult = null;
+        this.interactAirTicks = 0;
+        processInteractPackets();
+    }
+
+    private boolean isInteractBlockInvalid() {
+        return mc.player == null
+                || mc.getConnection() == null
+                || mc.gameMode == null
+                || mc.player.tickCount < 20
+                || mc.player.isDeadOrDying()
+                || !mc.player.isAlive()
+                || mc.player.getHealth() <= 0.0F
+                || mc.screen instanceof ProgressScreen
+                || mc.screen instanceof DeathScreen
+                || Naven.getInstance().getModuleManager().getModule(LongJump.class).isEnabled();
+    }
+
     @EventTarget
     public void onPacket(EventPacket e) {
+        if (!isBufferMode()) return;
         if (e.getType() != EventType.RECEIVE) return;
         if (shouldIgnore()) {
             if (isSuspending) {
@@ -474,7 +566,174 @@ public class Velocity extends Module {
     }
 
     @EventTarget
+    public void onHandlePacket(EventHandlePacket e) {
+        if (!isInteractBlockMode()) return;
+
+        if (mc.player == null || mc.getConnection() == null || mc.gameMode == null || mc.player.isUsingItem()) {
+            return;
+        }
+
+        if (Naven.getInstance().getModuleManager().getModule(LongJump.class).isEnabled()) {
+            return;
+        }
+
+        if (mc.player.tickCount < 20) {
+            resetInteractBlock();
+            return;
+        }
+
+        if (mc.player.isDeadOrDying()
+                || !mc.player.isAlive()
+                || mc.player.getHealth() <= 0.0F
+                || mc.screen instanceof ProgressScreen
+                || mc.screen instanceof DeathScreen) {
+            resetInteractBlock();
+            return;
+        }
+
+        Packet<?> packet = e.getPacket();
+        if (packet instanceof ClientboundLoginPacket) {
+            resetInteractBlock();
+            return;
+        }
+
+        if (this.interactDebugTick > 0 && mc.player.tickCount > 20) {
+            if (this.interactStage == InteractStage.BLOCK
+                    && packet instanceof ClientboundBlockUpdatePacket blockUpdate
+                    && this.interactResult != null
+                    && this.interactResult.getBlockPos().equals(blockUpdate.getPos())) {
+                processInteractPackets();
+                Naven.skipTasks.clear();
+                this.interactDebugTick = 0;
+                this.interactResult = null;
+                return;
+            }
+
+            if (!(packet instanceof ClientboundSystemChatPacket) && !(packet instanceof ClientboundSetTimePacket)) {
+                e.setCancelled(true);
+                this.interactInbound.add((Packet<ClientGamePacketListener>) packet);
+                return;
+            }
+        }
+
+        if (packet instanceof ClientboundSetEntityMotionPacket motionPacket) {
+            if (motionPacket.getId() != mc.player.getId()) {
+                return;
+            }
+
+            if (motionPacket.getYa() < 0 || mc.player.getMainHandItem().getItem() instanceof EnderpearlItem) {
+                e.setCancelled(false);
+                return;
+            }
+
+            this.interactGrimTick = mc.player.onGround() ? 2 : 0;
+            this.interactDebugTick = (int) packetHoldTime.getCurrentValue();
+            this.interactStage = mc.player.onGround() ? InteractStage.TRANSACTION : InteractStage.DELAY_GROUND;
+            e.setCancelled(true);
+            log(mc.player.onGround() ? "Interact Block velocity" : "Interact Block velocity delayed");
+        }
+    }
+
+    @EventTarget
     public void onPreTick(EventRunTicks e) {
+        if (isInteractBlockMode()) {
+            if (e.getType() == EventType.POST) {
+                return;
+            }
+
+            if (isInteractBlockInvalid()) {
+                resetInteractBlock();
+                return;
+            }
+
+            if (this.interactStage == InteractStage.DELAY_GROUND) {
+                this.interactDebugTick = Math.max(this.interactDebugTick, 5);
+                this.interactAirTicks++;
+                if (!mc.player.onGround()) {
+                    return;
+                }
+                if (this.interactAirTicks < 2) {
+                    return;
+                }
+                this.interactStage = InteractStage.TRANSACTION;
+                this.interactGrimTick = (int) landDelay.getCurrentValue();
+                this.interactDebugTick = Math.max(this.interactDebugTick, 20);
+                log("Interact Block delayed ground");
+            }
+
+            if (this.interactDebugTick > 0) {
+                this.interactDebugTick--;
+                if (this.interactDebugTick == 0) {
+                    processInteractPackets();
+                    this.interactStage = InteractStage.IDLE;
+                }
+            } else {
+                this.interactStage = InteractStage.IDLE;
+            }
+
+            if (this.interactGrimTick > 0) {
+                this.interactGrimTick--;
+            }
+
+            float yaw = RotationManager.rotations.getX();
+            float pitch = 89.79F;
+            BlockHitResult blockRayTraceResult = (BlockHitResult) PlayerUtils.pickCustom(3.7F, yaw, pitch);
+            if (this.interactStage == InteractStage.TRANSACTION
+                    && this.interactGrimTick == 0) {
+                if (!mc.player.onGround()) {
+                    this.interactStage = InteractStage.DELAY_GROUND;
+                    this.interactAirTicks = 0;
+                    log("Interact Block delayed (airborne)");
+                    return;
+                }
+                if (blockRayTraceResult != null
+                        && !BlockUtils.isAirBlock(blockRayTraceResult.getBlockPos())
+                        && mc.player.getBoundingBox().intersects(new AABB(blockRayTraceResult.getBlockPos().above()))) {
+                Block targetBlock = mc.level.getBlockState(blockRayTraceResult.getBlockPos()).getBlock();
+                if (targetBlock instanceof ChestBlock
+                        || targetBlock instanceof CraftingTableBlock
+                        || targetBlock instanceof FurnaceBlock
+                        || targetBlock instanceof EnchantmentTableBlock
+                        || targetBlock instanceof AnvilBlock
+                        || targetBlock instanceof BarrelBlock
+                        || targetBlock instanceof ShulkerBoxBlock) {
+                    return;
+                }
+
+                this.interactResult = new BlockHitResult(blockRayTraceResult.getLocation(), blockRayTraceResult.getDirection(), blockRayTraceResult.getBlockPos(), false);
+                ((LocalPlayerAccessor) mc.player).setYRotLast(yaw);
+                ((LocalPlayerAccessor) mc.player).setXRotLast(pitch);
+                RotationManager.setRotations(new Rotation(yaw, pitch).toVec2f());
+                if (KillAura.rotation != null) {
+                    KillAura.rotation = new Rotation(yaw, pitch).toVec2f();
+                }
+
+                processInteractPackets();
+                mc.player.connection.send(new Rot(yaw, pitch, mc.player.onGround()));
+                mc.player.connection.send(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, this.interactResult, 0));
+                Naven.skipTasks.add(() -> {
+                });
+
+                for (int i = 2; i <= 40; i++) {
+                    Naven.skipTasks.add(() -> {
+                        EventMotion event = new EventMotion(EventType.PRE, mc.player.position().x, mc.player.position().y, mc.player.position().z, yaw, pitch, mc.player.onGround());
+                        Naven.getInstance().getRotationManager().onPre(event);
+                        if (event.getYaw() != yaw || event.getPitch() != pitch) {
+                            mc.player.connection.send(new Rot(event.getYaw(), event.getPitch(), mc.player.onGround()));
+                        }
+                    });
+                }
+
+                this.interactDebugTick = 20;
+                this.interactStage = InteractStage.BLOCK;
+                this.interactGrimTick = 0;
+                log("Interact Block");
+                }
+            }
+            return;
+        }
+        if (!isBufferMode()) return;
+
         if (s08Cooldown > 0) {
             s08Cooldown--;
         }
@@ -661,6 +920,8 @@ public class Velocity extends Module {
 
     @EventTarget
     public void onMoveInput(EventMoveInput e) {
+        if (!isBufferMode()) return;
+
         if (jump) {
             if (mc.player != null) {
                 e.setJump(true);
@@ -677,6 +938,7 @@ public class Velocity extends Module {
 
     @EventTarget
     public void onRender2D(EventRender2D e) {
+        if (!isBufferMode()) return;
         if (!isSuspending) return;
         CustomTextRenderer font = Fonts.misans;
         int x = mc.getWindow().getGuiScaledWidth() / 2 - 50;
@@ -692,6 +954,7 @@ public class Velocity extends Module {
 
     @EventTarget
     public void onRender(EventRender event) {
+        if (!isBufferMode()) return;
         if (!renderServerPos.getCurrentValue() || targets.isEmpty()) return;
         PoseStack poseStack = event.getPMatrixStack();
         for (Map.Entry<Entity, Vector3d> entry : targets.entrySet()) {
@@ -757,5 +1020,14 @@ public class Velocity extends Module {
         jump = false;
         suspendTicks = 0;
         rotateActive = false;
+        resetInteractBlock();
+    }
+
+    private enum InteractStage {
+        TRANSACTION,
+        ROTATION,
+        DELAY_GROUND,
+        BLOCK,
+        IDLE
     }
 }
