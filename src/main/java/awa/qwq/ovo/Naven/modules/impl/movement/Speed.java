@@ -40,7 +40,7 @@ public class Speed extends Module {
     }
 
     public ModeValue mode = ValueBuilder.create(this, "Mode")
-            .setDefaultModeIndex(1)
+            .setDefaultModeIndex(0)
             .setModes("Collision")
             .build()
             .getModeValue();
