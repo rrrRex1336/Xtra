@@ -3,7 +3,7 @@ package awa.qwq.ovo.Naven.ui.Island;
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRenderTabOverlay;
-import awa.qwq.ovo.Naven.modules.impl.Visual.Island;
+import awa.qwq.ovo.Naven.modules.impl.visual.Island;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;

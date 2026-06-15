@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.ui.Island;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.modules.impl.Player.ContainerStealer;
+import awa.qwq.ovo.Naven.modules.impl.player.ContainerStealer;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;

@@ -1,7 +1,7 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.modules.impl.Visual.ItemPhysics;
+import awa.qwq.ovo.Naven.modules.impl.visual.ItemPhysics;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.MultiBufferSource;

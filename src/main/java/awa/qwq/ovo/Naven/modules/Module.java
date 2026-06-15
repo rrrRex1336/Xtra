@@ -1,9 +1,9 @@
 package awa.qwq.ovo.Naven.modules;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.modules.impl.Visual.ClickGUIModule;
-import awa.qwq.ovo.Naven.modules.impl.Visual.Interface;
-import awa.qwq.ovo.Naven.modules.impl.Visual.Island;
+import awa.qwq.ovo.Naven.modules.impl.visual.ClickGUIModule;
+import awa.qwq.ovo.Naven.modules.impl.visual.Interface;
+import awa.qwq.ovo.Naven.modules.impl.visual.Island;
 import awa.qwq.ovo.Naven.ui.notification.Notification;
 import awa.qwq.ovo.Naven.ui.notification.NotificationLevel;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;

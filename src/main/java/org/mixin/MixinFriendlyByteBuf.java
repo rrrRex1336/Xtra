@@ -1,6 +1,6 @@
 package org.mixin;
 
-import awa.qwq.ovo.Naven.modules.impl.Visual.NameProtect;
+import awa.qwq.ovo.Naven.modules.impl.visual.NameProtect;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;

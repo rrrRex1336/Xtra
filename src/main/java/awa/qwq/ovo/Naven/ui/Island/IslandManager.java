@@ -2,7 +2,7 @@ package awa.qwq.ovo.Naven.ui.Island;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.auth.VerifyClient;
-import awa.qwq.ovo.Naven.modules.impl.Visual.Island;
+import awa.qwq.ovo.Naven.modules.impl.visual.Island;
 import awa.qwq.ovo.Naven.utils.FontIcons;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;

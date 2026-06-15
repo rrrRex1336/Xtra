@@ -9,7 +9,7 @@ import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.events.impl.EventShutdown;
 import awa.qwq.ovo.Naven.files.FileManager;
 import awa.qwq.ovo.Naven.modules.ModuleManager;
-import awa.qwq.ovo.Naven.modules.impl.Visual.ClickGUIModule;
+import awa.qwq.ovo.Naven.modules.impl.visual.ClickGUIModule;
 import awa.qwq.ovo.Naven.ui.notification.NotificationManager;
 import awa.qwq.ovo.Naven.utils.*;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
@@ -23,7 +23,6 @@ import net.minecraft.client.Minecraft;
 
 import java.awt.FontFormatException;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 

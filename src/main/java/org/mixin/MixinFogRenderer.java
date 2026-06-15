@@ -1,7 +1,7 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.modules.impl.Visual.AntiBlindness;
+import awa.qwq.ovo.Naven.modules.impl.visual.AntiBlindness;
 import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffects;

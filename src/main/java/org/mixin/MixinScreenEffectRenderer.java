@@ -1,6 +1,6 @@
 package org.mixin;
 
-import awa.qwq.ovo.Naven.modules.impl.Visual.LowFire;
+import awa.qwq.ovo.Naven.modules.impl.visual.LowFire;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ScreenEffectRenderer;

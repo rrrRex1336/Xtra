@@ -37,20 +37,4 @@ public class MixinClientPacketListener {
    private void onHandleSetEntityMotion(ClientboundSetEntityMotionPacket packet, CallbackInfo ci) {
       MovementUtils.INSTANCE.onPacketReceive(packet);
    }
-
-   @Inject(
-      method = {"handleLogin"},
-      at = {@At(
-         value = "INVOKE",
-         target = "Lnet/minecraft/client/telemetry/WorldSessionTelemetryManager;onPlayerInfoReceived(Lnet/minecraft/world/level/GameType;Z)V",
-         shift = Shift.AFTER
-      )},
-      cancellable = true
-   )
-   private void onLogin(ClientboundLoginPacket p_105030_, CallbackInfo ci) {
-      try {
-         HttpUtils.get("http://127.0.0.1:23233/api/setHook?hook=0");
-      } catch (IOException var4) {
-      }
-   }
 }

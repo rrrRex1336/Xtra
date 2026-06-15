@@ -41,13 +41,6 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
    private double yLast1;
    @Shadow
    private double zLast;
-   @Unique
-   private static int playerStuckTicks = 0;
-   @Unique
-   private static boolean lastTickSkipped = false;
-   private static void setPlayerStuckTicks(int ticks) { playerStuckTicks = ticks; }
-   private static void incrementPlayerStuckTicks() { playerStuckTicks++; }
-   private static int getPlayerStuckTicks() { return playerStuckTicks; }
    @Shadow
    private float yRotLast;
    @Shadow

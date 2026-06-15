@@ -4,9 +4,10 @@ import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventRender;
 import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventRenderAfterWorld;
-import awa.qwq.ovo.Naven.modules.impl.Visual.FullBright;
-import awa.qwq.ovo.Naven.modules.impl.Visual.MotionBlur;
-import awa.qwq.ovo.Naven.modules.impl.Visual.NoHurtCam;
+import awa.qwq.ovo.Naven.modules.impl.visual.FullBright;
+import awa.qwq.ovo.Naven.modules.impl.visual.MotionBlur;
+import awa.qwq.ovo.Naven.modules.impl.visual.NoHurtCam;
+import awa.qwq.ovo.Naven.modules.ModuleManager;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -100,7 +101,13 @@ public class MixinGameRenderer {
       cancellable = true
    )
    private void bobHurt(PoseStack pMatrixStack, float pPartialTicks, CallbackInfo ci) {
-      NoHurtCam module = (NoHurtCam)Naven.getInstance().getModuleManager().getModule(NoHurtCam.class);
+      Naven naven = Naven.getInstance();
+      ModuleManager moduleManager = naven == null ? null : naven.getModuleManager();
+      if (moduleManager == null) {
+         return;
+      }
+
+      NoHurtCam module = (NoHurtCam)moduleManager.getModule(NoHurtCam.class);
       if (module.isEnabled()) {
          ci.cancel();
       }

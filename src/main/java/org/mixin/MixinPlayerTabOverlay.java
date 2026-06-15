@@ -5,7 +5,7 @@ import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRenderTabOverlay;
 import java.util.List;
 
-import awa.qwq.ovo.Naven.modules.impl.Visual.Island;
+import awa.qwq.ovo.Naven.modules.impl.visual.Island;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.PlayerTabOverlay;
 import net.minecraft.client.multiplayer.PlayerInfo;

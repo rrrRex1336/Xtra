@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.ui.Island;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.modules.impl.World.Scaffold;
+import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;

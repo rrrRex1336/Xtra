@@ -2,7 +2,7 @@ package awa.qwq.ovo.Naven.files.impl;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.files.ClientFile;
-import awa.qwq.ovo.Naven.modules.impl.Misc.Spammer;
+import awa.qwq.ovo.Naven.modules.impl.misc.Spammer;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import java.io.BufferedReader;

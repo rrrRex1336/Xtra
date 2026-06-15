@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.utils;
 
 import com.google.common.collect.Multimap;
-import awa.qwq.ovo.Naven.modules.impl.World.Scaffold;
+import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;

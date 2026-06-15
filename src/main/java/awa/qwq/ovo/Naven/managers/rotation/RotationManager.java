@@ -16,13 +16,13 @@ import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.events.impl.EventStrafe;
 import awa.qwq.ovo.Naven.events.impl.EventUseItemRayTrace;
 import awa.qwq.ovo.Naven.managers.rotation.utils.RotationUtils;
-import awa.qwq.ovo.Naven.modules.impl.Combat.*;
-import awa.qwq.ovo.Naven.modules.impl.Misc.Helper;
-import awa.qwq.ovo.Naven.modules.impl.Player.AutoMLG;
-import awa.qwq.ovo.Naven.modules.impl.Movement.LongJump;
-import awa.qwq.ovo.Naven.modules.impl.World.BedAura;
-import awa.qwq.ovo.Naven.modules.impl.World.ChestAura;
-import awa.qwq.ovo.Naven.modules.impl.World.Scaffold;
+import awa.qwq.ovo.Naven.modules.impl.combat.*;
+import awa.qwq.ovo.Naven.modules.impl.misc.Helper;
+import awa.qwq.ovo.Naven.modules.impl.player.AutoMLG;
+import awa.qwq.ovo.Naven.modules.impl.movement.LongJump;
+import awa.qwq.ovo.Naven.modules.impl.world.BedAura;
+import awa.qwq.ovo.Naven.modules.impl.world.ChestAura;
+import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
 import awa.qwq.ovo.Naven.utils.MoveUtils;
 import awa.qwq.ovo.Naven.utils.Vector2f;
 import net.minecraft.client.Minecraft;
@@ -182,7 +182,7 @@ public class RotationManager {
 
       Scaffold scaffold = (Scaffold) Naven.getInstance().getModuleManager().getModule(Scaffold.class);
       if (scaffold != null && scaffold.isEnabled() && scaffold.rots != null) {
-         return scaffold.movementCorrection.getCurrentValue();
+         return true;
       }
 
       KillAura killAura = (KillAura) Naven.getInstance().getModuleManager().getModule(KillAura.class);

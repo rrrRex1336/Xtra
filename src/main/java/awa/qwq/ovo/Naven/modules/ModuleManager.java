@@ -10,12 +10,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import awa.qwq.ovo.Naven.modules.impl.Combat.*;
-import awa.qwq.ovo.Naven.modules.impl.Misc.*;
-import awa.qwq.ovo.Naven.modules.impl.Movement.*;
-import awa.qwq.ovo.Naven.modules.impl.Player.*;
-import awa.qwq.ovo.Naven.modules.impl.Visual.*;
-import awa.qwq.ovo.Naven.modules.impl.World.*;
+import awa.qwq.ovo.Naven.modules.impl.combat.*;
+import awa.qwq.ovo.Naven.modules.impl.misc.*;
+import awa.qwq.ovo.Naven.modules.impl.movement.*;
+import awa.qwq.ovo.Naven.modules.impl.player.*;
+import awa.qwq.ovo.Naven.modules.impl.visual.*;
+import awa.qwq.ovo.Naven.modules.impl.world.*;
 import net.minecraft.client.Minecraft;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,6 +48,7 @@ public class ModuleManager {
          new ChestAura(),
          new ShieldBreaker(),
          new AutoPlay(),
+         new BackTrack(),
          new FastCobweb(),
          new KillerDetection(),
          new TNTWarning(),

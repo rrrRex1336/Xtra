@@ -2,7 +2,7 @@ package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.*;
-import awa.qwq.ovo.Naven.modules.impl.Player.NoPush;
+import awa.qwq.ovo.Naven.modules.impl.player.NoPush;
 import net.minecraft.world.entity.projectile.Projectile;
 import awa.qwq.ovo.Naven.utils.BlinkingPlayer;
 import net.minecraft.client.Minecraft;

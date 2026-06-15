@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.utils.shader.impl;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.modules.impl.Visual.PostProcess;
+import awa.qwq.ovo.Naven.modules.impl.visual.PostProcess;
 import awa.qwq.ovo.Naven.utils.TimerUtils;
 import awa.qwq.ovo.Naven.utils.shader.Framebuffer;
 import awa.qwq.ovo.Naven.utils.shader.PostProcessRenderer;

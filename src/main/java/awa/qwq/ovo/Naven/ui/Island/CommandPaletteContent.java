@@ -5,7 +5,7 @@ import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.impl.EventKey;
 import awa.qwq.ovo.Naven.events.impl.EventMouseClick;
 import awa.qwq.ovo.Naven.modules.ModuleManager;
-import awa.qwq.ovo.Naven.modules.impl.Visual.Island;
+import awa.qwq.ovo.Naven.modules.impl.visual.Island;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;

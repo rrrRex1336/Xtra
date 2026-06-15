@@ -4,9 +4,9 @@ import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventFallFlying;
 import awa.qwq.ovo.Naven.events.impl.EventJump;
 import awa.qwq.ovo.Naven.events.impl.EventRotationAnimation;
-import awa.qwq.ovo.Naven.modules.impl.Visual.AntiNausea;
-import awa.qwq.ovo.Naven.modules.impl.Visual.FullBright;
-import awa.qwq.ovo.Naven.modules.impl.Visual.Rotation;
+import awa.qwq.ovo.Naven.modules.impl.visual.AntiNausea;
+import awa.qwq.ovo.Naven.modules.impl.visual.FullBright;
+import awa.qwq.ovo.Naven.modules.impl.visual.Rotation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffects;
@@ -77,19 +77,21 @@ public abstract class MixinLivingEntity extends Entity {
    }
 
    @Redirect(
-      at = @At(
-         value = "INVOKE",
-         target = "Lnet/minecraft/world/entity/LivingEntity;getYRot()F"
-      ),
-      method = {"tickHeadTurn"}
+           at = @At(
+                   value = "INVOKE",
+                   target = "Lnet/minecraft/world/entity/LivingEntity;getYRot()F"
+           ),
+           method = {"tickHeadTurn"}
    )
    private float modifyHeadYaw(LivingEntity entity) {
-      if (entity == Minecraft.getInstance().player && Naven.getInstance().getModuleManager().getModule(Rotation.class).isEnabled()) {
-         EventRotationAnimation event = new EventRotationAnimation(entity.getYRot(), 0.0F, 0.0F, 0.0F);
-         Naven.getInstance().getEventManager().call(event);
-         return event.getYaw();
-      } else {
-         return entity.getYRot();
+      if (entity == Minecraft.getInstance().player) {
+         Rotation rotationModule = (Rotation) Naven.getInstance().getModuleManager().getModule(Rotation.class);
+         if (rotationModule != null && rotationModule.isEnabled() && rotationModule.headYaw.getCurrentValue()) {
+            EventRotationAnimation event = new EventRotationAnimation(entity.getYRot(), 0.0F, 0.0F, 0.0F);
+            Naven.getInstance().getEventManager().call(event);
+            return event.getYaw();
+         }
       }
+      return entity.getYRot();
    }
 }

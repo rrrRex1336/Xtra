@@ -7,7 +7,7 @@ import awa.qwq.ovo.Naven.events.impl.EventClick;
 import awa.qwq.ovo.Naven.events.impl.EventDisconnect;
 import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.events.impl.EventShutdown;
-import awa.qwq.ovo.Naven.modules.impl.Visual.Glow;
+import awa.qwq.ovo.Naven.modules.impl.visual.Glow;
 import awa.qwq.ovo.Naven.utils.animation.AnimationUtils;
 import awa.qwq.ovo.Naven.utils.ISkipTicks;
 import com.mojang.blaze3d.platform.Window;
