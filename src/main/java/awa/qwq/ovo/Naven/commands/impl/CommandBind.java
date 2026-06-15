@@ -20,6 +20,11 @@ public class CommandBind extends Command {
    @Override
    public void onCommand(String[] args) {
       if (args.length == 1) {
+         if (args[0].equalsIgnoreCase("s")) {
+            this.listBoundModules();
+            return;
+         }
+
          final String moduleName = args[0];
 
          try {
@@ -73,7 +78,7 @@ public class CommandBind extends Command {
             ChatUtils.addChatMessage("Invalid module.");
          }
       } else {
-         ChatUtils.addChatMessage("Usage: .bind <module> [key]");
+         ChatUtils.addChatMessage("Usage: .bind <module> [key] | .bind s");
       }
    }
 
@@ -86,5 +91,42 @@ public class CommandBind extends Command {
          .map(Module::getName)
          .filter(name -> name.toLowerCase().startsWith(args.length == 0 ? "" : args[0].toLowerCase()))
          .toArray(String[]::new);
+   }
+
+   private void listBoundModules() {
+      boolean hasBoundModule = false;
+
+      for (Module module : Naven.getInstance().getModuleManager().getModules()) {
+         if (this.isBoundKey(module.getKey())) {
+            if (!hasBoundModule) {
+               ChatUtils.addChatMessage("Bound modules:");
+               hasBoundModule = true;
+            }
+
+            ChatUtils.addChatMessage(module.getName() + " [" + this.getKeyName(module.getKey()) + "]");
+         }
+      }
+
+      if (!hasBoundModule) {
+         ChatUtils.addChatMessage("No modules are bound.");
+      }
+   }
+
+   private boolean isBoundKey(int keyCode) {
+      return keyCode != 0 && keyCode != InputConstants.UNKNOWN.getValue();
+   }
+
+   private String getKeyName(int keyCode) {
+      if (keyCode < 0) {
+         return switch (-keyCode) {
+            case 2 -> "MOUSE MIDDLE";
+            case 3 -> "MOUSE 4";
+            case 4 -> "MOUSE 5";
+            default -> "MOUSE " + -keyCode;
+         };
+      }
+
+      Key key = InputConstants.getKey(keyCode, 0);
+      return key.getDisplayName().getString().toUpperCase();
    }
 }
