@@ -132,6 +132,11 @@ public class Scaffold extends Module {
            .build()
            .getModeValue();
 
+   public BooleanValue legitUP = ValueBuilder.create(this, "LegitUP")
+           .setDefaultBooleanValue(false)
+           .build()
+           .getBooleanValue();
+
    private int oldSlot;
    private BlockPos pos;
    private int lastSneakTicks;
@@ -291,8 +296,8 @@ public class Scaffold extends Module {
             this.rots.setY(RotationUtils.rotateToPitch(pitchSpeed, this.rots.getY(), this.correctRotation.getY()));
          } else {
             this.rots.setX(RotationUtils.rotateToYaw(75.0F, this.rots.getX(), this.correctRotation.getX()));
+            this.rots.setY(this.correctRotation.getY());
          }
-         this.rots.setY(this.correctRotation.getY());
       }
 
       this.jumpKeyHeld = holdingJump || tellyStopActive;
@@ -413,7 +418,7 @@ public class Scaffold extends Module {
          HitResult hit = skippedTick ? RayTraceUtils.rayCast(4.5D, 1.0F, true, placeRotation) : RayTraceUtils.rayCast(1.0F, placeRotation);
          if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK && this.isPlaceHitValid(blockHit, skippedTick)) {
             boolean holdingJump = isJumpHeld();
-            boolean invalidUpHit = blockHit.getDirection() == Direction.UP && !mc.player.onGround() && PlayerUtils.movementInput() && !holdingJump && !this.mode.isCurrentMode("Normal") && !skippedTick;
+            boolean invalidUpHit = blockHit.getDirection() == Direction.UP && !this.legitUP.getCurrentValue() && !mc.player.onGround() && PlayerUtils.movementInput() && !holdingJump && !this.mode.isCurrentMode("Normal") && !skippedTick;
             if (!invalidUpHit) {
                if (skippedTick) {
                   this.rots.set(placeRotation.x, placeRotation.y);
@@ -425,7 +430,7 @@ public class Scaffold extends Module {
                   ));
                }
 
-               if (this.useItemBeforePlace.getCurrentValue()) {
+               if (this.useItemBeforePlace.getCurrentValue() && !this.rotationMode.isCurrentMode("Strict")) {
                   mc.gameMode.useItem(mc.player, hand);
                }
 
@@ -560,11 +565,15 @@ public class Scaffold extends Module {
       Direction bestFace = null;
       double bestFaceScore = Double.MAX_VALUE;
       BlockPos underPlayer = BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.0D, mc.player.getZ());
-      boolean avoidUpFace = this.mode.isCurrentMode("Telly Bridge") && !mc.player.onGround() && PlayerUtils.movementInput() && !isJumpHeld();
+      boolean allowLegitUp = this.legitUP.getCurrentValue();
+      boolean avoidUpFace = !allowLegitUp && this.mode.isCurrentMode("Telly Bridge") && !mc.player.onGround() && PlayerUtils.movementInput() && !isJumpHeld();
       Vec3 eye = mc.player.getEyePosition();
 
       Direction[] faceOrder = new Direction[]{Direction.UP, Direction.WEST, Direction.EAST, Direction.SOUTH, Direction.NORTH};
       for (Direction candidateFace : faceOrder) {
+         if (avoidUpFace && candidateFace == Direction.UP) {
+            continue;
+         }
          BlockPos placePos = this.pos.relative(candidateFace);
          if (!mc.level.isEmptyBlock(placePos)) {
             continue;
@@ -588,7 +597,7 @@ public class Scaffold extends Module {
          }
 
          double score = placePos.distSqr(underPlayer) + faceCenter.distanceToSqr(eye) * 0.03D;
-         if (candidateFace == Direction.UP && !isJumpHeld()) {
+         if (candidateFace == Direction.UP && !isJumpHeld() && !allowLegitUp) {
             score += 1.0D;
          }
          if (avoidUpFace && candidateFace == Direction.UP) {
@@ -794,7 +803,10 @@ public class Scaffold extends Module {
       if (!(hit instanceof BlockHitResult blockHit) || hit.getType() != HitResult.Type.BLOCK || this.pos == null) {
          return false;
       }
-      return isValidBlock(blockHit.getBlockPos()) && isNearbyBlockPos(blockHit.getBlockPos()) && blockHit.getDirection() != Direction.DOWN && blockHit.getDirection() != Direction.UP;
+      return isValidBlock(blockHit.getBlockPos())
+              && isNearbyBlockPos(blockHit.getBlockPos())
+              && blockHit.getDirection() != Direction.DOWN
+              && (this.legitUP.getCurrentValue() || blockHit.getDirection() != Direction.UP);
    }
 
    private boolean isNearbyBlockPos(BlockPos blockPos) {
@@ -865,7 +877,9 @@ public class Scaffold extends Module {
    private boolean isPlaceHitValid(BlockHitResult blockHit, boolean skippedTick) {
       if (!skippedTick && this.rotationMode.isCurrentMode("Strict") && this.strictPlacementFace != null) {
          return blockHit.getBlockPos().equals(this.pos)
+                 && isValidBlock(blockHit.getBlockPos())
                  && blockHit.getDirection() != Direction.DOWN
+                 && blockHit.getDirection() == this.strictPlacementFace
                  && mc.level.isEmptyBlock(blockHit.getBlockPos().relative(blockHit.getDirection()));
       }
       if (blockHit.getBlockPos().equals(this.pos)) {
