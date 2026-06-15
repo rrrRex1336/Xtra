@@ -7,8 +7,6 @@ import awa.qwq.ovo.Naven.exceptions.NoSuchModuleException;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.utils.ChatUtils;
 
-import java.util.List;
-
 @CommandInfo(
         name = "hide",
         description = "hide module in arraylist",
@@ -16,7 +14,6 @@ import java.util.List;
 )
 
 public class CommandHide extends Command {
-    List<Module> hideModules;
     @Override
     public void onCommand(String[] args) {
         if (args.length == 1) {
@@ -25,14 +22,17 @@ public class CommandHide extends Command {
             try {
                 Module module = Naven.getInstance().getModuleManager().getModule(moduleName);
                 if (module != null) {
-                    this.hideModules.removeIf((modulex) -> modulex.equals(moduleName));
-                   ChatUtils.addChatMessage("Hide module" + moduleName);
+                    module.setHidden(!module.isHidden());
+                    Naven.getInstance().getFileManager().save();
+                    ChatUtils.addChatMessage(module.getName() + (module.isHidden() ? " hidden." : " visible."));
                 } else {
                     ChatUtils.addChatMessage("Invalid module.");
                 }
             } catch (NoSuchModuleException var4) {
                 ChatUtils.addChatMessage("Invalid module.");
             }
+        } else {
+            ChatUtils.addChatMessage("Usage: .hide <module>");
         }
     }
 

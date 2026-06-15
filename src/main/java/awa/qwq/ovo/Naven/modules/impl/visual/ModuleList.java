@@ -143,6 +143,7 @@ public class ModuleList extends Module {
         if (this.hideRenderModules.getCurrentValue()) {
             allModules.removeIf((modulex) -> modulex.getCategory() == Category.VISUAL);
         }
+        allModules.removeIf(Module::isHidden);
 
         if (update || this.renderModules == null) {
             this.renderModules = new ArrayList<>(allModules);
@@ -167,7 +168,7 @@ public class ModuleList extends Module {
             }
 
             for (Module module : this.renderModules) {
-                if (!module.isEnabled()) continue;
+                if (!module.isEnabled() || module.isHidden()) continue;
 
                 String displayName = this.getModuleDisplayName(module);
                 adjustFont.render(e.getStack(), displayName, xOffset, yOffset, Color.WHITE, true, fontSize);
@@ -185,7 +186,7 @@ public class ModuleList extends Module {
 
             for (Module module : this.renderModules) {
                 SmoothAnimationTimer animation = module.getAnimation();
-                if (module.isEnabled()) {
+                if (module.isEnabled() && !module.isHidden()) {
                     animation.target = 100.0F;
                 } else {
                     animation.target = 0.0F;
@@ -251,7 +252,7 @@ public class ModuleList extends Module {
 
             for (Module module : this.renderModules) {
                 SmoothAnimationTimer animation = module.getAnimation();
-                if (module.isEnabled()) {
+                if (module.isEnabled() && !module.isHidden()) {
                     animation.target = 100.0F;
                 } else {
                     animation.target = 0.0F;

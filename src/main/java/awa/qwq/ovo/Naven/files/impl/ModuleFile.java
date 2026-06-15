@@ -25,17 +25,19 @@ public class ModuleFile extends ClientFile {
 
       String line;
       while ((line = reader.readLine()) != null) {
-         String[] split = line.split(":", 3);
-         if (split.length != 3) {
+         String[] split = line.split(":", 4);
+         if (split.length < 3) {
             logger.error("Failed to read line {}!", line);
          } else {
             String name = split[0];
             int key = Integer.parseInt(split[1]);
             boolean enabled = Boolean.parseBoolean(split[2]);
+            boolean hidden = split.length >= 4 && Boolean.parseBoolean(split[3]);
 
             try {
                Module module = moduleManager.getModule(name);
                module.setKey(key);
+               module.setHidden(hidden);
                module.setEnabled(enabled);
             } catch (NoSuchModuleException var9) {
                logger.error("Failed to find module {}!", name);
@@ -49,7 +51,7 @@ public class ModuleFile extends ClientFile {
       ModuleManager moduleManager = Naven.getInstance().getModuleManager();
 
       for (Module module : new ArrayList<>(moduleManager.getModules())) {
-         writer.write(String.format("%s:%d:%s\n", module.getName(), module.getKey(), module.isEnabled()));
+         writer.write(String.format("%s:%d:%s:%s\n", module.getName(), module.getKey(), module.isEnabled(), module.isHidden()));
       }
    }
 }

@@ -21,6 +21,7 @@ public class Module extends HasValue {
    private String suffix;
    private Category category;
    private boolean enabled;
+   private boolean hidden;
    private int minPermission = 0;
    private int key;
 
@@ -155,6 +156,10 @@ public class Module extends HasValue {
       return this.enabled;
    }
 
+   public boolean isHidden() {
+      return this.hidden;
+   }
+
    public int getMinPermission() {
       return this.minPermission;
    }
@@ -172,6 +177,13 @@ public class Module extends HasValue {
 
    public void setKey(int key) {
       this.key = key;
+   }
+
+   public void setHidden(boolean hidden) {
+      if (this.hidden != hidden) {
+         this.hidden = hidden;
+         update = true;
+      }
    }
 
    public void processCommand(String message) {
