@@ -13,11 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import awa.qwq.ovo.Naven.files.impl.*;
-import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import oshi.SystemInfo;
-import oshi.hardware.HWDiskStore;
 
 public class FileManager {
    public static final Logger logger = LogManager.getLogger(FileManager.class);
@@ -26,12 +23,10 @@ public class FileManager {
    private final List<ClientFile> files = new ArrayList<>();
 
    public FileManager() {
-      if (!clientFolder.exists() && clientFolder.mkdir()) {
+      if (!clientFolder.exists() && clientFolder.mkdirs()) {
          logger.info("Created client folder!");
       }
 
-      this.files.add(new KillSaysFile());
-      this.files.add(new SpammerFile());
       this.files.add(new ModuleFile());
       this.files.add(new ValueFile());
       this.files.add(new CGuiFile());
@@ -86,8 +81,6 @@ public class FileManager {
    }
 
    static {
-      List<HWDiskStore> diskStores = new SystemInfo().getHardware().getDiskStores();
-      clientFolder = new File(System.getenv("APPDATA") + "\\" + DigestUtils.md5Hex((diskStores.isEmpty() ? "NO_DISK_FOUND" : diskStores.get(0).getSerial()).getBytes(StandardCharsets.UTF_8))
-      );
+      clientFolder = new File(System.getProperty("user.dir"), "Naven");
    }
 }
