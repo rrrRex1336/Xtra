@@ -8,7 +8,6 @@ import awa.qwq.ovo.Naven.managers.friends.FriendManager;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
-import awa.qwq.ovo.Naven.modules.impl.misc.KillSay;
 import awa.qwq.ovo.Naven.modules.impl.misc.Teams;
 import awa.qwq.ovo.Naven.modules.impl.player.Blink;
 import awa.qwq.ovo.Naven.modules.impl.movement.Stuck;
@@ -454,9 +453,6 @@ public class KillAura extends Module {
       float currentPitch = mc.player.getXRot();
       mc.player.setYRot(RotationManager.rotations.x);
       mc.player.setXRot(RotationManager.rotations.y);
-      if (entity instanceof Player && !AntiBots.isBot(entity)) {
-         KillSay.attackedPlayers.add(entity.getName().getString());
-      }
       mc.gameMode.attack(mc.player, entity);
       mc.player.swing(InteractionHand.MAIN_HAND);
       if (this.moreParticles.getCurrentValue()) {

@@ -115,8 +115,6 @@ public class ModuleManager {
          new LowFire(),
          new Scoreboard(),
          new Compass(),
-         new Spammer(),
-         new KillSay(),
          new ItemPhysics(),
          new Blink(),
          new PostProcess(),
