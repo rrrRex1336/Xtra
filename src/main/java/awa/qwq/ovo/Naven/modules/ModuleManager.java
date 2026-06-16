@@ -104,7 +104,6 @@ public class ModuleManager {
          new BedPlates(),
          new TimeChanger(),
          new FastMine(),
-         new FastLadder(),
          new FullBright(),
          new NameProtect(),
          new NoHurtCam(),
