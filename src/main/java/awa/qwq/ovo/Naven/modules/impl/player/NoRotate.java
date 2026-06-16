@@ -29,6 +29,7 @@ public class NoRotate extends Module {
     @EventTarget
     public void onPacket(EventPacket event) {
         if (event.getType() == EventType.RECEIVE) {
+            setSuffix(mode.getCurrentMode());
             if (event.getPacket() instanceof ClientboundPlayerPositionPacket packet) {
                 switch (mode.getCurrentMode()) {
                     case "Packet":
