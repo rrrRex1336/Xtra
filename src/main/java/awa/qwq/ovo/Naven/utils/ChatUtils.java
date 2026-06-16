@@ -6,7 +6,7 @@ import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Component;
 
 public class ChatUtils {
-   private static final String PREFIX = "§7[§4" + Naven.CLIENT_DISPLAY_NAME.charAt(0) + "§7] ";
+   private static final String PREFIX = "§d" + Naven.CLIENT_DISPLAY_NAME + " §7>> ";
 
    public static void component(Component component) {
       ChatComponent chat = Minecraft.getInstance().gui.getChat();
