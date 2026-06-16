@@ -11,6 +11,7 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.ui.ClickGUI;
 import awa.qwq.ovo.Naven.utils.ChatUtils;
+import awa.qwq.ovo.Naven.utils.NetworkUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
@@ -19,12 +20,14 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 @ModuleInfo(
         name = "InventoryMove",
@@ -53,6 +56,8 @@ public class InventoryMove extends Module {
     private boolean wasInInventory;
     private boolean wasSprintingBeforeGui;
     private boolean isInGui;
+    private boolean releasingHeypixelInventoryPackets;
+    private final Queue<Packet<?>> heypixelInventoryPackets = new ConcurrentLinkedQueue<>();
 
     @EventTarget
     public void onRunTicks(EventRunTicks event) {
@@ -65,9 +70,24 @@ public class InventoryMove extends Module {
             return;
         }
 
-        if (!this.quickMoveWarning && event.getPacket() instanceof ServerboundContainerClickPacket clickPacket && this.isQuickMoveToHotbar(clickPacket)) {
-            this.quickMoveWarning = true;
-            ChatUtils.addChatMessage("You must close inventory after 0.4s~.");
+        if (this.releasingHeypixelInventoryPackets) {
+            return;
+        }
+
+        if (event.getPacket() instanceof ServerboundContainerClickPacket clickPacket && this.shouldQueueHeypixelInventoryClick(clickPacket)) {
+            if (!this.quickMoveWarning) {
+                this.quickMoveWarning = true;
+                ChatUtils.addChatMessage("You must close inventory after 0.4s~.");
+            }
+            event.setCancelled(true);
+            this.heypixelInventoryPackets.offer(clickPacket);
+            return;
+        }
+
+        if (event.getPacket() instanceof ServerboundContainerClosePacket closePacket && this.shouldReleaseQueuedInventoryPackets(closePacket)) {
+            event.setCancelled(true);
+            this.releaseHeypixelInventoryPackets();
+            NetworkUtils.sendPacketNoEvent(closePacket);
         }
     }
 
@@ -123,45 +143,65 @@ public class InventoryMove extends Module {
 
     private void updateHeypixelInventoryState() {
         if (!mode.isCurrentMode("Heypixel")) {
-            this.wasInInventory = false;
             this.quickMoveWarning = false;
+            this.wasInInventory = false;
+            this.releaseHeypixelInventoryPackets();
             return;
         }
 
-        boolean currentlyInInventory = this.minecraft.screen instanceof AbstractContainerScreen;
+        boolean currentlyInInventory = this.isPlayerInventoryScreen();
         if (currentlyInInventory && !this.wasInInventory) {
             this.quickMoveWarning = false;
+        }
+        if (this.wasInInventory && !currentlyInInventory) {
+            this.releaseHeypixelInventoryPackets();
         }
         this.wasInInventory = currentlyInInventory;
     }
 
-    private boolean isQuickMoveToHotbar(ServerboundContainerClickPacket clickPacket) {
-        if (clickPacket.getClickType() != ClickType.QUICK_MOVE || this.minecraft.player == null) {
+    private boolean shouldQueueHeypixelInventoryClick(ServerboundContainerClickPacket clickPacket) {
+        return this.isPlayerInventoryScreen()
+                && clickPacket.getContainerId() == this.minecraft.player.inventoryMenu.containerId;
+    }
+
+    private boolean shouldReleaseQueuedInventoryPackets(ServerboundContainerClosePacket closePacket) {
+        return !this.heypixelInventoryPackets.isEmpty()
+                && this.minecraft.player != null
+                && closePacket.getContainerId() == this.minecraft.player.inventoryMenu.containerId;
+    }
+
+    private boolean isPlayerInventoryScreen() {
+        if (this.minecraft.player == null) {
             return false;
         }
 
         AbstractContainerMenu menu = this.minecraft.player.containerMenu;
-        if (menu == null || clickPacket.getContainerId() != menu.containerId) {
-            return false;
+        return this.minecraft.screen instanceof InventoryScreen
+                && menu != null
+                && menu.containerId == this.minecraft.player.inventoryMenu.containerId;
+    }
+
+    private void releaseHeypixelInventoryPackets() {
+        if (this.heypixelInventoryPackets.isEmpty()) {
+            return;
         }
 
-        for (int slotId : clickPacket.getChangedSlots().keySet()) {
-            if (slotId < 0 || slotId >= menu.slots.size()) {
-                continue;
-            }
-
-            Slot slot = menu.getSlot(slotId);
-            ItemStack changedStack = clickPacket.getChangedSlots().get(slotId);
-            if (changedStack != null
-                    && !changedStack.isEmpty()
-                    && slot.container == this.minecraft.player.getInventory()
-                    && slot.getContainerSlot() >= 0
-                    && slot.getContainerSlot() <= 8) {
-                return true;
-            }
+        if (this.minecraft.getConnection() == null) {
+            this.heypixelInventoryPackets.clear();
+            return;
         }
 
-        return false;
+        this.releasingHeypixelInventoryPackets = true;
+        try {
+            while (!this.heypixelInventoryPackets.isEmpty()) {
+                Packet<?> packet = this.heypixelInventoryPackets.poll();
+                if (packet != null) {
+                    NetworkUtils.sendPacketNoEvent(packet);
+                }
+            }
+        } finally {
+            this.releasingHeypixelInventoryPackets = false;
+        }
     }
 
     private boolean isKeyActive(KeyMapping keyMapping) {
@@ -267,8 +307,10 @@ public class InventoryMove extends Module {
     public void onDisable() {
         super.onDisable();
         this.quickMoveWarning = false;
+        this.releaseHeypixelInventoryPackets();
         this.wasInInventory = false;
         this.wasSprintingBeforeGui = false;
         this.isInGui = false;
+        this.releasingHeypixelInventoryPackets = false;
     }
 }
