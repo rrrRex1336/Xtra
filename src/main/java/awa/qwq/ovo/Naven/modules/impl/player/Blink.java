@@ -291,7 +291,7 @@ public class Blink extends Module {
    @EventTarget
    public void onMotion(EventMotion e) {
       if (e.getType() == EventType.PRE && mc.player != null) {
-         this.setSuffix(this.getBlinkTicks() + "");
+         this.setSuffix("Delay C03s : " + this.getBlinkTicks());
          this.progress.target = Mth.clamp((float) this.getBlinkTicks() / this.maxTicks.getCurrentValue() * 100.0F, 0.0F, 100.0F);
          this.releasedTicks = 0;
          if (mc.player.hurtTime == 10) {
