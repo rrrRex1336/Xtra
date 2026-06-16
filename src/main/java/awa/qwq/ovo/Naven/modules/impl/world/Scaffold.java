@@ -8,6 +8,7 @@ import awa.qwq.ovo.Naven.events.impl.EventMouseClick;
 import awa.qwq.ovo.Naven.events.impl.EventPacket;
 import awa.qwq.ovo.Naven.events.impl.EventRender;
 import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
+import awa.qwq.ovo.Naven.events.impl.EventUpdateFoV;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
 import awa.qwq.ovo.Naven.managers.rotation.utils.RotationUtils;
 import awa.qwq.ovo.Naven.modules.Category;
@@ -17,6 +18,7 @@ import awa.qwq.ovo.Naven.modules.impl.player.AutoMLG;
 import awa.qwq.ovo.Naven.utils.*;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
+import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -116,6 +118,20 @@ public class Scaffold extends Module {
            .build()
            .getBooleanValue();
 
+   public BooleanValue keepFov = ValueBuilder.create(this, "Keep Fov (>No Fov)")
+           .setDefaultBooleanValue(false)
+           .build()
+           .getBooleanValue();
+
+   public FloatValue fov = ValueBuilder.create(this, "Fov")
+           .setDefaultFloatValue(1.0F)
+           .setMinFloatValue(1.0F)
+           .setMaxFloatValue(2.0F)
+           .setFloatStep(0.05F)
+           .setVisibility(() -> this.keepFov.getCurrentValue())
+           .build()
+           .getFloatValue();
+
    public BooleanValue vulcan = ValueBuilder.create(this, "Vulcan")
            .setDefaultBooleanValue(false)
            .build()
@@ -132,7 +148,7 @@ public class Scaffold extends Module {
            .build()
            .getModeValue();
 
-   public BooleanValue legitUP = ValueBuilder.create(this, "LegitUP")
+   public BooleanValue legitUP = ValueBuilder.create(this, "Legit UP")
            .setDefaultBooleanValue(false)
            .build()
            .getBooleanValue();
@@ -225,6 +241,13 @@ public class Scaffold extends Module {
             ChatUtils.addChatMessage("你也是要飞了 " + strength);
             this.bigVelocityTick = 60;
          }
+      }
+   }
+
+   @EventTarget
+   public void onUpdateFoV(EventUpdateFoV event) {
+      if (this.keepFov.getCurrentValue()) {
+         event.setFov(this.fov.getCurrentValue() + PlayerUtils.getMoveSpeedEffectAmplifier() * 0.13F);
       }
    }
 
@@ -418,7 +441,7 @@ public class Scaffold extends Module {
          HitResult hit = skippedTick ? RayTraceUtils.rayCast(4.5D, 1.0F, true, placeRotation) : RayTraceUtils.rayCast(1.0F, placeRotation);
          if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK && this.isPlaceHitValid(blockHit, skippedTick)) {
             boolean holdingJump = isJumpHeld();
-            boolean invalidUpHit = blockHit.getDirection() == Direction.UP && !this.legitUP.getCurrentValue() && !mc.player.onGround() && PlayerUtils.movementInput() && !holdingJump && !this.mode.isCurrentMode("Normal") && !skippedTick;
+            boolean invalidUpHit = blockHit.getDirection() == Direction.UP && !this.canUseLegitUp() && !mc.player.onGround() && PlayerUtils.movementInput() && !holdingJump && !this.mode.isCurrentMode("Normal") && !skippedTick;
             if (!invalidUpHit) {
                if (skippedTick) {
                   this.rots.set(placeRotation.x, placeRotation.y);
@@ -565,7 +588,7 @@ public class Scaffold extends Module {
       Direction bestFace = null;
       double bestFaceScore = Double.MAX_VALUE;
       BlockPos underPlayer = BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.0D, mc.player.getZ());
-      boolean allowLegitUp = this.legitUP.getCurrentValue();
+      boolean allowLegitUp = this.canUseLegitUp();
       boolean avoidUpFace = !allowLegitUp && this.mode.isCurrentMode("Telly Bridge") && !mc.player.onGround() && PlayerUtils.movementInput() && !isJumpHeld();
       Vec3 eye = mc.player.getEyePosition();
 
@@ -806,7 +829,7 @@ public class Scaffold extends Module {
       return isValidBlock(blockHit.getBlockPos())
               && isNearbyBlockPos(blockHit.getBlockPos())
               && blockHit.getDirection() != Direction.DOWN
-              && (this.legitUP.getCurrentValue() || blockHit.getDirection() != Direction.UP);
+              && (this.canUseLegitUp() || blockHit.getDirection() != Direction.UP);
    }
 
    private boolean isNearbyBlockPos(BlockPos blockPos) {
@@ -829,6 +852,10 @@ public class Scaffold extends Module {
    private boolean isTower() {
       boolean holdingJump = isJumpHeld();
       return holdingJump && !this.useLastTellyMovementYaw && !mc.options.keyUp.isDown() && !mc.options.keyDown.isDown() && !mc.options.keyLeft.isDown() && !mc.options.keyRight.isDown();
+   }
+
+   private boolean canUseLegitUp() {
+      return this.legitUP.getCurrentValue() && isJumpHeld();
    }
 
    private boolean isJumpHeld() {
