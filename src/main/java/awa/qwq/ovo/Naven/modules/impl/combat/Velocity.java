@@ -223,10 +223,6 @@ public class Velocity extends Module {
         }
     }
 
-    private void clearTargets() {
-        targets.clear();
-    }
-
     private void flushPackets() {
         boolean attacked = totalAttacks > 0;
 
@@ -262,7 +258,7 @@ public class Velocity extends Module {
         attackTarget = null;
         attacksRemaining = 0;
         totalAttacks = 0;
-        clearTargets();
+        targets.clear();
     }
 
     private boolean shouldIgnore() {
@@ -839,7 +835,7 @@ public class Velocity extends Module {
             }
 
             if (shouldRelease) {
-                clearTargets();
+                targets.clear();
                 if (reduceAddons.isSelected("Rotate") && clientboundSetEntityMotionPacket != null) {
                     double motionX = -clientboundSetEntityMotionPacket.getXa() / 8000.0;
                     double motionZ = -clientboundSetEntityMotionPacket.getZa() / 8000.0;
