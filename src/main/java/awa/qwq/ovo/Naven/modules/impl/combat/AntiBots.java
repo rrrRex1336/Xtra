@@ -98,7 +98,7 @@ public class AntiBots extends Module {
       if (e.getType() == EventType.PRE) {
          for (Entry<UUID, Long> entry : uuids.entrySet()) {
             if (System.currentTimeMillis() - entry.getValue() > 500L) {
-               ChatUtils.addChatMessage("[AntiBot] Fake Staff Detected! (" + uuidDisplayNames.get(entry.getKey()) + ")");
+               ChatUtils.addChatMessage("Fake Staff Detected! (" + uuidDisplayNames.get(entry.getKey()) + ")");
                uuids.remove(entry.getKey());
             }
          }
@@ -123,7 +123,7 @@ public class AntiBots extends Module {
             ClientboundAddEntityPacket packet = (ClientboundAddEntityPacket)e.getPacket();
             if (uuids.containsKey(packet.getUUID())) {
                String displayName = uuidDisplayNames.get(packet.getUUID());
-               ChatUtils.addChatMessage("[AntiBot] Bot Detected! (" + displayName + ")");
+               ChatUtils.addChatMessage("Bot Detected! (" + displayName + ")");
                entityIdDisplayNames.put(packet.getId(), displayName);
                uuids.remove(packet.getUUID());
                ids.add(packet.getId());
@@ -136,7 +136,7 @@ public class AntiBots extends Module {
                Integer entityId = (Integer)var9.next();
                if (ids.contains(entityId)) {
                   String displayName = entityIdDisplayNames.get(entityId);
-                  ChatUtils.addChatMessage("[AntiBot] Bot Removed! (" + displayName + ")");
+                  ChatUtils.addChatMessage("Bot Removed! (" + displayName + ")");
                   ids.remove(entityId);
                }
             }
