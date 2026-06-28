@@ -61,6 +61,7 @@ public class ModuleManager {
          new Velocity(),
          new NameTags(),
          new ContainerStealer(),
+         new Timer(),
          new InventoryManager(),
          new Scaffold(),
          new Rotation(),
