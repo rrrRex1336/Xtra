@@ -14,6 +14,7 @@ import awa.qwq.ovo.Naven.modules.impl.combat.KillAura;
 import awa.qwq.ovo.Naven.modules.impl.player.AutoMLG;
 import awa.qwq.ovo.Naven.modules.impl.visual.ChestESP;
 import awa.qwq.ovo.Naven.utils.ChunkUtils;
+import awa.qwq.ovo.Naven.utils.NetworkUtils;
 import awa.qwq.ovo.Naven.utils.TimeHelper;
 import awa.qwq.ovo.Naven.utils.Vector2f;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
@@ -22,6 +23,7 @@ import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockEventPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.level.block.Blocks;
@@ -66,6 +68,7 @@ public class ChestAura extends Module {
     public void onEnable() {
         super.onEnable();
         rotations = null;
+        chestRotations = null;
         isOpening = false;
         hasOpened = false;
         openedChests.clear();
@@ -99,11 +102,12 @@ public class ChestAura extends Module {
 
         if (mc.player == null || mc.level == null) return;
         AutoMLG autoMLG = (AutoMLG) Naven.getInstance().getModuleManager().getModule(AutoMLG.class);
-        boolean mlgActive = autoMLG != null;
+        boolean mlgActive = autoMLG != null && autoMLG.isEnabled();
         boolean inChest = mc.screen instanceof ContainerScreen;
         if (hasOpened && !inChest && rotations != null) {
             if (delayTimer.delay(nextDelay.getCurrentValue())) {
                 rotations = null;
+                chestRotations = null;
                 isOpening = false;
                 hasOpened = false;
                 delayTimer.reset();
@@ -125,6 +129,7 @@ public class ChestAura extends Module {
                 lookAtBlock(rotations);
             } else {
                 rotations = null;
+                chestRotations = null;
             }
             return;
         }
@@ -147,17 +152,24 @@ public class ChestAura extends Module {
             Module scaffold = Naven.getInstance().getModuleManager().getModule(Scaffold.class);
             Module killAura = Naven.getInstance().getModuleManager().getModule(KillAura.class);
             Module aura = Naven.getInstance().getModuleManager().getModule(Aura.class);
-            AutoMLG autoMLG = (AutoMLG) Naven.getInstance().getModuleManager().getModule(AutoMLG.class);
-            boolean mlgActive = autoMLG != null;
-            if ((scaffold == null || !scaffold.isEnabled()) && (killAura == null || !killAura.isEnabled()) && (aura == null || !aura.isEnabled()) || !mlgActive) {
+        AutoMLG autoMLG = (AutoMLG) Naven.getInstance().getModuleManager().getModule(AutoMLG.class);
+            boolean mlgActive = autoMLG != null && autoMLG.isEnabled();
+            if (!mlgActive && (scaffold == null || !scaffold.isEnabled()) && (killAura == null || !killAura.isEnabled()) && (aura == null || !aura.isEnabled())) {
+                lookAtBlock(rotations);
                 openChest(rotations);
                 isOpening = true;
                 hasOpened = true;
+                delayTimer.reset();
             }
         }
     }
 
     private void openChest(BlockPos pos) {
+        lookAtBlock(pos);
+        if (chestRotations != null) {
+            NetworkUtils.sendPacket(new ServerboundMovePlayerPacket.Rot(chestRotations.x, chestRotations.y, mc.player.onGround()));
+        }
+
         Vec3 hitVec = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
         BlockHitResult hitResult = new BlockHitResult(hitVec, Direction.UP, pos, false);
 
