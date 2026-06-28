@@ -53,7 +53,7 @@ public class WaterMark extends Module {
 
     @EventTarget
     public void onShader(EventShader e) {
-        if (e.getType() == EventType.SHADOW) {
+        if (e.getType() == EventType.SHADOW && mode.isCurrentMode("Naven")) {
             RenderUtils.drawRoundedRect(e.getStack(), 5.0F, 5.0F, this.width, this.watermarkHeight + 8.0F, 5.0F, Integer.MIN_VALUE);
         }
     }
@@ -63,62 +63,50 @@ public class WaterMark extends Module {
         e.getStack().pushPose();
 
         if (mode.isCurrentMode("Naven")) {
-            renderNavenMode(e);
+            CustomTextRenderer font = Fonts.opensans;
+
+            String userName = "Shiroko";
+            String userRole = "User";
+            try {
+                userName = VerifyClient.getUserName();
+                userRole = VerifyClient.getUserRole();
+            } catch (Exception ex) {
+            }
+
+            String userDisplay = userName + "[" + userRole + "]";
+
+            String text = "Naven | " + Version.getVersion() + " | " + userDisplay + "§r | " +
+                    StringUtils.split(mc.fpsString, " ")[0] + " FPS | " + format.format(new Date());
+
+            this.width = font.getWidth(text, this.watermarkSize.getCurrentValue()) + 14.0F;
+            this.watermarkHeight = (float) font.getHeight(true, this.watermarkSize.getCurrentValue());
+
+            StencilUtils.write(false);
+            RenderUtils.drawRoundedRect(e.getStack(), 5.0F, 5.0F, this.width, this.watermarkHeight + 8.0F, 5.0F, Integer.MIN_VALUE);
+            StencilUtils.erase(true);
+            RenderUtils.fill(e.getStack(), 5.0F, 5.0F, 9.0F + this.width, 8.0F, headerColor);
+            RenderUtils.fill(e.getStack(), 5.0F, 8.0F, 9.0F + this.width, 16.0F + this.watermarkHeight, bodyColor);
+            font.render(e.getStack(), text, 12.0, 10.0, Color.WHITE, true, this.watermarkSize.getCurrentValue());
+            StencilUtils.dispose();
         } else {
-            renderAdjustMode(e);
+            CustomTextRenderer font = Fonts.misans;
+            float fontSize = 0.65F;
+
+            String fps = StringUtils.split(mc.fpsString, " ")[0];
+            String clientName = Naven.CLIENT_DISPLAY_NAME;
+            String firstLetter = clientName.substring(0, 1);
+            String restLetters = clientName.substring(1);
+
+            float xOffset = 4.0F;
+            float yOffset = 4.0F;
+            int rainbowColor = RenderUtils.getRainbowOpaque(5, 1.0F, 1.0F, 5000.0F);
+            font.render(e.getStack(), firstLetter, xOffset, yOffset, new Color(rainbowColor), true, fontSize);
+            xOffset += font.getWidth(firstLetter, fontSize);
+            font.render(e.getStack(), restLetters, xOffset, yOffset, Color.WHITE, true, fontSize);
+            xOffset += font.getWidth(restLetters, fontSize);
+            font.render(e.getStack(), " (" + fps + " FPS)", xOffset, yOffset, Color.WHITE, true, fontSize);
         }
 
         e.getStack().popPose();
-    }
-
-    private void renderNavenMode(EventRender2D e) {
-        CustomTextRenderer font = Fonts.opensans;
-
-        String userName = "Shiroko";
-        String userRole = "User";
-        try {
-            userName = VerifyClient.getUserName();
-            userRole = VerifyClient.getUserRole();
-        } catch (Exception ex) {
-        }
-
-        String userDisplay = userName + "[" + userRole + "]";
-
-        String text = "Naven | " + Version.getVersion() + " | " + userDisplay + "§r | " +
-                StringUtils.split(mc.fpsString, " ")[0] + " FPS | " + format.format(new Date());
-
-        this.width = font.getWidth(text, this.watermarkSize.getCurrentValue()) + 14.0F;
-        this.watermarkHeight = (float) font.getHeight(true, this.watermarkSize.getCurrentValue());
-
-        StencilUtils.write(false);
-        RenderUtils.drawRoundedRect(e.getStack(), 5.0F, 5.0F, this.width, this.watermarkHeight + 8.0F, 5.0F, Integer.MIN_VALUE);
-        StencilUtils.erase(true);
-        RenderUtils.fill(e.getStack(), 5.0F, 5.0F, 9.0F + this.width, 8.0F, headerColor);
-        RenderUtils.fill(e.getStack(), 5.0F, 8.0F, 9.0F + this.width, 16.0F + this.watermarkHeight, bodyColor);
-        font.render(e.getStack(), text, 12.0, 10.0, Color.WHITE, true, this.watermarkSize.getCurrentValue());
-        StencilUtils.dispose();
-    }
-
-    private void renderAkarinMode(EventRender2D e) {
-
-    }
-
-    private void renderAdjustMode(EventRender2D e) {
-        CustomTextRenderer font = Fonts.misans;
-        float fontSize = 0.65F;
-
-        String fps = StringUtils.split(mc.fpsString, " ")[0];
-        String clientName = Naven.CLIENT_DISPLAY_NAME;
-        String firstLetter = clientName.substring(0, 1);
-        String restLetters = clientName.substring(1);
-
-        float xOffset = 4.0F;
-        float yOffset = 4.0F;
-        int rainbowColor = RenderUtils.getRainbowOpaque(5, 1.0F, 1.0F, 5000.0F);
-        font.render(e.getStack(), firstLetter, xOffset, yOffset, new Color(rainbowColor), true, fontSize);
-        xOffset += font.getWidth(firstLetter, fontSize);
-        font.render(e.getStack(), restLetters, xOffset, yOffset, Color.WHITE, true, fontSize);
-        xOffset += font.getWidth(restLetters, fontSize);
-        font.render(e.getStack(), " (" + fps + " FPS)", xOffset, yOffset, Color.WHITE, true, fontSize);
     }
 }
