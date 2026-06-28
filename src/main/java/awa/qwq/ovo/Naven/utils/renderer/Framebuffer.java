@@ -29,8 +29,8 @@ public class Framebuffer {
       GL.textureParam(3553, 10241, 9729);
       GL.textureParam(3553, 10240, 9729);
       Minecraft mc = Minecraft.getInstance();
-      this.width = (int)((double)mc.getWindow().getWidth() * this.sizeMulti);
-      this.height = (int)((double)mc.getWindow().getHeight() * this.sizeMulti);
+      this.width = Math.max(1, (int)((double)mc.getWindow().getWidth() * this.sizeMulti));
+      this.height = Math.max(1, (int)((double)mc.getWindow().getHeight() * this.sizeMulti));
       GL.textureImage2D(3553, 0, 6408, this.width, this.height, 0, 6408, 5121, null);
       GL.framebufferTexture2D(36160, 36064, 3553, this.texture, 0);
       this.unbind();
