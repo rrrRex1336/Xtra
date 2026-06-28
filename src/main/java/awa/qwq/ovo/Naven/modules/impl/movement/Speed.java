@@ -14,6 +14,7 @@ import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.events.impl.EventMoveInput;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
+import lombok.Getter;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -31,13 +32,9 @@ public class Speed extends Module {
     public static final Speed INSTANCE = new Speed();
     private double lastPosX, lastPosZ;
     private long lastUpdateTime;
+    @Getter
     private double currentBPS = 0.0;
-    private int jumpCooldown = 0;
     private boolean wasJumping = false;
-
-    public double getCurrentBPS() {
-        return currentBPS;
-    }
 
     public ModeValue mode = ValueBuilder.create(this, "Mode")
             .setDefaultModeIndex(0)
@@ -182,5 +179,10 @@ public class Speed extends Module {
             if (jump) {
                 if (mc.player != null && mc.player.onGround() && MoveUtils.isMoving()) event.setJump(true);
             }
+    }
+
+    public int getJumpCooldown() {
+        int jumpCooldown = 0;
+        return jumpCooldown;
     }
 }
