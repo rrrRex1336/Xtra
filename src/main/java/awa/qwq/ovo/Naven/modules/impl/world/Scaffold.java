@@ -415,11 +415,10 @@ public class Scaffold extends Module {
             this.placeCount = 0;
             return;
          }
-         int skippedTicks = this.recursionPlace.getCurrentValue() ? 5 : 3;
          if (!this.recursionPlace.getCurrentValue() || this.multiPlaceDepth == 0) {
             Naven.skipTasks.clear();
          }
-         for (int i = 0; i < skippedTicks; ++i) {
+         for (int i = 0; i < 2; ++i) {
             Naven.skipTasks.offer(() -> {
             });
          }
@@ -669,10 +668,8 @@ public class Scaffold extends Module {
               && fixedBlockHit.getDirection() != Direction.DOWN
               && fixedBlockHit.getDirection() == face;
       if (fixedValid) {
-         rotation = fixedRotation;
       } else {
-         Vector2f bestRotation = fixedRotation;
-         double bestRotationScore = Double.MAX_VALUE;
+          double bestRotationScore = Double.MAX_VALUE;
          for (float yawOffset = -12.0F; yawOffset <= 12.0F; yawOffset += 1.5F) {
             for (float pitchOffset = -12.0F; pitchOffset <= 12.0F; pitchOffset += 1.5F) {
                float candidateYawDelta = MathHelper.wrapDegrees(rotation.x + yawOffset - this.rots.x);
@@ -694,45 +691,11 @@ public class Scaffold extends Module {
                double score = Math.abs(yawOffset) + Math.abs(pitchOffset);
                if (score < bestRotationScore) {
                   bestRotationScore = score;
-                  bestRotation = fixedCandidate;
                }
             }
          }
-         rotation = bestRotation;
       }
-
-      double yawDiff = Math.abs(MathHelper.wrapDegrees(rotation.x - this.rots.x));
-      double pitchDiff = Math.abs(rotation.y - this.rots.y);
-      boolean stuckYaw = yawDiff > 2.0D && !Double.isNaN(this.lastStrictYawDiff) && Math.abs(yawDiff - this.lastStrictYawDiff) < 1.0E-4D;
-      boolean stuckPitch = pitchDiff > 2.0D && !Double.isNaN(this.lastStrictPitchDiff) && Math.abs(pitchDiff - this.lastStrictPitchDiff) < 1.0E-4D;
-      if (stuckYaw || stuckPitch) {
-         float jitterYaw = (float) MathUtils.getRandomDoubleInRange(0.095D, 0.19D);
-         float jitterPitch = (float) MathUtils.getRandomDoubleInRange(0.016D, 0.055D);
-         if ((this.strictJitterCounter++ & 1) == 0) {
-            jitterYaw = -jitterYaw;
-         }
-         Vector2f jittered = RotationUtils.getFixedRotation(
-                 rotation.x + jitterYaw,
-                 MathHelper.clamp(rotation.y + jitterPitch, -89.5F, 89.5F),
-                 this.rots.x,
-                 this.rots.y
-         );
-         HitResult jitteredHit = RayTraceUtils.rayCast(1.0F, jittered);
-         if (jitteredHit instanceof BlockHitResult jitteredBlockHit
-                 && jitteredHit.getType() == HitResult.Type.BLOCK
-                 && this.pos != null
-                 && jitteredBlockHit.getBlockPos().equals(this.pos)
-                 && jitteredBlockHit.getDirection() != Direction.DOWN
-                 && jitteredBlockHit.getDirection() == face) {
-            rotation = jittered;
-         }
-         yawDiff = Math.abs(MathHelper.wrapDegrees(rotation.x - this.rots.x));
-         pitchDiff = Math.abs(rotation.y - this.rots.y);
-      }
-
-      this.lastStrictYawDiff = yawDiff;
-      this.lastStrictPitchDiff = pitchDiff;
-      return rotation;
+       return targetRotation;
    }
 
    private BlockPos getBlockPos() {
