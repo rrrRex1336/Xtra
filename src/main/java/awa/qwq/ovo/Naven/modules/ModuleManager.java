@@ -62,6 +62,7 @@ public class ModuleManager {
          new NameTags(),
          new ContainerStealer(),
          new Timer(),
+         new Surround(),
          new InventoryManager(),
          new Scaffold(),
          new Rotation(),
