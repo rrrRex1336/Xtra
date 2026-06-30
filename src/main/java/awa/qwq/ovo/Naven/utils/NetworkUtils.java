@@ -134,6 +134,9 @@ public class NetworkUtils {
             if (passthroughsPackets.remove(packet)) {
                return;
             }
+            if (e.getType() == EventType.SEND) {
+               GetC03StatusUtil.packetEvent(packet);
+            }
             EventPacket event = new EventPacket(e.getType(), packet);
             Naven.getInstance().getEventManager().call(event);
             if (event.isCancelled()) {

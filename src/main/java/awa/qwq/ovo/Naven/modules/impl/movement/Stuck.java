@@ -8,6 +8,8 @@ import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
+import awa.qwq.ovo.Naven.utils.GetC03StatusUtil;
+import awa.qwq.ovo.Naven.utils.MovementUtils;
 import awa.qwq.ovo.Naven.utils.NetworkUtils;
 import awa.qwq.ovo.Naven.utils.SkipTicks;
 import awa.qwq.ovo.Naven.managers.rotation.utils.Rotation;
@@ -15,6 +17,7 @@ import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
+import org.mixin.accessors.LocalPlayerAccessor;
 import org.mixin.accessors.ServerboundMovePlayerPacketAccessor;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ServerboundPongPacket;
@@ -45,7 +48,7 @@ public class Stuck extends Module {
 
    public ModeValue mode = ValueBuilder.create(this, "Mode")
            .setDefaultModeIndex(0)
-           .setModes("Delay", "Packet", "Skip Ticks")
+           .setModes("Delay", "Packet", "Skip Ticks", "Cancel Move")
            .build()
            .getModeValue();
 
@@ -67,6 +70,8 @@ public class Stuck extends Module {
       this.pendingDisable = false;
       if (mode.isCurrentMode("Skip Ticks")) {
          SkipTicks.skipTicks(skipTicks.getCurrentValue());
+      } else if (mode.isCurrentMode("Cancel Move")) {
+         MovementUtils.cancelMove();
       }
    }
 
@@ -91,11 +96,20 @@ public class Stuck extends Module {
    @Override
    public void onDisable() {
       SkipTicks.dispatch();
+      if (this.mode.isCurrentMode("Cancel Move")) {
+         MovementUtils.resetMove();
+         if (mc.player != null) {
+            ((LocalPlayerAccessor) mc.player).setPositionReminder(GetC03StatusUtil.noMovePackets);
+         }
+      }
       super.onDisable();
    }
 
    @EventTarget
    public void onTick(EventRunTicks e) {
+      if (this.mode.isCurrentMode("Cancel Move")) {
+         return;
+      }
       if (!this.mode.isCurrentMode("Packet")) return;
       Scaffold scaffold = (Scaffold) Naven.getInstance().getModuleManager().getModule(Scaffold.class);
       if (scaffold.isEnabled()) {
@@ -110,7 +124,7 @@ public class Stuck extends Module {
 
    @EventTarget
    public void onMotion(EventMotion e) {
-      if (this.mode.isCurrentMode("Skip Ticks")) return;
+      if (this.mode.isCurrentMode("Skip Ticks") || this.mode.isCurrentMode("Cancel Move")) return;
       Scaffold scaffold = (Scaffold) Naven.getInstance().getModuleManager().getModule(Scaffold.class);
       if (scaffold.isEnabled()) {
          scaffold.setEnabled(false);
@@ -159,6 +173,13 @@ public class Stuck extends Module {
       }
    }
 
+   @EventTarget
+   public void onUpdate(EventUpdate e) {
+      if (mc.player != null && this.mode.isCurrentMode("Cancel Move")) {
+         ((LocalPlayerAccessor) mc.player).setPositionReminder(0);
+      }
+   }
+
    private boolean shouldSendCapturedPacket() {
       if (this.capturedPacket instanceof ServerboundUseItemPacket useItemPacket) {
          ItemStack heldStack = mc.player.getItemInHand(useItemPacket.getHand());
@@ -172,7 +193,7 @@ public class Stuck extends Module {
 
    @EventTarget
    public void onMoveInput(EventMoveInput e) {
-      if (this.mode.isCurrentMode("Skip Ticks")) return;
+      if (this.mode.isCurrentMode("Skip Ticks") || this.mode.isCurrentMode("Cancel Move")) return;
       e.setForward(0.0F);
       e.setStrafe(0.0F);
       e.setJump(false);
@@ -192,6 +213,16 @@ public class Stuck extends Module {
       if (mc.player == null) {
          return;
       }
+
+      if (this.mode.isCurrentMode("Cancel Move")) {
+         if (e.getType() == EventType.RECEIVE && e.getPacket() instanceof ClientboundPlayerPositionPacket) {
+            this.setEnabled(false);
+         } else if (e.getType() == EventType.SEND && e.getPacket() instanceof ServerboundMovePlayerPacket.StatusOnly) {
+            e.setCancelled(true);
+         }
+         return;
+      }
+
       Object rawPacket = e.getPacket();
       if (rawPacket instanceof ServerboundMovePlayerPacket) {
          if (this.stuckState != 1 && this.mode.isCurrentMode("Packet")) {
