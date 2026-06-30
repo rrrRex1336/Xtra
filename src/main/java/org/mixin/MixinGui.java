@@ -6,23 +6,26 @@ import awa.qwq.ovo.Naven.events.impl.EventRenderScoreboard;
 import awa.qwq.ovo.Naven.events.impl.EventSetTitle;
 import awa.qwq.ovo.Naven.modules.impl.visual.NoRender;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
-import awa.qwq.ovo.Naven.utils.StencilUtils;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.utils.renderer.text.CustomTextRenderer;
 
 import java.awt.Color;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.numbers.BlankFormat;
 import net.minecraft.network.chat.numbers.NumberFormat;
 import net.minecraft.network.chat.numbers.StyledFormat;
 import net.minecraft.world.scores.*;
+import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -52,90 +55,21 @@ public abstract class MixinGui {
    @Shadow
    public abstract Font getFont();
 
-   private static final int MODERN_HEADER_COLOR = new Color(150, 45, 45, 255).getRGB();
-   private static final int MODERN_BODY_COLOR = new Color(0, 0, 0, 120).getRGB();
-   private static final int MODERN_BACKGROUND_COLOR = new Color(0, 0, 0, 180).getRGB();
+   private static final int MODERN_BACKGROUND_COLOR = new Color(0, 0, 0, 120).getRGB();
+   private static final float MODERN_FONT_SCALE = 0.66F;
 
    @Inject(method = "displayScoreboardSidebar", at = @At("HEAD"), cancellable = true)
    public void hookScoreboardRender(GuiGraphics guiGraphics, Objective objective, CallbackInfo ci) {
       awa.qwq.ovo.Naven.modules.impl.visual.Scoreboard module = this.getScoreboardModule();
-      if (module == null || !module.isEnabled() || !module.modern.getCurrentValue()) {
-         if (module != null && module.isEnabled()) {
-            try {
-               this.renderVanillaScoreboard(guiGraphics, objective, module);
-               ci.cancel();
-            } catch (Exception e) {
-               e.printStackTrace();
-            }
-         }
-
+      if (module == null || !module.isEnabled()) {
          return;
       }
 
-      boolean stencilActive = false;
       try {
-         Scoreboard scoreboard = objective.getScoreboard();
-         List<PlayerScoreEntry> list = scoreboard.listPlayerScores(objective).stream()
-                 .filter(entry -> !entry.isHidden())
-                 .sorted(SCORE_DISPLAY_ORDER)
-                 .limit(15)
-                 .toList();
-
-         if (list.isEmpty()) {
-            ci.cancel();
-            return;
-         }
-
-         CustomTextRenderer font = Fonts.opensans;
-         float fontSize = 0.4F;
-         boolean hideScore = module.hideScore.getCurrentValue();
-         String titleText = this.getScoreboardTitle(objective).getString();
-         float titleWidth = font.getWidth(titleText, fontSize);
-         float maxWidth = titleWidth;
-
-         for (PlayerScoreEntry entry : list) {
-            String playerName = this.getScoreboardPlayerName(scoreboard, entry);
-            String text = hideScore ? playerName : playerName + ": " + entry.value();
-            float width = font.getWidth(text, fontSize);
-            if (width > maxWidth) maxWidth = width;
-         }
-
-         int screenWidth = guiGraphics.guiWidth();
-         float x = screenWidth - maxWidth - 8.0F;
-         float y = module.down.getCurrentValue();
-         float bgHeight = (list.size() + 1) * (float) font.getHeight(true, fontSize) + 10.0F;
-
-         StencilUtils.write(false);
-         stencilActive = true;
-         RenderUtils.drawRoundedRect(guiGraphics.pose(), x - 2.0F, y, maxWidth + 8.0F, bgHeight, 5.0F, MODERN_BACKGROUND_COLOR);
-         StencilUtils.erase(true);
-         RenderUtils.fill(guiGraphics.pose(), x - 2.0F, y, maxWidth + 8.0F, 3.0F, MODERN_HEADER_COLOR);
-         font.render(guiGraphics.pose(), titleText,
-                 x + (maxWidth - titleWidth) / 2.0F, y + 4.0F,
-                 Color.WHITE, true, fontSize);
-
-         float currentY = y + (float) font.getHeight(true, fontSize) + 6.0F;
-         for (PlayerScoreEntry entry : list) {
-            String playerName = this.getScoreboardPlayerName(scoreboard, entry);
-            RenderUtils.fill(guiGraphics.pose(), x - 2.0F, currentY - 1.0F, maxWidth + 8.0F,
-                    (float) font.getHeight(true, fontSize) + 2.0F, MODERN_BODY_COLOR);
-            font.render(guiGraphics.pose(), playerName, x, currentY, Color.WHITE, true, fontSize);
-            if (!hideScore) {
-               String scoreText = String.valueOf(entry.value());
-               float scoreX = x + maxWidth - font.getWidth(scoreText, fontSize);
-               font.render(guiGraphics.pose(), scoreText, scoreX, currentY, Color.RED, true, fontSize);
-            }
-            currentY += (float) font.getHeight(true, fontSize) + 2.0F;
-         }
-
+         this.renderScoreboard(guiGraphics, objective, module, module.modern.getCurrentValue());
          ci.cancel();
-
       } catch (Exception e) {
          e.printStackTrace();
-      } finally {
-         if (stencilActive) {
-            StencilUtils.dispose();
-         }
       }
    }
 
@@ -224,7 +158,7 @@ public abstract class MixinGui {
       return PlayerTeam.formatNameForTeam(team, entry.ownerName()).getString();
    }
 
-   private void renderVanillaScoreboard(GuiGraphics guiGraphics, Objective objective, awa.qwq.ovo.Naven.modules.impl.visual.Scoreboard module) {
+   private void renderScoreboard(GuiGraphics guiGraphics, Objective objective, awa.qwq.ovo.Naven.modules.impl.visual.Scoreboard module, boolean modern) {
       Scoreboard scoreboard = objective.getScoreboard();
       NumberFormat numberFormat = module.hideScore.getCurrentValue()
               ? BlankFormat.INSTANCE
@@ -237,6 +171,7 @@ public abstract class MixinGui {
               .toList();
 
       if (lines.isEmpty()) {
+         module.clearModernRenderer();
          return;
       }
 
@@ -255,9 +190,26 @@ public abstract class MixinGui {
          maxWidth = Math.max(maxWidth, lineWidth);
       }
 
-      int left = guiGraphics.guiWidth() - maxWidth - 3;
-      int right = guiGraphics.guiWidth() - 1;
-      int titleTop = Math.round(module.down.getCurrentValue());
+      if (modern) {
+         maxWidth = Math.round(this.getModernComponentWidth(title));
+         float modernSeparatorWidth = this.getModernStringWidth(":");
+         for (VanillaScoreboardLine line : lines) {
+            float lineWidth = this.getModernComponentWidth(line.name());
+            if (line.scoreWidth() > 0) {
+               lineWidth += modernSeparatorWidth + this.getModernComponentWidth(line.score());
+            }
+
+            maxWidth = Math.max(maxWidth, (int)Math.ceil(lineWidth));
+         }
+      }
+
+      float baseBoxLeft = guiGraphics.guiWidth() - maxWidth - 5.0F;
+      float scoreboardHeight = 10.0F + lines.size() * 9.0F;
+      module.updateDrag(baseBoxLeft, 0.0F, maxWidth + 4.0F, scoreboardHeight);
+      int boxLeft = Math.round(module.getRenderX(baseBoxLeft));
+      int left = boxLeft + 2;
+      int right = boxLeft + maxWidth + 4;
+      int titleTop = Math.round(module.getRenderY(0.0F));
       int rowTop = titleTop + 10;
       int bottom = rowTop + lines.size() * 9;
       int titleY = rowTop - 9;
@@ -265,9 +217,46 @@ public abstract class MixinGui {
       int backgroundColor = minecraft.options.getBackgroundColor(0.3F);
       int titleBackgroundColor = minecraft.options.getBackgroundColor(0.4F);
 
-      guiGraphics.fill(left - 2, titleTop, right, rowTop - 1, titleBackgroundColor);
-      guiGraphics.fill(left - 2, rowTop - 1, right, bottom, backgroundColor);
-      guiGraphics.drawString(font, title, left + maxWidth / 2 - titleWidth / 2, titleY, -1, false);
+      if (modern) {
+         float rectX = left - 2.0F;
+         float rectY = titleTop;
+         float rectWidth = right - rectX;
+         float rectHeight = bottom - titleTop;
+         final int renderMaxWidth = maxWidth;
+         module.setShaderRect(rectX, rectY, rectWidth, rectHeight);
+         module.setModernRenderer(overlayGraphics -> {
+            boolean depthWasEnabled = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+            boolean depthMaskWasEnabled = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+            boolean blendWasEnabled = GL11.glIsEnabled(GL11.GL_BLEND);
+            double misansAlpha = Fonts.misansScoreboard.mesh.alpha;
+            this.prepareScoreboardRenderState();
+            try {
+               RenderUtils.drawRoundedRect(overlayGraphics.pose(), rectX, rectY, rectWidth, rectHeight, 3.0F, MODERN_BACKGROUND_COLOR);
+               this.prepareScoreboardRenderState();
+               Fonts.misansScoreboard.setAlpha(1.0F);
+               this.renderModernComponent(overlayGraphics, title, left + (renderMaxWidth - this.getModernComponentWidth(title)) / 2.0F, titleY, -1, false);
+
+               for (int i = 0; i < lines.size(); i++) {
+                  VanillaScoreboardLine line = lines.get(i);
+                  int y = rowTop + i * 9;
+                  this.renderModernComponent(overlayGraphics, line.name(), left, y, -1, false);
+                  if (line.scoreWidth() > 0) {
+                     this.renderModernComponent(overlayGraphics, line.score(), right - this.getModernComponentWidth(line.score()), y, 0xFFFF5555, false);
+                  }
+               }
+            } finally {
+               Fonts.misansScoreboard.setAlpha((float)misansAlpha);
+               this.restoreScoreboardRenderState(depthWasEnabled, depthMaskWasEnabled, blendWasEnabled);
+            }
+         });
+
+         return;
+      } else {
+         module.clearModernRenderer();
+         guiGraphics.fill(left - 2, titleTop, right, rowTop - 1, titleBackgroundColor);
+         guiGraphics.fill(left - 2, rowTop - 1, right, bottom, backgroundColor);
+         guiGraphics.drawString(font, title, left + maxWidth / 2 - titleWidth / 2, titleY, -1, false);
+      }
 
       for (int i = 0; i < lines.size(); i++) {
          VanillaScoreboardLine line = lines.get(i);
@@ -276,6 +265,89 @@ public abstract class MixinGui {
          if (line.scoreWidth() > 0) {
             guiGraphics.drawString(font, line.score(), right - line.scoreWidth(), y, -1, false);
          }
+      }
+   }
+
+   private float renderModernComponent(GuiGraphics guiGraphics, Component component, float x, float y, int fallbackColor, boolean shadow) {
+      float[] currentX = new float[]{x};
+      boolean[] rendered = new boolean[]{false};
+      component.visit((style, text) -> {
+         currentX[0] += this.renderModernString(guiGraphics, text, currentX[0], y, this.getStyleColor(style, fallbackColor), shadow);
+         rendered[0] = true;
+         return Optional.empty();
+      }, Style.EMPTY);
+
+      if (!rendered[0]) {
+         currentX[0] += this.renderModernString(guiGraphics, component.getString(), currentX[0], y, withOpaqueAlpha(fallbackColor), shadow);
+      }
+
+      return currentX[0] - x;
+   }
+
+   private float getModernComponentWidth(Component component) {
+      float[] width = new float[]{0.0F};
+      boolean[] measured = new boolean[]{false};
+      component.visit((style, text) -> {
+         width[0] += this.getModernStringWidth(text);
+         measured[0] = true;
+         return Optional.empty();
+      }, Style.EMPTY);
+
+      return measured[0] ? width[0] : this.getModernStringWidth(component.getString());
+   }
+
+   private float renderModernString(GuiGraphics guiGraphics, String text, float x, float y, int color, boolean shadow) {
+      if (text.isEmpty()) {
+         return 0.0F;
+      }
+
+      this.prepareScoreboardRenderState();
+      CustomTextRenderer renderer = Fonts.misansScoreboard;
+      renderer.setAlpha(1.0F);
+      renderer.render(guiGraphics.pose(), text, x, y, new Color(color, true), shadow, MODERN_FONT_SCALE);
+      return renderer.getWidth(text, MODERN_FONT_SCALE);
+   }
+
+   private float getModernStringWidth(String text) {
+      return Fonts.misansScoreboard.getWidth(text, MODERN_FONT_SCALE);
+   }
+
+   private int getStyleColor(Style style, int fallbackColor) {
+      if (style != null && style.getColor() != null) {
+         return withOpaqueAlpha(style.getColor().getValue());
+      }
+
+      return withOpaqueAlpha(fallbackColor);
+   }
+
+   private static int withOpaqueAlpha(int color) {
+      return (color & 0xFF000000) == 0 ? color | 0xFF000000 : color;
+   }
+
+   private void prepareScoreboardRenderState() {
+      RenderSystem.colorMask(true, true, true, true);
+      RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+      RenderSystem.enableBlend();
+      RenderSystem.defaultBlendFunc();
+      GL11.glDisable(GL11.GL_DEPTH_TEST);
+      GL11.glDepthMask(false);
+   }
+
+   private void restoreScoreboardRenderState(boolean depthWasEnabled, boolean depthMaskWasEnabled, boolean blendWasEnabled) {
+      RenderSystem.colorMask(true, true, true, true);
+      RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+      GL11.glDepthMask(depthMaskWasEnabled);
+      if (depthWasEnabled) {
+         GL11.glEnable(GL11.GL_DEPTH_TEST);
+      } else {
+         GL11.glDisable(GL11.GL_DEPTH_TEST);
+      }
+
+      if (blendWasEnabled) {
+         RenderSystem.enableBlend();
+         RenderSystem.defaultBlendFunc();
+      } else {
+         RenderSystem.disableBlend();
       }
    }
 
