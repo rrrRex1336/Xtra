@@ -15,6 +15,7 @@ public class StringValue extends Value {
       super(key, name, visibility);
       this.update = update;
       this.defaultValue = defaultValue;
+      this.currentValue = defaultValue;
    }
 
    @Override

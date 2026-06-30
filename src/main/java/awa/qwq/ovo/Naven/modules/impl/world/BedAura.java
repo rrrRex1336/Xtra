@@ -1,5 +1,6 @@
 package awa.qwq.ovo.Naven.modules.impl.world;
 
+import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventDestroyBlock;
@@ -9,6 +10,9 @@ import awa.qwq.ovo.Naven.managers.rotation.utils.RotationUtils;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
+import awa.qwq.ovo.Naven.modules.impl.combat.Aura;
+import awa.qwq.ovo.Naven.modules.impl.combat.KillAura;
+import awa.qwq.ovo.Naven.utils.NetworkUtils;
 import awa.qwq.ovo.Naven.utils.Vector2f;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
@@ -16,6 +20,8 @@ import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
@@ -122,7 +128,7 @@ public class BedAura extends Module {
         currentDamage = 0.0f;
     }
 
-    @EventTarget
+    @EventTarget(3)
     public void onPreTick(EventRunTicks event) {
         if (event.type() != EventType.PRE) return;
         if (mc.player == null || mc.level == null) return;
@@ -130,15 +136,18 @@ public class BedAura extends Module {
         findNearestBed();
         updateWorkingStatus();
 
-        if (working && canBreak() && currentBreakPos != null) {
-            if (currentBreakPos == null) return;
-            updateTargetRotation();
-            if (!isBreaking) {
-                isBreaking = true;
-                if (breakMode.isCurrentMode("Legit")) {
-                    mc.options.keyAttack.setDown(true);
-                }
+        boolean combatAuraActive = isCombatAuraActive();
+        if (combatAuraActive && !allowKillAura.getCurrentValue()) {
+            pauseForCombatAura();
+            bedRotations = null;
+            if (RotationManager.active && isUsingBedAuraRotation()) {
+                RotationManager.active = false;
             }
+            return;
+        }
+
+        if (working && currentBreakPos != null) {
+            performBreakTick(combatAuraActive);
         }
 
         if (isBreaking && (!working || currentBreakPos == null)) {
@@ -375,11 +384,81 @@ public class BedAura extends Module {
         return System.currentTimeMillis() - lastBreakTime >= delayMs;
     }
 
+    private void performBreakTick(boolean combatAuraActive) {
+        updateTargetRotation();
+
+        if (combatAuraActive && allowKillAura.getCurrentValue()) {
+            mc.options.keyAttack.setDown(false);
+            if (canBreak()) {
+                startPacketBreaking(true);
+            }
+            return;
+        }
+
+        if (breakMode.isCurrentMode("Legit")) {
+            if (!isBreaking) {
+                isBreaking = true;
+                mc.options.keyAttack.setDown(true);
+            }
+            return;
+        }
+
+        mc.options.keyAttack.setDown(false);
+        if (canBreak()) {
+            startPacketBreaking(false);
+        }
+    }
+
     private void stopBreaking() {
         mc.options.keyAttack.setDown(false);
         isBreaking = false;
         lastBreakTime = System.currentTimeMillis();
         currentBreakPos = null;
+    }
+
+    private void pauseForCombatAura() {
+        if (isBreaking) {
+            stopBreaking();
+        }
+        currentBreakPos = null;
+        legitTargetBlock = null;
+    }
+
+    private void startPacketBreaking(boolean sendRotationPacket) {
+        if (mc.player == null || currentBreakPos == null || bedRotations == null) return;
+        Direction direction = getBreakDirection(currentBreakPos);
+        if (sendRotationPacket) {
+            NetworkUtils.sendPacketNoEvent(new ServerboundMovePlayerPacket.Rot(bedRotations.x, bedRotations.y, mc.player.onGround()));
+        }
+        NetworkUtils.sendPacketNoEvent(new ServerboundPlayerActionPacket(
+                ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK,
+                currentBreakPos,
+                direction
+        ));
+        NetworkUtils.sendPacketNoEvent(new ServerboundPlayerActionPacket(
+                ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK,
+                currentBreakPos,
+                direction
+        ));
+        isBreaking = true;
+        lastBreakTime = System.currentTimeMillis();
+    }
+
+    private Direction getBreakDirection(BlockPos pos) {
+        if (mc.player == null || mc.level == null) return Direction.UP;
+
+        Vec3 eyePos = mc.player.getEyePosition(1.0F);
+        Vec3 targetPos = isBed(mc.level.getBlockState(pos))
+                ? getBestHitPoint(pos)
+                : Vec3.atCenterOf(pos);
+        BlockHitResult hit = mc.level.clip(new ClipContext(
+                eyePos,
+                targetPos,
+                ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.NONE,
+                mc.player
+        ));
+        return hit.getBlockPos().equals(pos) ? hit.getDirection() : Direction.UP;
     }
 
     private void updateTargetRotation() {
@@ -396,8 +475,10 @@ public class BedAura extends Module {
         Vector2f rotations = RotationUtils.getRotations(targetCenter);
         if (rotations != null) {
             bedRotations = rotations;
-            RotationManager.setRotations(bedRotations);
-            RotationManager.active = true;
+            if (!isCombatAuraActive() || !allowKillAura.getCurrentValue()) {
+                RotationManager.setRotations(bedRotations);
+                RotationManager.active = true;
+            }
         }
     }
 
@@ -429,6 +510,27 @@ public class BedAura extends Module {
         Vec3 targetCenter = Vec3.atCenterOf(pos);
         double distance = eyePos.distanceTo(targetCenter);
         return distance <= breakRange.getCurrentValue();
+    }
+
+    public boolean shouldYieldToCombatAura() {
+        return isEnabled() && bedRotations != null && !allowKillAura.getCurrentValue() && isCombatAuraActive();
+    }
+
+    private boolean isUsingBedAuraRotation() {
+        return RotationManager.rotations != null
+                && bedRotations != null
+                && RotationManager.rotations.x == bedRotations.x
+                && RotationManager.rotations.y == bedRotations.y;
+    }
+
+    private boolean isCombatAuraActive() {
+        KillAura killAura = (KillAura) Naven.getInstance().getModuleManager().getModule(KillAura.class);
+        if (killAura != null && killAura.isEnabled() && (KillAura.target != null || !KillAura.targets.isEmpty())) {
+            return true;
+        }
+
+        Aura aura = (Aura) Naven.getInstance().getModuleManager().getModule(Aura.class);
+        return aura != null && aura.isEnabled() && (Aura.target != null || !Aura.targets.isEmpty());
     }
 
     private boolean isBed(BlockState state) {

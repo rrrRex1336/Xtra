@@ -21,6 +21,8 @@ import awa.qwq.ovo.Naven.values.impl.AddonsValue;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
+import awa.qwq.ovo.Naven.values.impl.StringValue;
+import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import java.util.HashMap;
@@ -106,6 +108,9 @@ public class ClickGUI extends Screen {
    BooleanValue hoveringBooleanValue;
    FloatValue hoveringFloatValue;
    FloatValue draggingFloatValue;
+   StringValue hoveringStringValue;
+   StringValue editingStringValue;
+   String editingStringText = "";
    ModeValue hoveringModeValue;
    AddonsValue hoveringAddonsValue;
    int targetAddonIndex = -1;
@@ -124,6 +129,9 @@ public class ClickGUI extends Screen {
    }
 
    public void onClose() {
+      if (this.editingStringValue != null) {
+         this.commitEditingString(true);
+      }
       Naven.getInstance().getFileManager().save();
       Naven.getInstance().getEventManager().unregister(this);
       super.onClose();
@@ -184,6 +192,16 @@ public class ClickGUI extends Screen {
                   this.draggingFloatValue = this.hoveringFloatValue;
                }
 
+               if (this.hoveringStringValue != null) {
+                  if (this.editingStringValue != null && this.editingStringValue != this.hoveringStringValue) {
+                     this.commitEditingString(true);
+                  }
+                  this.editingStringValue = this.hoveringStringValue;
+                  this.editingStringText = this.editingStringValue.getCurrentValue() == null ? "" : this.editingStringValue.getCurrentValue();
+               } else if (this.editingStringValue != null) {
+                  this.commitEditingString(true);
+               }
+
                if (this.hoveringModeValue != null) {
                   this.hoveringModeValue.setCurrentValue(this.targetModeValueIndex);
                   SmoothAnimationTimer animation = this.valuesAnimation.get(this.hoveringModeValue);
@@ -233,6 +251,18 @@ public class ClickGUI extends Screen {
    }
 
    public boolean keyPressed(int pKeyCode, int pScanCode, int pModifiers) {
+      if (this.editingStringValue != null) {
+         if (pKeyCode == InputConstants.KEY_ESCAPE || pKeyCode == InputConstants.KEY_RETURN || pKeyCode == InputConstants.KEY_NUMPADENTER) {
+            this.commitEditingString(pKeyCode != InputConstants.KEY_ESCAPE);
+            return true;
+         }
+
+         if (pKeyCode == InputConstants.KEY_BACKSPACE && !this.editingStringText.isEmpty()) {
+            this.editingStringText = this.editingStringText.substring(0, this.editingStringText.length() - 1);
+            return true;
+         }
+      }
+
       if (this.bindingModule != null) {
          if (pKeyCode == 256) {
             this.bindingModule.setKey(0);
@@ -245,6 +275,16 @@ public class ClickGUI extends Screen {
       }
 
       return super.keyPressed(pKeyCode, pScanCode, pModifiers);
+   }
+
+   @Override
+   public boolean charTyped(char codePoint, int modifiers) {
+      if (this.editingStringValue != null && !Character.isISOControl(codePoint)) {
+         this.editingStringText += codePoint;
+         return true;
+      }
+
+      return super.charTyped(codePoint, modifiers);
    }
 
    protected void init() {
@@ -581,6 +621,44 @@ public class ClickGUI extends Screen {
          }
 
          this.hoveringAddonsValue = null;
+         this.hoveringStringValue = null;
+
+         for (Value valueString : this.renderValues) {
+            if (valueString.isVisible() && valueString.getValueType() == ValueType.STRING) {
+               StringValue stringValue = valueString.getStringValue();
+               float baseY = windowY + valueHeight + motion + 25.0F;
+               float lineY = baseY + 20.0F;
+               float fieldWidth = windowWidth - 155.0F;
+               if (isValueInBound
+                  && RenderUtils.isHoveringBound(mouseX, mouseY, windowX + 140.0F, lineY - 13.0F, fieldWidth, 16.0F)) {
+                  this.hoveringStringValue = stringValue;
+               }
+
+               opensans.render(stack, valueString.getName(), (double)(windowX + 140.0F), (double)baseY, Color.WHITE, true, 0.4);
+               String currentValue = this.editingStringValue == stringValue
+                  ? this.editingStringText + ((System.currentTimeMillis() / 450L) % 2L == 0L ? "_" : "")
+                  : stringValue.getCurrentValue();
+               if (currentValue == null) {
+                  currentValue = "";
+               }
+
+               int lineColor = this.editingStringValue == stringValue || this.hoveringStringValue == stringValue
+                  ? Colors.getColor(54, 98, 236, 255)
+                  : Colors.getColor(0, 0, 0, 160);
+               RenderUtils.drawRoundedRect(stack, windowX + 140.0F, lineY, fieldWidth, 3.0F, 2.0F, Colors.getColor(0, 0, 0, 150));
+               RenderUtils.drawRoundedRect(stack, windowX + 140.0F, lineY, fieldWidth, 3.0F, 2.0F, lineColor);
+               opensans.render(
+                  stack,
+                  trimToWidth(opensans, currentValue, fieldWidth - 6.0F, 0.4),
+                  (double)(windowX + 142.0F),
+                  (double)(lineY - 13.0F),
+                  this.editingStringValue == stringValue ? Color.WHITE : new Color(190, 190, 190),
+                  true,
+                  0.4
+               );
+               valueHeight += 35.0F;
+            }
+         }
 
          for (Value valuexx : this.renderValues) {
             if (valuexx.isVisible() && valuexx.getValueType() == ValueType.ADDONS) {
@@ -786,5 +864,29 @@ public class ClickGUI extends Screen {
    public void SetDragPosition(int x, int y) {
       this.dragMousePosition[0] = x;
       this.dragMousePosition[1] = y;
+   }
+
+   private void commitEditingString(boolean save) {
+      if (this.editingStringValue != null && save) {
+         this.editingStringValue.setCurrentValue(this.editingStringText);
+         Naven.getInstance().getFileManager().save();
+      }
+
+      this.editingStringValue = null;
+      this.editingStringText = "";
+   }
+
+   private String trimToWidth(CustomTextRenderer font, String text, float maxWidth, double scale) {
+      if (text == null || font.getWidth(text, scale) <= maxWidth) {
+         return text == null ? "" : text;
+      }
+
+      String suffix = "...";
+      int end = text.length();
+      while (end > 0 && font.getWidth(text.substring(0, end) + suffix, scale) > maxWidth) {
+         end--;
+      }
+
+      return text.substring(0, end) + suffix;
    }
 }

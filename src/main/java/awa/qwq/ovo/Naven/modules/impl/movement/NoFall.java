@@ -150,6 +150,7 @@ public class NoFall extends Module {
 
                 if (currentMode.equals("Elytra")) {
                     PacketUtils.sendQueued(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
+                    PacketUtils.sendQueued(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
                 } else if (currentMode.equals("LagPos")) {
                     double offset = lagOffset.getCurrentValue();
                     PacketUtils.sendQueued(new ServerboundMovePlayerPacket.Pos(

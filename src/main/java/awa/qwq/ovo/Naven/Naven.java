@@ -82,6 +82,7 @@ public class Naven {
       this.eventManager.register(this.eventWrapper);
       this.eventManager.register(new RotationManager());
       this.eventManager.register(new NetworkUtils());
+      this.eventManager.register(MovementUtils.INSTANCE);
       this.eventManager.register(new ServerUtils());
       this.eventManager.register(new EntityWatcher());
       this.hWIDCheck = new HWIDCheck();

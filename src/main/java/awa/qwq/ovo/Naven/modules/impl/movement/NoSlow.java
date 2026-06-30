@@ -2,6 +2,7 @@ package awa.qwq.ovo.Naven.modules.impl.movement;
 
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
+import awa.qwq.ovo.Naven.events.impl.EventMotion;
 import awa.qwq.ovo.Naven.events.impl.EventPacket;
 import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.events.impl.EventSlowdown;
@@ -17,7 +18,6 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.common.ServerboundPongPacket;
 import net.minecraft.network.protocol.game.*;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.PrimedTnt;
@@ -66,7 +66,7 @@ public class NoSlow extends Module {
 
    private final ModeValue heypixelTick = ValueBuilder.create(this, "Heypixel Pattern")
            .setDefaultModeIndex(0)
-           .setModes("1:3 Pattern", "3:2 Pattern")
+           .setModes("1:3 Pattern", "3:2 Pattern", "Swap Pattern")
            .setVisibility(() -> modeValue.isCurrentMode("Heypixel"))
            .build()
            .getModeValue();
@@ -91,25 +91,23 @@ public class NoSlow extends Module {
    private int maxUseDuration = 0;
    private int useTimer = 0;
    private Step step = Step.NONE;
-   private int noUsingItemTicks = 0;
-   private final Queue<Packet<?>> packets = new ConcurrentLinkedQueue<>();
+   private int grimOffhandUseTicks = 0;
+   private final Queue<Packet<ClientGamePacketListener>> delayedOffhandPackets = new ConcurrentLinkedQueue<>();
    private boolean foodDroppedThisUse = false;
    private boolean legacyEating = false;
    private boolean legacyDropSent = false;
    private int legacyReleaseCancelTicks = 0;
 
    private enum Step {
-      NONE, CANCEL_C0F, SWAP_HANDS, EATING
+      NONE, DELAYING
    }
 
    @Override
    public void onDisable() {
-      step = Step.NONE;
-      noUsingItemTicks = 0;
+      finishGrimOffhandSwap(true);
       legacyEating = false;
       legacyDropSent = false;
       legacyReleaseCancelTicks = 0;
-      releaseQueuedPackets();
       releaseMovementPackets();
       super.onDisable();
    }
@@ -238,6 +236,13 @@ public class NoSlow extends Module {
                      if (mc.player.isUsingItem() && !mc.player.isSprinting()) mc.player.setSprinting(true);
                   }
                   break;
+
+               case "Swap Pattern":
+                  if (checkSword()) {
+                     eventSlowdown.setSlowdown(false);
+                     if (mc.player.isUsingItem() && !mc.player.isSprinting()) mc.player.setSprinting(true);
+                  }
+                  break;
             }
             break;
          case "Grim Offhand Swap":
@@ -249,7 +254,7 @@ public class NoSlow extends Module {
    public void onSlowDown(EventSlowdown e) {
       if (!modeValue.isCurrentMode("Grim Offhand Swap")) return;
 
-      if (mc.player == null || mc.player.getUseItem() == null) return;
+      if (mc.player == null || mc.getConnection() == null || mc.player.getUseItem() == null) return;
 
       UseAnim activeUseAnim = mc.player.getUseItem().getUseAnimation();
       if (!isUsable(activeUseAnim) || mc.player.getUseItemRemainingTicks() <= 0) {
@@ -264,18 +269,11 @@ public class NoSlow extends Module {
          return;
       }
 
-      if (step != Step.EATING) {
-         mc.options.keyUse.setDown(false);
+      if (step == Step.NONE) {
+         startGrimOffhandSwap();
       }
 
-      if (step == Step.NONE) {
-         step = Step.CANCEL_C0F;
-
-         boolean isInventoryOpenServerSide = mc.player.containerMenu != mc.player.inventoryMenu;
-         if (isInventoryOpenServerSide) {
-            mc.getConnection().send(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
-         }
-      } else if (step == Step.EATING) {
+      if (step == Step.DELAYING) {
          mc.player.setSprinting(true);
          e.setSlowdown(false);
       }
@@ -338,6 +336,10 @@ public class NoSlow extends Module {
 
       if (event.getType() != EventType.PRE) return;
 
+      if (modeValue.isCurrentMode("Grim Offhand Swap")) {
+         updateGrimOffhandSwap();
+      }
+
       if (usingActive) {
          useTimer++;
       }
@@ -369,6 +371,26 @@ public class NoSlow extends Module {
    }
 
    @EventTarget
+   public void onMotion(EventMotion event) {
+      if (event.getType() == EventType.PRE
+              && modeValue.isCurrentMode("Heypixel")
+              && heypixelTick.isCurrentMode("Swap Pattern")) {
+         if (mc.player == null || mc.getConnection() == null || !mc.player.isUsingItem() || !checkSword()) {
+            return;
+         }
+
+         if (mc.player.getUsedItemHand() == InteractionHand.MAIN_HAND) {
+            mc.getConnection().send(new ServerboundUseItemPacket(InteractionHand.OFF_HAND, 0));
+         } else {
+            int slot = mc.player.getInventory().selected;
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot % 8 + 1));
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot % 7 + 2));
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
+         }
+      }
+   }
+
+   @EventTarget
    public void onPacket(EventPacket event) {
       if (!isEnabled()) return;
 
@@ -384,34 +406,21 @@ public class NoSlow extends Module {
          return;
       }
 
-      // Latest Grim
       if (modeValue.isCurrentMode("Grim Offhand Swap")) {
          Packet<?> packet = event.getPacket();
 
-         if (packet instanceof ServerboundPongPacket && step != Step.NONE) {
+         if (event.getType() == EventType.RECEIVE
+                 && step == Step.DELAYING
+                 && shouldDelayGrimOffhandPacket(packet)) {
             event.setCancelled(true);
-            packets.add(packet);
-
-            if (step == Step.CANCEL_C0F) {
-               step = Step.SWAP_HANDS;
-               mc.getConnection().send(new ServerboundPlayerActionPacket(
-                       ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND,
-                       BlockPos.ZERO,
-                       Direction.DOWN
-               ));
-            }
+            queueDelayedOffhandPacket(packet);
+            return;
          }
 
-         if (packet instanceof ClientboundContainerSetSlotPacket && step == Step.SWAP_HANDS) {
-            mc.options.keyUse.setDown(true);
-            step = Step.EATING;
-         }
-
-         if (packet instanceof ServerboundPlayerActionPacket) {
+         if (event.getType() == EventType.SEND && packet instanceof ServerboundPlayerActionPacket) {
             ServerboundPlayerActionPacket actionPacket = (ServerboundPlayerActionPacket) packet;
-            if (actionPacket.getAction() == ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM && step == Step.EATING) {
-               releaseQueuedPackets();
-               swap();
+            if (actionPacket.getAction() == ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM && step == Step.DELAYING) {
+               finishGrimOffhandSwap(true);
             }
          }
       }
@@ -443,23 +452,6 @@ public class NoSlow extends Module {
 
    @EventTarget
    public void onUpdate(EventUpdate event) {
-      // Latest Grim
-      if (modeValue.isCurrentMode("Grim Offhand Swap")) {
-         if (step != Step.EATING) {
-            noUsingItemTicks = 0;
-         } else {
-            if (mc.player.isUsingItem()) {
-               noUsingItemTicks = 0;
-            } else {
-               noUsingItemTicks++;
-               if (noUsingItemTicks >= 5) {
-                  releaseQueuedPackets();
-                  swap();
-               }
-            }
-         }
-      }
-
       updateSuffix();
    }
 
@@ -487,14 +479,71 @@ public class NoSlow extends Module {
    }
 
    private void releaseQueuedPackets() {
-      step = Step.NONE;
-
-      while (!packets.isEmpty()) {
-         Packet<?> p = packets.poll();
+      while (!delayedOffhandPackets.isEmpty()) {
+         Packet<ClientGamePacketListener> p = delayedOffhandPackets.poll();
          if (p != null && mc.getConnection() != null) {
-            mc.getConnection().send(p);
+            p.handle(mc.getConnection());
          }
       }
+   }
+
+   @SuppressWarnings("unchecked")
+   private void queueDelayedOffhandPacket(Packet<?> packet) {
+      delayedOffhandPackets.offer((Packet<ClientGamePacketListener>) packet);
+   }
+
+   private void startGrimOffhandSwap() {
+      step = Step.DELAYING;
+      grimOffhandUseTicks = 0;
+      delayedOffhandPackets.clear();
+
+      boolean isInventoryOpenServerSide = mc.player.containerMenu != mc.player.inventoryMenu;
+      if (isInventoryOpenServerSide) {
+         mc.getConnection().send(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
+      }
+
+      swap();
+   }
+
+   private void updateGrimOffhandSwap() {
+      if (step != Step.DELAYING) {
+         return;
+      }
+
+      if (mc.player == null || mc.options == null || !mc.player.isUsingItem() || !mc.options.keyUse.isDown()) {
+         finishGrimOffhandSwap(true);
+         return;
+      }
+
+      grimOffhandUseTicks++;
+      if (grimOffhandUseTicks >= 32) {
+         finishGrimOffhandSwap(true);
+      }
+   }
+
+   private void finishGrimOffhandSwap(boolean swapBack) {
+      boolean wasDelaying = step == Step.DELAYING;
+      step = Step.NONE;
+      grimOffhandUseTicks = 0;
+
+      releaseQueuedPackets();
+
+      if (swapBack && wasDelaying) {
+         swap();
+      }
+   }
+
+   private boolean shouldDelayGrimOffhandPacket(Packet<?> packet) {
+      if (packet instanceof ClientboundContainerSetSlotPacket slotPacket) {
+         return slotPacket.getContainerId() == ClientboundContainerSetSlotPacket.PLAYER_INVENTORY
+                 || mc.player != null && slotPacket.getContainerId() == mc.player.inventoryMenu.containerId;
+      }
+
+      if (packet instanceof ClientboundContainerSetContentPacket contentPacket) {
+         return mc.player != null && contentPacket.getContainerId() == mc.player.inventoryMenu.containerId;
+      }
+
+      return false;
    }
 
    private void releaseMovementPackets() {
@@ -561,6 +610,12 @@ public class NoSlow extends Module {
       ItemStack mainHandItem = mc.player.getMainHandItem();
       ItemStack offhandItem = mc.player.getOffhandItem();
       return mainHandItem.is(item) || offhandItem.is(item);
+   }
+
+   private boolean checkSword() {
+      ItemStack mainHandItem = mc.player.getMainHandItem();
+      ItemStack offhandItem = mc.player.getOffhandItem();
+      return mainHandItem.getItem() instanceof SwordItem || offhandItem.getItem() instanceof SwordItem;
    }
 
    private boolean isLegacyHeypixelFood(ItemStack stack) {

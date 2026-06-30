@@ -5,7 +5,6 @@ import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventClick;
 import awa.qwq.ovo.Naven.events.impl.EventMouseClick;
-import awa.qwq.ovo.Naven.events.impl.EventPacket;
 import awa.qwq.ovo.Naven.events.impl.EventRender;
 import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.events.impl.EventUpdateFoV;
@@ -26,7 +25,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
-import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.world.InteractionHand;
@@ -153,14 +151,27 @@ public class Scaffold extends Module {
            .build()
            .getBooleanValue();
 
+   public FloatValue clutchSafeDistance = ValueBuilder.create(this, "Clutch Safe Distance")
+           .setDefaultFloatValue(4.25F)
+           .setMinFloatValue(1.0F)
+           .setMaxFloatValue(6.0F)
+           .setFloatStep(0.05F)
+           .build()
+           .getFloatValue();
+
    private int oldSlot;
    private BlockPos pos;
    private int lastSneakTicks;
    private int airTicks;
    private int rotateCount;
    private int placeCount;
-   private int bigVelocityTick;
    private boolean jumpKeyHeld;
+   private int lastClutchLayer = Integer.MIN_VALUE;
+   private boolean preferUpFace;
+   private Vec3 lastClutchDebugPosition;
+   private boolean clutchDebugAnchorActive;
+   private Vec3 clutchDebugAnchorPosition;
+   private boolean clutchSafeDistanceActive;
    private long lastPlaceGameTick = -1L;
    private float lastMovementYaw;
    private int tellyStopTicks;
@@ -184,11 +195,16 @@ public class Scaffold extends Module {
       this.rots.set(mc.player.getYRot(), mc.player.getXRot());
       this.lastRots.set(mc.player.yRotO, mc.player.xRotO);
       this.pos = null;
-      this.bigVelocityTick = 0;
       this.rotateCount = 0;
       this.placeCount = 0;
       this.reachable = true;
       this.jumpKeyHeld = false;
+      this.lastClutchLayer = mc.player.blockPosition().getY();
+      this.preferUpFace = false;
+      this.lastClutchDebugPosition = mc.player.position();
+      this.clutchDebugAnchorActive = false;
+      this.clutchDebugAnchorPosition = null;
+      this.clutchSafeDistanceActive = false;
       this.lastSneakTicks = 0;
       this.lastPlaceGameTick = -1L;
       this.lastMovementYaw = mc.player.getYRot();
@@ -215,6 +231,12 @@ public class Scaffold extends Module {
       this.strictJitterCounter = 0;
       this.strictPlacementFace = null;
       this.multiPlaceDepth = 0;
+      this.lastClutchLayer = Integer.MIN_VALUE;
+      this.preferUpFace = false;
+      this.lastClutchDebugPosition = null;
+      this.clutchDebugAnchorActive = false;
+      this.clutchDebugAnchorPosition = null;
+      this.clutchSafeDistanceActive = false;
       if (mc.player == null) {
          return;
       }
@@ -231,17 +253,6 @@ public class Scaffold extends Module {
       this.useLastTellyMovementYaw = false;
       this.emergencySneakTicks = 0;
       this.renderedBlocks.clear();
-   }
-
-   @EventTarget
-   public void onPacket(EventPacket event) {
-      if (event.getType() == EventType.RECEIVE && event.getPacket() instanceof ClientboundSetEntityMotionPacket velocity && mc.player != null && velocity.getId() == mc.player.getId()) {
-         double strength = new Vec3(velocity.getXa() / 8000.0D, 0.0D, velocity.getZa() / 8000.0D).lengthSqr();
-         if (strength >= 1.5D) {
-            ChatUtils.addChatMessage("你也是要飞了 " + strength);
-            this.bigVelocityTick = 60;
-         }
-      }
    }
 
    @EventTarget
@@ -265,6 +276,7 @@ public class Scaffold extends Module {
       }
 
       if (event.getType() != EventType.PRE) {
+         this.updateClutchDebug();
          if (mc.player.onGround()) {
             this.airTicks = 0;
          } else {
@@ -356,9 +368,6 @@ public class Scaffold extends Module {
       }
 
       this.lastRots.set(this.rots.getX(), this.rots.getY());
-      if (this.bigVelocityTick > 0) {
-         --this.bigVelocityTick;
-      }
    }
 
    @EventTarget
@@ -391,9 +400,12 @@ public class Scaffold extends Module {
          }
       }
 
-      boolean clutchDanger = (!reachable || this.bigVelocityTick > 0) && this.rotateCount <= 8;
+      boolean clutchDanger = !reachable && this.rotateCount <= 8;
       Vec3 hitCenter = new Vec3(this.pos.getX() + 0.5D, this.pos.getY(), this.pos.getZ() + 0.5D);
       if (hitCenter.subtract(mc.player.getEyePosition()).lengthSqr() > (clutchDanger ? 25.0D : 20.25D)) {
+         return;
+      }
+      if ((this.preferUpFace || this.clutchSafeDistanceActive) && this.lastPlaceGameTick == mc.level.getGameTime()) {
          return;
       }
 
@@ -440,7 +452,7 @@ public class Scaffold extends Module {
          HitResult hit = skippedTick ? RayTraceUtils.rayCast(4.5D, 1.0F, true, placeRotation) : RayTraceUtils.rayCast(1.0F, placeRotation);
          if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK && this.isPlaceHitValid(blockHit, skippedTick)) {
             boolean holdingJump = isJumpHeld();
-            boolean invalidUpHit = blockHit.getDirection() == Direction.UP && !this.canUseLegitUp() && !mc.player.onGround() && PlayerUtils.movementInput() && !holdingJump && !this.mode.isCurrentMode("Normal") && !skippedTick;
+            boolean invalidUpHit = blockHit.getDirection() == Direction.UP && !this.preferUpFace && !this.canUseLegitUp() && !mc.player.onGround() && PlayerUtils.movementInput() && !holdingJump && !this.mode.isCurrentMode("Normal") && !skippedTick;
             if (!invalidUpHit) {
                if (skippedTick) {
                   this.rots.set(placeRotation.x, placeRotation.y);
@@ -466,7 +478,7 @@ public class Scaffold extends Module {
                   }
 
                   BlockPos placedPos = blockHit.getBlockPos().relative(blockHit.getDirection());
-                  this.renderedBlocks.add(new RenderedBlock(placedPos));
+                  this.renderedBlocks.add(new RenderedBlock(placedPos, mc.level.getGameTime()));
                   while (this.renderedBlocks.size() > 2) {
                      this.renderedBlocks.remove(0);
                   }
@@ -528,6 +540,14 @@ public class Scaffold extends Module {
    }
 
    private Vector2f getPlayerYawRotation() {
+      if (this.preferUpFace) {
+         Vector2f upRotation = this.getUpFaceRotation();
+         if (upRotation != null) {
+            return upRotation;
+         }
+         this.preferUpFace = false;
+      }
+
       if (isTower()) {
          return new Vector2f(mc.player.getYRot(), 90.0F);
       }
@@ -588,7 +608,7 @@ public class Scaffold extends Module {
       double bestFaceScore = Double.MAX_VALUE;
       BlockPos underPlayer = BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.0D, mc.player.getZ());
       boolean allowLegitUp = this.canUseLegitUp();
-      boolean avoidUpFace = !allowLegitUp && this.mode.isCurrentMode("Telly Bridge") && !mc.player.onGround() && PlayerUtils.movementInput() && !isJumpHeld();
+      boolean avoidUpFace = !allowLegitUp && !this.preferUpFace && this.mode.isCurrentMode("Telly Bridge") && !mc.player.onGround() && PlayerUtils.movementInput() && !isJumpHeld();
       Vec3 eye = mc.player.getEyePosition();
 
       Direction[] faceOrder = new Direction[]{Direction.UP, Direction.WEST, Direction.EAST, Direction.SOUTH, Direction.NORTH};
@@ -619,7 +639,9 @@ public class Scaffold extends Module {
          }
 
          double score = placePos.distSqr(underPlayer) + faceCenter.distanceToSqr(eye) * 0.03D;
-         if (candidateFace == Direction.UP && !isJumpHeld() && !allowLegitUp) {
+         if (this.preferUpFace && candidateFace == Direction.UP) {
+            score -= 5.0D;
+         } else if (candidateFace == Direction.UP && !isJumpHeld() && !allowLegitUp) {
             score += 1.0D;
          }
          if (avoidUpFace && candidateFace == Direction.UP) {
@@ -698,6 +720,30 @@ public class Scaffold extends Module {
        return targetRotation;
    }
 
+   private Vector2f getUpFaceRotation() {
+      if (this.pos == null || mc.player == null || mc.level == null) {
+         return null;
+      }
+
+      if (!isValidBlock(this.pos) || !mc.level.isEmptyBlock(this.pos.relative(Direction.UP))) {
+         return null;
+      }
+
+      Vec3 target = new Vec3(this.pos.getX() + 0.5D, this.pos.getY() + 1.0D, this.pos.getZ() + 0.5D);
+      Vector2f targetRotation = RotationUtils.getRotations(target);
+      Vector2f fixedRotation = RotationUtils.getFixedRotation(targetRotation.x, targetRotation.y, this.rots.x, this.rots.y);
+      HitResult fixedHit = RayTraceUtils.rayCast(1.0F, fixedRotation);
+      if (fixedHit instanceof BlockHitResult fixedBlockHit
+              && fixedHit.getType() == HitResult.Type.BLOCK
+              && fixedBlockHit.getBlockPos().equals(this.pos)
+              && fixedBlockHit.getDirection() == Direction.UP) {
+         this.strictPlacementFace = Direction.UP;
+         return fixedRotation;
+      }
+
+      return null;
+   }
+
    private BlockPos getBlockPos() {
       BlockPos playerPos = BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.0D, mc.player.getZ());
       ArrayList<Vec3> positions = new ArrayList<>();
@@ -722,11 +768,54 @@ public class Scaffold extends Module {
       }
 
       if (positions.isEmpty()) {
+         this.preferUpFace = false;
          return null;
       }
       positions.sort(Comparator.comparingDouble(vec -> mc.player.distanceToSqr(vec.x, vec.y, vec.z)));
       BlockPos best = lookup.get(positions.get(0));
-      return isTower() && best.getY() != mc.player.getY() - 1.5D ? BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.5D, mc.player.getZ()) : best;
+      int currentLayer = mc.player.blockPosition().getY();
+      boolean risingLayer = currentLayer > this.lastClutchLayer;
+      boolean preferUp = risingLayer && (isManualJumpHeld() || this.clutchSafeDistanceActive);
+      BlockPos result = isTower() && !preferUp && best.getY() != mc.player.getY() - 1.5D ? BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.5D, mc.player.getZ()) : best;
+      this.preferUpFace = preferUp;
+      this.lastClutchLayer = currentLayer;
+      return result;
+   }
+
+   private void updateClutchDebug() {
+      Vec3 currentPosition = mc.player.position();
+      if (this.lastClutchDebugPosition == null) {
+         this.lastClutchDebugPosition = currentPosition;
+         return;
+      }
+
+      if (currentPosition.y > this.lastClutchDebugPosition.y) {
+         Vec3 currentHorizontalPosition = getHorizontalPosition(currentPosition);
+         if (!this.clutchDebugAnchorActive) {
+            this.clutchDebugAnchorPosition = getHorizontalPosition(this.lastClutchDebugPosition);
+            this.clutchDebugAnchorActive = true;
+         }
+
+         float safeDistance = this.clutchSafeDistance.getCurrentValue();
+         double horizontalDistance = this.clutchDebugAnchorPosition != null ? currentHorizontalPosition.distanceTo(this.clutchDebugAnchorPosition) : 0.0D;
+         double horizontalStep = currentHorizontalPosition.distanceTo(getHorizontalPosition(this.lastClutchDebugPosition));
+         double projectedDistance = horizontalDistance + horizontalStep * 6.0D;
+         if (this.clutchDebugAnchorPosition != null && projectedDistance > safeDistance) {
+            ChatUtils.addChatMessage("Working");
+            this.clutchSafeDistanceActive = true;
+            this.clutchDebugAnchorPosition = currentHorizontalPosition;
+         }
+      } else if (currentPosition.y < this.lastClutchDebugPosition.y) {
+         this.clutchDebugAnchorActive = false;
+         this.clutchDebugAnchorPosition = null;
+         this.clutchSafeDistanceActive = false;
+      }
+
+      this.lastClutchDebugPosition = currentPosition;
+   }
+
+   private Vec3 getHorizontalPosition(Vec3 position) {
+      return new Vec3(position.x, 0.0D, position.z);
    }
 
    public boolean isValidBlock(BlockPos blockPos) {
@@ -792,7 +881,7 @@ public class Scaffold extends Module {
       return isValidBlock(blockHit.getBlockPos())
               && isNearbyBlockPos(blockHit.getBlockPos())
               && blockHit.getDirection() != Direction.DOWN
-              && (this.canUseLegitUp() || blockHit.getDirection() != Direction.UP);
+              && (this.canUseLegitUp() || this.preferUpFace || blockHit.getDirection() != Direction.UP);
    }
 
    private boolean isNearbyBlockPos(BlockPos blockPos) {
@@ -821,6 +910,10 @@ public class Scaffold extends Module {
       return this.legitUP.getCurrentValue() && isJumpHeld();
    }
 
+   private boolean isManualJumpHeld() {
+      return InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getDefaultKey().getValue());
+   }
+
    private boolean isJumpHeld() {
       if (this.ignoreJumpDuringSkipTick) {
          if (!Naven.skipTasks.isEmpty()) {
@@ -828,7 +921,7 @@ public class Scaffold extends Module {
          }
          this.ignoreJumpDuringSkipTick = false;
       }
-      return InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getDefaultKey().getValue());
+      return isManualJumpHeld();
    }
 
    private float currentMovementYaw() {
@@ -870,12 +963,19 @@ public class Scaffold extends Module {
                  && isValidBlock(blockHit.getBlockPos())
                  && blockHit.getDirection() != Direction.DOWN
                  && blockHit.getDirection() == this.strictPlacementFace
+                 && !this.isUnsafeRecentSupport(blockHit.getBlockPos())
                  && mc.level.isEmptyBlock(blockHit.getBlockPos().relative(blockHit.getDirection()));
       }
       if (blockHit.getBlockPos().equals(this.pos)) {
-         return true;
+         return isValidBlock(blockHit.getBlockPos())
+                 && blockHit.getDirection() != Direction.DOWN
+                 && !this.isUnsafeRecentSupport(blockHit.getBlockPos())
+                 && mc.level.isEmptyBlock(blockHit.getBlockPos().relative(blockHit.getDirection()));
       }
       if (!skippedTick || this.pos == null || !isValidBlock(blockHit.getBlockPos()) || blockHit.getDirection() == Direction.DOWN) {
+         return false;
+      }
+      if (this.isUnsafeRecentSupport(blockHit.getBlockPos())) {
          return false;
       }
 
@@ -890,6 +990,22 @@ public class Scaffold extends Module {
               && Math.abs(hitPos.getZ() - this.pos.getZ()) <= 2;
    }
 
+   private boolean isUnsafeRecentSupport(BlockPos blockPos) {
+      if (!this.preferUpFace && !this.clutchSafeDistanceActive) {
+         return false;
+      }
+      if (mc.level == null) {
+         return false;
+      }
+      long now = mc.level.getGameTime();
+      for (RenderedBlock block : this.renderedBlocks) {
+         if (block.position.equals(blockPos) && now - block.placedTick <= 2L) {
+            return true;
+         }
+      }
+      return false;
+   }
+
    private int findBlockSlot() {
       for (int i = 0; i < 9; ++i) {
          if (isValidStack(mc.player.getInventory().getItem(i))) {
@@ -901,10 +1017,12 @@ public class Scaffold extends Module {
 
    private static class RenderedBlock {
       private final BlockPos position;
+      private final long placedTick;
       private int lifetime = 10;
 
-      private RenderedBlock(BlockPos position) {
+      private RenderedBlock(BlockPos position, long placedTick) {
          this.position = position;
+         this.placedTick = placedTick;
       }
 
       private boolean tick() {

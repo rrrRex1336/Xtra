@@ -44,18 +44,21 @@ public class IslandManager {
     public IslandManager() {
     }
 
-    private float[] getOffsets() {
+    private Island getIslandModule() {
         try {
-            Island islandModule =
-                    (Island) Naven.getInstance()
-                            .getModuleManager().getModule(Island.class);
-            if (islandModule != null) {
-                return new float[]{
-                        islandModule.xOffset.getCurrentValue(),
-                        islandModule.yOffset.getCurrentValue()
-                };
-            }
+            return (Island) Naven.getInstance()
+                    .getModuleManager().getModule(Island.class);
         } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private float[] getOffsets(Island islandModule) {
+        if (islandModule != null) {
+            return new float[]{
+                    islandModule.xOffset.getCurrentValue(),
+                    islandModule.yOffset.getCurrentValue()
+            };
         }
         return new float[]{0.0f, 0.0f};
     }
@@ -146,12 +149,16 @@ public class IslandManager {
         animW.update(true);
         animH.update(true);
 
-        float[] offsets = getOffsets();
-        float xOffset = offsets[0];
-        float yOffset = offsets[1];
-
         float baseX = (screenWidth - animW.value) / 2.0f;
         float baseY = screenHeight * 0.05f;
+        Island islandModule = getIslandModule();
+        if (islandModule != null) {
+            islandModule.updateDrag(baseX, baseY, animW.value, animH.value);
+        }
+
+        float[] offsets = getOffsets(islandModule);
+        float xOffset = offsets[0];
+        float yOffset = offsets[1];
 
         float x = baseX + xOffset;
         float y = baseY + yOffset;
