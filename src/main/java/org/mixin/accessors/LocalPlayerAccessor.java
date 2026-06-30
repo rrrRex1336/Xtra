@@ -20,4 +20,10 @@ public interface LocalPlayerAccessor {
 
    @Accessor("yRotLast")
    void setYRotLast(float var1);
+
+   @Accessor("positionReminder")
+   int getPositionReminder();
+
+   @Accessor("positionReminder")
+   void setPositionReminder(int var1);
 }

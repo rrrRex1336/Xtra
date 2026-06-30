@@ -2,10 +2,7 @@ package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventServerSetPosition;
-import awa.qwq.ovo.Naven.utils.HttpUtils;
-import java.io.IOException;
 
-import awa.qwq.ovo.Naven.utils.MovementUtils;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
@@ -14,7 +11,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.At.Shift;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin({ClientPacketListener.class})
@@ -31,10 +27,5 @@ public class MixinClientPacketListener {
       EventServerSetPosition event = new EventServerSetPosition(pPacket);
       Naven.getInstance().getEventManager().call(event);
       instance.send(event.getPacket());
-   }
-
-   @Inject(method = "handleSetEntityMotion", at = @At("HEAD"))
-   private void onHandleSetEntityMotion(ClientboundSetEntityMotionPacket packet, CallbackInfo ci) {
-      MovementUtils.INSTANCE.onPacketReceive(packet);
    }
 }

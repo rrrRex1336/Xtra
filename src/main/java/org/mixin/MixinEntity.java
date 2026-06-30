@@ -7,6 +7,7 @@ import net.minecraft.world.entity.projectile.Projectile;
 import awa.qwq.ovo.Naven.utils.BlinkingPlayer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
@@ -17,11 +18,15 @@ import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.*;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin({Entity.class})
 public abstract class MixinEntity{
+   @Unique
+   private boolean naven_Modern$movementUtilsMoveHook;
+
    @Shadow
    protected Vec3 stuckSpeedMultiplier;
 
@@ -45,6 +50,37 @@ public abstract class MixinEntity{
 
    @Shadow
    public float fallDistance;
+
+   @Inject(
+           method = {"move"},
+           at = {@At("HEAD")},
+           cancellable = true
+   )
+   private void onMove(MoverType type, Vec3 movement, CallbackInfo ci) {
+      if (this.naven_Modern$movementUtilsMoveHook) {
+         return;
+      }
+
+      Entity thisEntity = (Entity)(Object)this;
+      if (thisEntity == Minecraft.getInstance().player) {
+         EventMove event = new EventMove(movement.x, movement.y, movement.z);
+         Naven.getInstance().getEventManager().call(event);
+         if (event.isCancelled()) {
+            ci.cancel();
+            return;
+         }
+
+         if (event.getX() != movement.x || event.getY() != movement.y || event.getZ() != movement.z) {
+            ci.cancel();
+            this.naven_Modern$movementUtilsMoveHook = true;
+            try {
+               thisEntity.move(type, new Vec3(event.getX(), event.getY(), event.getZ()));
+            } finally {
+               this.naven_Modern$movementUtilsMoveHook = false;
+            }
+         }
+      }
+   }
 
 
    /**

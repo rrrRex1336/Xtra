@@ -65,14 +65,7 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
       super(pClientLevel, pGameProfile);
    }
 
-   @Inject(
-           method = {"tick"},
-           at = {@At(
-                   value = "INVOKE",
-                   target = "Lnet/minecraft/client/player/AbstractClientPlayer;tick()V",
-                   shift = Shift.BEFORE
-           )}
-   )
+   @Inject(method = "aiStep", at = @At("HEAD"))
    public void injectUpdateEvent(CallbackInfo ci) {
       Naven.getInstance().getEventManager().call(new EventUpdate());
    }
@@ -128,7 +121,7 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
                this.connection.send(new Pos(eventPre.getX(), eventPre.getY(), eventPre.getZ(), eventPre.isOnGround()));
             } else if (flag2) {
                this.connection.send(new Rot(eventPre.getYaw(), eventPre.getPitch(), eventPre.isOnGround()));
-            } else if (this.lastOnGround != eventPre.isOnGround()) {
+            } else if (MovementUtils.cancelMove || this.lastOnGround != eventPre.isOnGround() || MovementUtils.lastOnGround != eventPre.isOnGround()) {
                this.connection.send(new StatusOnly(eventPre.isOnGround()));
             }
 
@@ -145,17 +138,11 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
             }
 
             this.lastOnGround = eventPre.isOnGround();
+            MovementUtils.lastOnGround = eventPre.isOnGround();
             this.autoJumpEnabled = (Boolean) this.minecraft.options.autoJump().get();
          }
 
          Naven.getInstance().getEventManager().call(new EventMotion(EventType.POST, eventPre.getYaw(), eventPre.getPitch()));
-      }
-   }
-
-   @Inject(method = "sendPosition", at = @At("HEAD"), cancellable = true)
-   private void onSendPosition(CallbackInfo ci) {
-      if (MovementUtils.cancelMove) {
-         ci.cancel();
       }
    }
 
