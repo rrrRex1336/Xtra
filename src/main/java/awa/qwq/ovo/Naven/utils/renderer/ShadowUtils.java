@@ -26,12 +26,16 @@ public class ShadowUtils {
    private static int savedStencilFunc = GL11.GL_ALWAYS;
    private static int savedStencilRef = 0;
    private static int savedStencilMask = 0xFFFFFFFF;
+   private static boolean depthWasEnabled = false;
+   private static boolean blendWasEnabled = false;
 
    public static void onRenderAfterWorld(EventRender2D e, float fps, float strength) {
       if (hasFailed) {
          return;
       }
 
+      boolean renderStateSaved = false;
+      boolean stencilStateSaved = false;
       try {
          Window window = Minecraft.getInstance().getWindow();
          int width = window.getWidth();
@@ -47,8 +51,11 @@ public class ShadowUtils {
             hasRenderedFrame = false;
          }
 
-         boolean shouldRefresh = !hasRenderedFrame || shadowTimer.delay(1000.0F / fps);
+         boolean shouldRefresh = !hasRenderedFrame || shadowTimer.delay(1000.0F / Math.max(1.0F, fps));
+         saveRenderState();
+         renderStateSaved = true;
          saveAndResetStencilState();
+         stencilStateSaved = true;
 
          if (shouldRefresh) {
             renderToBuffer(e);
@@ -58,12 +65,18 @@ public class ShadowUtils {
          }
 
          renderCachedResult(e, window, strength);
-         restoreStencilState();
       } catch (Exception ex) {
          System.err.println("[ShadowUtils] Render failed: " + ex.getMessage());
          ex.printStackTrace();
          hasFailed = true;
          cleanup();
+      } finally {
+         if (stencilStateSaved) {
+            restoreStencilState();
+         }
+         if (renderStateSaved) {
+            restoreRenderState();
+         }
       }
    }
 
@@ -124,8 +137,6 @@ public class ShadowUtils {
       PostProcessRenderer.endRender();
 
       blurBuffer.unbind();
-      GL.disableBlend();
-      GL11.glEnable(GL11.GL_DEPTH_TEST);
    }
 
    private static void renderCachedResult(EventRender2D e, Window window, float strength) {
@@ -143,9 +154,6 @@ public class ShadowUtils {
       blurShader.set("u_Direction", 0.0, 1.0);
       PostProcessRenderer.render(e.getStack());
       PostProcessRenderer.endRender();
-
-      GL.disableBlend();
-      GL11.glEnable(GL11.GL_DEPTH_TEST);
    }
 
    private static void setBlurUniforms(Window window, float strength) {
@@ -165,6 +173,29 @@ public class ShadowUtils {
 
       GL11.glClearStencil(0);
       GL11.glClear(GL11.GL_STENCIL_BUFFER_BIT);
+   }
+
+   private static void saveRenderState() {
+      depthWasEnabled = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+      blendWasEnabled = GL11.glIsEnabled(GL11.GL_BLEND);
+   }
+
+   private static void restoreRenderState() {
+      RenderSystem.colorMask(true, true, true, true);
+      if (depthWasEnabled) {
+         GL11.glEnable(GL11.GL_DEPTH_TEST);
+      } else {
+         GL11.glDisable(GL11.GL_DEPTH_TEST);
+      }
+
+      if (blendWasEnabled) {
+         GL11.glEnable(GL11.GL_BLEND);
+         RenderSystem.defaultBlendFunc();
+      } else {
+         GL11.glDisable(GL11.GL_BLEND);
+      }
+
+      GL.resetTextureSlot();
    }
 
    private static void restoreStencilState() {

@@ -7,6 +7,7 @@ import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.ui.Island.*;
+import awa.qwq.ovo.Naven.utils.DragManager;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 
@@ -25,20 +26,24 @@ public class Island extends Module {
     private final PlayerListContent playerListContent = new PlayerListContent();
 
     public final FloatValue xOffset = ValueBuilder.create(this, "X Offset")
-            .setMinFloatValue(-1000.0F)
-            .setMaxFloatValue(1000.0F)
+            .setMinFloatValue(-10000.0F)
+            .setMaxFloatValue(10000.0F)
             .setDefaultFloatValue(0.0F)
             .setFloatStep(1.0F)
+            .setVisibility(() -> false)
             .build()
             .getFloatValue();
 
     public final FloatValue yOffset = ValueBuilder.create(this, "Y Offset")
-            .setMinFloatValue(-1000.0F)
-            .setMaxFloatValue(1000.0F)
+            .setMinFloatValue(-10000.0F)
+            .setMaxFloatValue(10000.0F)
             .setDefaultFloatValue(0.0F)
             .setFloatStep(1.0F)
+            .setVisibility(() -> false)
             .build()
             .getFloatValue();
+
+    private final DragManager dragManager = new DragManager(this.xOffset, this.yOffset);
 
     public Island() {
         islandManager.addContent(moduleToggleContent);
@@ -72,5 +77,9 @@ public class Island extends Module {
         if (moduleToggleContent != null) {
             moduleToggleContent.onModuleToggled(module);
         }
+    }
+
+    public void updateDrag(float baseX, float baseY, float width, float height) {
+        this.dragManager.update(baseX, baseY, width, height);
     }
 }

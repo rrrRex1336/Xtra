@@ -1,16 +1,19 @@
 package awa.qwq.ovo.Naven.modules.impl.visual;
 
 import awa.qwq.ovo.Naven.events.api.EventTarget;
+import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventShader;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
+import awa.qwq.ovo.Naven.utils.DragManager;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.utils.StencilUtils;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.utils.renderer.text.CustomTextRenderer;
+import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import com.google.common.collect.Lists;
 import com.mojang.blaze3d.systems.RenderSystem;
 import java.awt.Color;
@@ -28,6 +31,7 @@ import net.minecraft.util.StringUtil;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import org.joml.Vector4f;
+import org.lwjgl.opengl.GL11;
 
 @ModuleInfo(
    name = "EffectDisplay",
@@ -40,14 +44,31 @@ public class EffectDisplay extends Module {
    private final Color headerColor = new Color(150, 45, 45, 255);
    private final Color bodyColor = new Color(0, 0, 0, 50);
    private final List<Vector4f> blurMatrices = new ArrayList<>();
+   private final FloatValue xOffset = DragManager.createHiddenPositionValue(this, "Drag X", 0.0F);
+   private final FloatValue yOffset = DragManager.createHiddenPositionValue(this, "Drag Y", 0.0F);
+   private final DragManager dragManager = new DragManager(this.xOffset, this.yOffset);
 
    @EventTarget(4)
    public void renderIcons(EventRender2D e) {
-      this.list.forEach(Runnable::run);
+      boolean depthWasEnabled = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+      boolean depthMaskWasEnabled = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+      boolean blendWasEnabled = GL11.glIsEnabled(GL11.GL_BLEND);
+      this.prepareHudRenderState();
+      try {
+         if (this.list != null) {
+            this.list.forEach(Runnable::run);
+         }
+      } finally {
+         this.restoreHudRenderState(depthWasEnabled, depthMaskWasEnabled, blendWasEnabled);
+      }
    }
 
    @EventTarget
    public void onShader(EventShader e) {
+      if (e.getType() != EventType.BLUR) {
+         return;
+      }
+
       for (Vector4f matrix : this.blurMatrices) {
          RenderUtils.drawRoundedRect(e.getStack(), matrix.x(), matrix.y(), matrix.z(), matrix.w(), 5.0F, 1073741824);
       }
@@ -55,77 +76,106 @@ public class EffectDisplay extends Module {
 
    @EventTarget
    public void onRender(EventRender2D e) {
-      for (MobEffectInstance effect : mc.player.getActiveEffects()) {
-         EffectDisplay.MobEffectInfo info;
-         if (this.infos.containsKey(effect.getEffect())) {
-            info = this.infos.get(effect.getEffect());
-         } else {
-            info = new EffectDisplay.MobEffectInfo();
-            this.infos.put(effect.getEffect(), info);
+      double harmonyAlpha = Fonts.harmony.mesh.alpha;
+      boolean depthWasEnabled = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+      boolean depthMaskWasEnabled = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+      boolean blendWasEnabled = GL11.glIsEnabled(GL11.GL_BLEND);
+      this.prepareHudRenderState();
+
+      try {
+         for (MobEffectInstance effect : mc.player.getActiveEffects()) {
+            EffectDisplay.MobEffectInfo info;
+            if (this.infos.containsKey(effect.getEffect())) {
+               info = this.infos.get(effect.getEffect());
+            } else {
+               info = new EffectDisplay.MobEffectInfo();
+               this.infos.put(effect.getEffect(), info);
+            }
+
+            info.maxDuration = Math.max(info.maxDuration, effect.getDuration());
+            info.duration = effect.getDuration();
+            info.amplifier = effect.getAmplifier();
+            info.shouldDisappear = false;
          }
 
-         info.maxDuration = Math.max(info.maxDuration, effect.getDuration());
-         info.duration = effect.getDuration();
-         info.amplifier = effect.getAmplifier();
-         info.shouldDisappear = false;
-      }
-
-      int startY = mc.getWindow().getGuiScaledHeight() / 2 - this.infos.size() * 16;
-      this.list = Lists.newArrayListWithExpectedSize(this.infos.size());
-      this.blurMatrices.clear();
-
-      for (Entry<MobEffect, EffectDisplay.MobEffectInfo> entry : this.infos.entrySet()) {
-         e.getStack().pushPose();
-         EffectDisplay.MobEffectInfo effectInfo = entry.getValue();
-         String text = this.getDisplayName(entry.getKey(), effectInfo);
-         if (effectInfo.yTimer.value == -1.0F) {
-            effectInfo.yTimer.value = (float)startY;
-         }
+         int startY = mc.getWindow().getGuiScaledHeight() / 2 - this.infos.size() * 16;
+         this.list = Lists.newArrayListWithExpectedSize(this.infos.size());
+         this.blurMatrices.clear();
+         Fonts.harmony.setAlpha(1.0F);
 
          CustomTextRenderer harmony = Fonts.harmony;
-         effectInfo.width = 25.0F + harmony.getWidth(text, 0.3) + 20.0F;
-         float x = effectInfo.xTimer.value;
-         float y = effectInfo.yTimer.value;
-         effectInfo.shouldDisappear = !mc.player.hasEffect(entry.getKey());
-         if (effectInfo.shouldDisappear) {
-            effectInfo.xTimer.target = -effectInfo.width - 20.0F;
-            if (x <= -effectInfo.width - 20.0F) {
-               this.infos.remove(entry.getKey());
-            }
-         } else {
-            effectInfo.durationTimer.target = (float)effectInfo.duration / (float)effectInfo.maxDuration * effectInfo.width;
-            if (effectInfo.durationTimer.value <= 0.0F) {
-               effectInfo.durationTimer.value = effectInfo.durationTimer.target;
-            }
-
-            effectInfo.xTimer.target = 10.0F;
-            effectInfo.yTimer.target = (float)startY;
-            effectInfo.yTimer.update(true);
+         float maxWidth = 0.0F;
+         for (Entry<MobEffect, EffectDisplay.MobEffectInfo> entry : this.infos.entrySet()) {
+            EffectDisplay.MobEffectInfo effectInfo = entry.getValue();
+            String text = this.getDisplayName(entry.getKey(), effectInfo);
+            effectInfo.width = 25.0F + harmony.getWidth(text, 0.3) + 20.0F;
+            maxWidth = Math.max(maxWidth, effectInfo.width);
          }
 
-         effectInfo.durationTimer.update(true);
-         effectInfo.xTimer.update(true);
-         StencilUtils.write(false);
-         this.blurMatrices.add(new Vector4f(x + 2.0F, y + 2.0F, effectInfo.width - 2.0F, 28.0F));
-         RenderUtils.drawRoundedRect(e.getStack(), x + 2.0F, y + 2.0F, effectInfo.width - 2.0F, 28.0F, 5.0F, -1);
-         StencilUtils.erase(true);
-         RenderUtils.fillBound(e.getStack(), x, y, effectInfo.width, 30.0F, this.bodyColor.getRGB());
-         RenderUtils.fillBound(e.getStack(), x, y, effectInfo.durationTimer.value, 30.0F, this.bodyColor.getRGB());
-         RenderUtils.drawRoundedRect(e.getStack(), x + effectInfo.width - 10.0F, y + 7.0F, 5.0F, 18.0F, 2.0F, this.headerColor.getRGB());
-         harmony.render(e.getStack(), text, (double)(x + 27.0F), (double)(y + 7.0F), this.headerColor, true, 0.3);
-         float tickRate = Minecraft.getInstance().level != null ? Minecraft.getInstance().level.tickRateManager().tickrate() : 20.0F;
-         String duration = StringUtil.formatTickDuration(effectInfo.duration, tickRate);
-         harmony.render(e.getStack(), duration, (double)(x + 27.0F), (double)(y + 17.0F), Color.WHITE, true, 0.25);
-         MobEffectTextureManager mobeffecttexturemanager = mc.getMobEffectTextures();
-         TextureAtlasSprite textureatlassprite = mobeffecttexturemanager.get(entry.getKey());
-         this.list.add(() -> {
-            RenderSystem.setShaderTexture(0, textureatlassprite.atlasLocation());
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-            e.getGuiGraphics().blit((int)(x + 6.0F), (int)(y + 8.0F), 1, 18, 18, textureatlassprite);
-         });
-         StencilUtils.dispose();
-         startY += 34;
-         e.getStack().popPose();
+         float stackHeight = this.infos.isEmpty() ? 0.0F : this.infos.size() * 34.0F - 4.0F;
+         this.dragManager.update(10.0F, (float) startY, maxWidth, stackHeight);
+         float stackX = this.dragManager.getX(10.0F);
+         float rowY = this.dragManager.getY((float) startY);
+
+         for (Entry<MobEffect, EffectDisplay.MobEffectInfo> entry : this.infos.entrySet()) {
+            e.getStack().pushPose();
+            try {
+               EffectDisplay.MobEffectInfo effectInfo = entry.getValue();
+               String text = this.getDisplayName(entry.getKey(), effectInfo);
+               if (effectInfo.yTimer.value == -1.0F) {
+                  effectInfo.yTimer.value = rowY;
+               }
+
+               harmony.setAlpha(1.0F);
+               float x = effectInfo.xTimer.value;
+               float y = effectInfo.yTimer.value;
+               effectInfo.shouldDisappear = !mc.player.hasEffect(entry.getKey());
+               if (effectInfo.shouldDisappear) {
+                  effectInfo.xTimer.target = -effectInfo.width - 20.0F;
+                  if (x <= -effectInfo.width - 20.0F) {
+                     this.infos.remove(entry.getKey());
+                  }
+               } else {
+                  effectInfo.durationTimer.target = (float)effectInfo.duration / (float)effectInfo.maxDuration * effectInfo.width;
+                  if (effectInfo.durationTimer.value <= 0.0F) {
+                     effectInfo.durationTimer.value = effectInfo.durationTimer.target;
+                  }
+
+                  effectInfo.xTimer.target = stackX;
+                  effectInfo.yTimer.target = rowY;
+                  effectInfo.yTimer.update(true);
+               }
+
+               effectInfo.durationTimer.update(true);
+               effectInfo.xTimer.update(true);
+               StencilUtils.write(false);
+               this.blurMatrices.add(new Vector4f(x + 2.0F, y + 2.0F, effectInfo.width - 2.0F, 28.0F));
+               RenderUtils.drawRoundedRect(e.getStack(), x + 2.0F, y + 2.0F, effectInfo.width - 2.0F, 28.0F, 5.0F, -1);
+               StencilUtils.erase(true);
+               RenderUtils.fillBound(e.getStack(), x, y, effectInfo.width, 30.0F, this.bodyColor.getRGB());
+               RenderUtils.fillBound(e.getStack(), x, y, effectInfo.durationTimer.value, 30.0F, this.bodyColor.getRGB());
+               RenderUtils.drawRoundedRect(e.getStack(), x + effectInfo.width - 10.0F, y + 7.0F, 5.0F, 18.0F, 2.0F, this.headerColor.getRGB());
+               harmony.setAlpha(1.0F);
+               harmony.render(e.getStack(), text, (double)(x + 27.0F), (double)(y + 7.0F), this.headerColor, true, 0.3);
+               float tickRate = Minecraft.getInstance().level != null ? Minecraft.getInstance().level.tickRateManager().tickrate() : 20.0F;
+               String duration = StringUtil.formatTickDuration(effectInfo.duration, tickRate);
+               harmony.render(e.getStack(), duration, (double)(x + 27.0F), (double)(y + 17.0F), Color.WHITE, true, 0.25);
+               MobEffectTextureManager mobeffecttexturemanager = mc.getMobEffectTextures();
+               TextureAtlasSprite textureatlassprite = mobeffecttexturemanager.get(entry.getKey());
+               this.list.add(() -> {
+                  RenderSystem.setShaderTexture(0, textureatlassprite.atlasLocation());
+                  RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+                  e.getGuiGraphics().blit((int)(x + 6.0F), (int)(y + 8.0F), 1, 18, 18, textureatlassprite);
+               });
+               rowY += 34.0F;
+            } finally {
+               StencilUtils.dispose();
+               e.getStack().popPose();
+            }
+         }
+      } finally {
+         Fonts.harmony.setAlpha((float)harmonyAlpha);
+         this.restoreHudRenderState(depthWasEnabled, depthMaskWasEnabled, blendWasEnabled);
       }
    }
 
@@ -145,6 +195,33 @@ public class EffectDisplay extends Module {
       }
 
       return effectName + amplifierName;
+   }
+
+   private void prepareHudRenderState() {
+      RenderSystem.colorMask(true, true, true, true);
+      RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+      RenderSystem.enableBlend();
+      RenderSystem.defaultBlendFunc();
+      GL11.glDisable(GL11.GL_DEPTH_TEST);
+      GL11.glDepthMask(false);
+   }
+
+   private void restoreHudRenderState(boolean depthWasEnabled, boolean depthMaskWasEnabled, boolean blendWasEnabled) {
+      RenderSystem.colorMask(true, true, true, true);
+      RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+      GL11.glDepthMask(depthMaskWasEnabled);
+      if (depthWasEnabled) {
+         GL11.glEnable(GL11.GL_DEPTH_TEST);
+      } else {
+         GL11.glDisable(GL11.GL_DEPTH_TEST);
+      }
+
+      if (blendWasEnabled) {
+         RenderSystem.enableBlend();
+         RenderSystem.defaultBlendFunc();
+      } else {
+         RenderSystem.disableBlend();
+      }
    }
 
    public static class MobEffectInfo {

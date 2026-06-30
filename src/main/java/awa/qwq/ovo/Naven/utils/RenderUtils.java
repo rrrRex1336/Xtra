@@ -327,6 +327,8 @@ public class RenderUtils {
       BufferBuilder buffer = TESSELATOR.getBuilder();
       Matrix4f matrix = poseStack.last().pose();
       float[] rgba = getColor(color);
+      RenderSystem.setShader(GameRenderer::getPositionColorShader);
+      RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
       buffer.begin(Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
       buffer.vertex(matrix, x, y + height, 0.0F).color(rgba[0], rgba[1], rgba[2], rgba[3]).endVertex();
       buffer.vertex(matrix, x + width, y + height, 0.0F).color(rgba[0], rgba[1], rgba[2], rgba[3]).endVertex();
@@ -361,6 +363,8 @@ public class RenderUtils {
 
       BufferBuilder buffer = TESSELATOR.getBuilder();
       Matrix4f matrix = poseStack.last().pose();
+      RenderSystem.setShader(GameRenderer::getPositionColorShader);
+      RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
       int vertices = (int)Math.min(Math.max(edgeRadius, 10.0F), 90.0F);
       buffer.begin(Mode.TRIANGLE_FAN, DefaultVertexFormat.POSITION_COLOR);

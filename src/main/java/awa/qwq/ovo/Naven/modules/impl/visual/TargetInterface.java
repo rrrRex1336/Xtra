@@ -6,9 +6,11 @@ import awa.qwq.ovo.Naven.events.impl.EventShader;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
+import awa.qwq.ovo.Naven.utils.DragManager;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.StencilUtils;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
+import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import org.joml.Vector4f;
@@ -20,6 +22,9 @@ public class TargetInterface extends Module {
 
     public static LivingEntity target;
     private Vector4f blurMatrix;
+    private final FloatValue xOffset = DragManager.createHiddenPositionValue(this, "Drag X", 0.0F);
+    private final FloatValue yOffset = DragManager.createHiddenPositionValue(this, "Drag Y", 0.0F);
+    private final DragManager dragManager = new DragManager(this.xOffset, this.yOffset);
 
     @EventTarget
     public void onRender(EventRender2D e) {
@@ -27,10 +32,13 @@ public class TargetInterface extends Module {
         if (target instanceof LivingEntity) {
             LivingEntity living = (LivingEntity)target;
             e.getStack().pushPose();
-            float x = mc.getWindow().getGuiScaledWidth() / 2.0F + 10.0F;
-            float y = mc.getWindow().getGuiScaledHeight() / 2.0F + 10.0F;
+            float baseX = mc.getWindow().getGuiScaledWidth() / 2.0F + 10.0F;
+            float baseY = mc.getWindow().getGuiScaledHeight() / 2.0F + 10.0F;
             String targetName = target.getName().getString() + (living.isBaby() ? " (Baby)" : "");
             float width = Math.max(Fonts.harmony.getWidth(targetName, 0.4F) + 10.0F, 60.0F);
+            this.dragManager.update(baseX, baseY, width, 30.0F);
+            float x = this.dragManager.getX(baseX);
+            float y = this.dragManager.getY(baseY);
             this.blurMatrix = new Vector4f(x, y, width, 30.0F);
             StencilUtils.write(false);
             RenderUtils.drawRoundedRect(e.getStack(), x, y, width, 30.0F, 5.0F, WaterMark.headerColor);

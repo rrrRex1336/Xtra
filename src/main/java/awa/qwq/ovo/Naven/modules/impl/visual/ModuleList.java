@@ -9,6 +9,7 @@ import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.modules.ModuleManager;
+import awa.qwq.ovo.Naven.utils.DragManager;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
@@ -80,20 +81,20 @@ public class ModuleList extends Module {
             .build().getModeValue();
 
     public FloatValue xOffset = ValueBuilder.create(this, "X Offset")
-            .setMinFloatValue(-100.0F)
-            .setMaxFloatValue(100.0F)
+            .setMinFloatValue(-10000.0F)
+            .setMaxFloatValue(10000.0F)
             .setDefaultFloatValue(1.0F)
             .setFloatStep(1.0F)
-            .setVisibility(() -> !listMode.isCurrentMode("Adjust"))
+            .setVisibility(() -> false)
             .build()
             .getFloatValue();
 
     public FloatValue yOffset = ValueBuilder.create(this, "Y Offset")
-            .setMinFloatValue(1.0F)
-            .setMaxFloatValue(100.0F)
+            .setMinFloatValue(-10000.0F)
+            .setMaxFloatValue(10000.0F)
             .setDefaultFloatValue(1.0F)
             .setFloatStep(1.0F)
-            .setVisibility(() -> !listMode.isCurrentMode("Adjust"))
+            .setVisibility(() -> false)
             .build()
             .getFloatValue();
 
@@ -108,6 +109,7 @@ public class ModuleList extends Module {
 
     private List<Module> renderModules;
     private List<Vector4f> blurMatrices = new ArrayList<>();
+    private final DragManager dragManager = new DragManager(this.xOffset, this.yOffset);
 
     public String getModuleDisplayName(Module module) {
         if (listMode.isCurrentMode("Adjust")) {
@@ -177,12 +179,16 @@ public class ModuleList extends Module {
         } else if (listMode.isCurrentMode("Naven")) {
             float maxWidth = this.renderModules.isEmpty() ? 0.0F :
                     font.getWidth(this.getModuleDisplayName(this.renderModules.get(0)), this.fontSize.getCurrentValue());
-            float moduleListX = this.direction.isCurrentMode("Right") ?
-                    (float) mc.getWindow().getGuiScaledWidth() - maxWidth - 6.0F + this.xOffset.getCurrentValue() :
-                    3.0F + this.xOffset.getCurrentValue();
-            float moduleListY = this.yOffset.getCurrentValue();
             float height = 0.0F;
             double fontHeight = font.getHeight(true, this.fontSize.getCurrentValue());
+            float baseX = this.direction.isCurrentMode("Right") ?
+                    (float) mc.getWindow().getGuiScaledWidth() - maxWidth - 6.0F :
+                    3.0F;
+            float baseY = 0.0F;
+
+            this.dragManager.update(baseX, baseY, maxWidth + 3.0F, this.getEnabledModuleListHeight((float) fontHeight, 0.0F));
+            float moduleListX = this.dragManager.getX(baseX);
+            float moduleListY = this.dragManager.getY(baseY);
 
             for (Module module : this.renderModules) {
                 SmoothAnimationTimer animation = module.getAnimation();
@@ -243,12 +249,16 @@ public class ModuleList extends Module {
 
             float maxWidth = this.renderModules.isEmpty() ? 0.0F :
                     font.getWidth(this.getModuleDisplayName(this.renderModules.get(0)), (double) this.fontSize.getCurrentValue());
-            float moduleListX = this.direction.isCurrentMode("Right") ?
-                    (float) mc.getWindow().getGuiScaledWidth() - maxWidth - 6.0F + this.xOffset.getCurrentValue() :
-                    3.0F + this.xOffset.getCurrentValue();
-            float moduleListY = this.yOffset.getCurrentValue();
             float height = 0.0F;
             double fontHeight = font.getHeight(true, (double) this.fontSize.getCurrentValue());
+            float baseX = this.direction.isCurrentMode("Right") ?
+                    (float) mc.getWindow().getGuiScaledWidth() - maxWidth - 6.0F :
+                    3.0F;
+            float baseY = 0.0F;
+
+            this.dragManager.update(baseX, baseY, maxWidth + (float) fontHeight + 10.0F, this.getEnabledModuleListHeight((float) fontHeight, 2.0F));
+            float moduleListX = this.dragManager.getX(baseX);
+            float moduleListY = this.dragManager.getY(baseY);
 
             for (Module module : this.renderModules) {
                 SmoothAnimationTimer animation = module.getAnimation();
@@ -354,6 +364,25 @@ public class ModuleList extends Module {
         if (listMode.isCurrentMode("Adjust")) return 0.65F;
         if (listMode.isCurrentMode("Naven")) return this.fontSize.getCurrentValue();
         return this.fontSize.getCurrentValue();
+    }
+
+    private float getEnabledModuleListHeight(float lineHeight, float spacing) {
+        if (this.renderModules == null) {
+            return 0.0F;
+        }
+
+        int count = 0;
+        for (Module module : this.renderModules) {
+            if (module.isEnabled() && !module.isHidden()) {
+                count++;
+            }
+        }
+
+        if (count == 0) {
+            return 0.0F;
+        }
+
+        return count * lineHeight + Math.max(0, count - 1) * spacing + 4.0F;
     }
 
     private static final int[] WATER_COLORS = {
