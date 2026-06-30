@@ -65,6 +65,12 @@ public class RotationManager {
          AutoThrow autoThrow = (AutoThrow) Naven.getInstance().getModuleManager().getModule(AutoThrow.class);
 
          active = true;
+         boolean killAuraTargeting = isKillAuraTargeting(killAura);
+         boolean auraTargeting = isAuraTargeting(aura);
+         boolean killAuraReady = killAuraTargeting && killAura.rotation != null;
+         boolean auraReady = aura != null && aura.isEnabled() && aura.working && aura.targetRotation != null;
+         boolean bedAuraReady = bedAura != null && bedAura.isEnabled() && bedAura.bedRotations != null && !bedAura.shouldYieldToCombatAura();
+         boolean bedAuraYieldingToCombat = bedAuraReady && bedAura.allowKillAura.getCurrentValue() && (killAuraTargeting || auraTargeting);
 
          if (autoMLG.isEnabled() && autoMLG.rotation) {
             if (autoMLG.getTargetRotation() != null) {
@@ -91,43 +97,17 @@ public class RotationManager {
             setRotations(new Vector2f(CrystalAura.rotations.x, CrystalAura.rotations.y));
          } else if (scaffold.isEnabled() && scaffold.rots != null) {
             setRotations(new Vector2f(scaffold.rots.x, scaffold.rots.y));
-         } else if (bedAura.isEnabled() && bedAura.bedRotations != null) {
+         } else if (bedAuraYieldingToCombat && killAuraReady) {
+            applyKillAuraRotation(killAura, autoThrow);
+         } else if (bedAuraYieldingToCombat && auraReady) {
+            applyAuraRotation(aura, autoThrow);
+         } else if (bedAuraReady && !bedAuraYieldingToCombat) {
             setRotations(bedAura.bedRotations);
             active = true;
-         } else if (killAura.isEnabled() && KillAura.target != null && killAura.rotation != null) {
-            float minSpeed = killAura.rotateMinSpeed.getCurrentValue();
-            float maxSpeed = killAura.rotateMaxSpeed.getCurrentValue();
-            float randomSpeed = minSpeed + (float) (Math.random() * (maxSpeed - minSpeed));
-
-            Vector2f targetRot = new Vector2f(killAura.rotation.x, killAura.rotation.y);
-            Vector2f currentRot = new Vector2f(mc.player.getYRot(), mc.player.getXRot());
-
-            float yawOffset = (float) ((Math.random() - 0.5) * killAura.randomYawOffset.getCurrentValue());
-            float pitchOffset = (float) ((Math.random() - 0.5) * killAura.randomPitchOffset.getCurrentValue());
-            targetRot.x += yawOffset;
-            targetRot.y += pitchOffset;
-
-            float yawDelta = RotationUtils.getAngleDifference(targetRot.x, currentRot.x);
-            if (Math.abs(yawDelta) > randomSpeed) {
-               targetRot.x = currentRot.x + randomSpeed * Math.signum(yawDelta);
-            }
-
-            float pitchDelta = targetRot.y - currentRot.y;
-            if (Math.abs(pitchDelta) > randomSpeed) {
-               targetRot.y = currentRot.y + randomSpeed * Math.signum(pitchDelta);
-            }
-
-            setRotations(targetRot);
-            if (autoThrow != null && autoThrow.isEnabled()) {
-               autoThrow.targetRotations = null;
-               autoThrow.rotationSet = 0;
-            }
-         } else if (aura.isEnabled() && aura.working && aura.targetRotation != null) {
-            setRotations(new Vector2f(aura.targetRotation.getX(), aura.targetRotation.getY()));
-            if (autoThrow != null && autoThrow.isEnabled()) {
-               autoThrow.targetRotations = null;
-               autoThrow.rotationSet = 0;
-            }
+         } else if (killAuraReady) {
+            applyKillAuraRotation(killAura, autoThrow);
+         } else if (auraReady) {
+            applyAuraRotation(aura, autoThrow);
          } else if (aimAssist.isEnabled() && aimAssist.working) {
             if (aimAssist.slientaim) {
                setRotations(new Vector2f(aimAssist.targetRotation.x, aimAssist.targetRotation.y));
@@ -137,6 +117,53 @@ public class RotationManager {
          } else {
             active = false;
          }
+      }
+   }
+
+   private static boolean isKillAuraTargeting(KillAura killAura) {
+      return killAura != null && killAura.isEnabled() && (KillAura.target != null || !KillAura.targets.isEmpty());
+   }
+
+   private static boolean isAuraTargeting(Aura aura) {
+      return aura != null && aura.isEnabled() && (Aura.target != null || !Aura.targets.isEmpty());
+   }
+
+   private static void applyKillAuraRotation(KillAura killAura, AutoThrow autoThrow) {
+      float minSpeed = killAura.rotateMinSpeed.getCurrentValue();
+      float maxSpeed = killAura.rotateMaxSpeed.getCurrentValue();
+      float randomSpeed = minSpeed + (float) (Math.random() * (maxSpeed - minSpeed));
+
+      Vector2f targetRot = new Vector2f(killAura.rotation.x, killAura.rotation.y);
+      Vector2f currentRot = new Vector2f(mc.player.getYRot(), mc.player.getXRot());
+
+      float yawOffset = (float) ((Math.random() - 0.5) * killAura.randomYawOffset.getCurrentValue());
+      float pitchOffset = (float) ((Math.random() - 0.5) * killAura.randomPitchOffset.getCurrentValue());
+      targetRot.x += yawOffset;
+      targetRot.y += pitchOffset;
+
+      float yawDelta = RotationUtils.getAngleDifference(targetRot.x, currentRot.x);
+      if (Math.abs(yawDelta) > randomSpeed) {
+         targetRot.x = currentRot.x + randomSpeed * Math.signum(yawDelta);
+      }
+
+      float pitchDelta = targetRot.y - currentRot.y;
+      if (Math.abs(pitchDelta) > randomSpeed) {
+         targetRot.y = currentRot.y + randomSpeed * Math.signum(pitchDelta);
+      }
+
+      setRotations(targetRot);
+      clearAutoThrowRotation(autoThrow);
+   }
+
+   private static void applyAuraRotation(Aura aura, AutoThrow autoThrow) {
+      setRotations(new Vector2f(aura.targetRotation.getX(), aura.targetRotation.getY()));
+      clearAutoThrowRotation(autoThrow);
+   }
+
+   private static void clearAutoThrowRotation(AutoThrow autoThrow) {
+      if (autoThrow != null && autoThrow.isEnabled()) {
+         autoThrow.targetRotations = null;
+         autoThrow.rotationSet = 0;
       }
    }
 
