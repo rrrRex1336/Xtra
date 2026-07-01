@@ -1,6 +1,7 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
+import awa.qwq.ovo.Naven.modules.impl.misc.ViaVersionFix;
 import awa.qwq.ovo.Naven.modules.impl.world.OldHitting;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -25,6 +26,11 @@ public class ItemInHandRendererMixin {
             cancellable = true
     )
     private void onRenderArmWithItem(AbstractClientPlayer player, float partialTick, float equipProgress, InteractionHand hand, float swingProgress, ItemStack itemStack, float equippedProg, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, CallbackInfo ci) {
+        if (hand == InteractionHand.OFF_HAND && ViaVersionFix.shouldHideServerLegacyBlockingShield(itemStack)) {
+            ci.cancel();
+            return;
+        }
+
         OldHitting oldHitting = (OldHitting) Naven.getInstance().getModuleManager().getModule(OldHitting.class);
         if (oldHitting == null || !oldHitting.isEnabled()) {
             return;

@@ -1,0 +1,11 @@
+{
+  "enchantment.minecraft.breach": "Breach",
+  "enchantment.minecraft.density": "Density",
+  "enchantment.minecraft.wind_burst": "Wind Burst",
+  "item.naven-modern.mace": "Mace",
+  "item.naven-modern.viaversionfix/items/mace": "Mace",
+  "itemGroup.naven-modern.viaversionfix": "ViaVersion Fix",
+  "subtitles.naven-modern.mace_smash_air": "Mace smashes air",
+  "subtitles.naven-modern.mace_smash_ground": "Mace smashes ground",
+  "subtitles.naven-modern.mace_smash_ground_heavy": "Mace lands a heavy blow"
+}

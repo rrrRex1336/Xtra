@@ -1,0 +1,6 @@
+{
+  "parent": "item/handheld",
+  "textures": {
+    "layer0": "naven-modern:item/viaversionfix/items/mace"
+  }
+}

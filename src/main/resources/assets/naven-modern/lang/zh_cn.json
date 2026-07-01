@@ -1,0 +1,11 @@
+{
+  "enchantment.minecraft.breach": "破甲",
+  "enchantment.minecraft.density": "致密",
+  "enchantment.minecraft.wind_burst": "风爆",
+  "item.naven-modern.mace": "重锤",
+  "item.naven-modern.viaversionfix/items/mace": "重锤",
+  "itemGroup.naven-modern.viaversionfix": "ViaVersion 修复",
+  "subtitles.naven-modern.mace_smash_air": "重锤击空",
+  "subtitles.naven-modern.mace_smash_ground": "重锤砸地",
+  "subtitles.naven-modern.mace_smash_ground_heavy": "重锤重击"
+}

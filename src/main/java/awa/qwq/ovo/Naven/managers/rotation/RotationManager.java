@@ -23,6 +23,7 @@ import awa.qwq.ovo.Naven.modules.impl.movement.LongJump;
 import awa.qwq.ovo.Naven.modules.impl.world.BedAura;
 import awa.qwq.ovo.Naven.modules.impl.world.ChestAura;
 import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
+import awa.qwq.ovo.Naven.modules.impl.world.Surround;
 import awa.qwq.ovo.Naven.utils.MoveUtils;
 import awa.qwq.ovo.Naven.utils.Vector2f;
 import net.minecraft.client.Minecraft;
@@ -62,6 +63,7 @@ public class RotationManager {
          LongJump longJump = (LongJump) Naven.getInstance().getModuleManager().getModule(LongJump.class);
          BedAura bedAura = (BedAura) Naven.getInstance().getModuleManager().getModule(BedAura.class);
          ChestAura chestAura = (ChestAura) Naven.getInstance().getModuleManager().getModule(ChestAura.class);
+         Surround surround = (Surround) Naven.getInstance().getModuleManager().getModule(Surround.class);
          AutoThrow autoThrow = (AutoThrow) Naven.getInstance().getModuleManager().getModule(AutoThrow.class);
 
          active = true;
@@ -95,6 +97,8 @@ public class RotationManager {
             active = true;
          } else if (crystalAura.isEnabled() && CrystalAura.rotations != null) {
             setRotations(new Vector2f(CrystalAura.rotations.x, CrystalAura.rotations.y));
+         } else if (surround != null && surround.isEnabled() && surround.rots != null) {
+            setRotations(new Vector2f(surround.rots.x, surround.rots.y));
          } else if (scaffold.isEnabled() && scaffold.rots != null) {
             setRotations(new Vector2f(scaffold.rots.x, scaffold.rots.y));
          } else if (bedAuraYieldingToCombat && killAuraReady) {

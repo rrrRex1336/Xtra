@@ -2,6 +2,6 @@ package awa.qwq.ovo.Naven;
 
 public class Version {
    public static String getVersion() {
-      return "Modern-Fabric: 260604";
+      return "Modern-Fabric: 260701";
    }
 }

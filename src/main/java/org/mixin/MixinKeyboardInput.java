@@ -2,6 +2,7 @@ package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventMoveInput;
+import awa.qwq.ovo.Naven.modules.impl.misc.ViaVersionFix;
 import net.minecraft.client.player.Input;
 import net.minecraft.client.player.KeyboardInput;
 import org.spongepowered.asm.mixin.Mixin;
@@ -21,13 +22,20 @@ public class MixinKeyboardInput extends Input {
       EventMoveInput eventMoveInput = new EventMoveInput(this.forwardImpulse, this.leftImpulse, this.jumping, this.shiftKeyDown, 0.3);
       Naven.getInstance().getEventManager().call(eventMoveInput);
       double sneakMultiplier = eventMoveInput.getSneakSlowDownMultiplier();
-      this.forwardImpulse = eventMoveInput.getForward();
-      this.leftImpulse = eventMoveInput.getStrafe();
+      float eventForward = eventMoveInput.getForward();
+      float eventStrafe = eventMoveInput.getStrafe();
+      this.forwardImpulse = eventForward;
+      this.leftImpulse = eventStrafe;
       this.jumping = eventMoveInput.isJump();
       this.shiftKeyDown = eventMoveInput.isSneak();
       if (pIsMovingSlowly) {
          this.leftImpulse = (float)((double)this.leftImpulse * sneakMultiplier);
          this.forwardImpulse = (float)((double)this.forwardImpulse * sneakMultiplier);
+      }
+
+      if (ViaVersionFix.shouldApplyLegacyBlockingSlowdown()) {
+         this.leftImpulse = eventStrafe * 0.2F;
+         this.forwardImpulse = eventForward * 0.2F;
       }
    }
 }

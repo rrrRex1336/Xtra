@@ -47,6 +47,8 @@ dependencies {
 	//modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
 	//modImplementation "top.theillusivec4.ias:ias-fabric:${project.ias_version}"
 	implementation "org.antlr:antlr4-runtime:4.13.1"
+	compileOnly fileTree(dir: "run/mods", include: "ViaFabricPlus-*.jar")
+	compileOnly fileTree(dir: "run/mods/.compileOnly", include: "*.jar")
 	compileOnly 'org.projectlombok:lombok:1.18.30'
 	annotationProcessor 'org.projectlombok:lombok:1.18.30'
 }

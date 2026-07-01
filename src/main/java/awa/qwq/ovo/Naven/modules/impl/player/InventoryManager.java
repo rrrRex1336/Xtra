@@ -127,6 +127,15 @@ public class InventoryManager extends Module {
       .setVisibility(() -> this.switchAxe.getCurrentValue())
       .build()
       .getFloatValue();
+   BooleanValue switchMace = ValueBuilder.create(this, "Switch Mace").setDefaultBooleanValue(false).build().getBooleanValue();
+   FloatValue maceSlot = ValueBuilder.create(this, "Mace Slot")
+      .setDefaultFloatValue(4.0F)
+      .setFloatStep(1.0F)
+      .setMinFloatValue(1.0F)
+      .setMaxFloatValue(9.0F)
+      .setVisibility(() -> this.switchMace.getCurrentValue())
+      .build()
+      .getFloatValue();
    BooleanValue switchBow = ValueBuilder.create(this, "Switch Bow or Crossbow").setDefaultBooleanValue(true).build().getBooleanValue();
    FloatValue bowSlot = ValueBuilder.create(this, "Bow Slot")
       .setDefaultFloatValue(5.0F)
@@ -283,6 +292,8 @@ public class InventoryManager extends Module {
          return false;
       } else if (InventoryUtils.isGodItem(stack)) {
          return true;
+      } else if (InventoryUtils.isMace(stack)) {
+         return true;
       } else if (stack.getDisplayName().getString().contains("点击使用")) {
          return true;
       } else if (stack.getItem() instanceof ArmorItem) {
@@ -354,6 +365,7 @@ public class InventoryManager extends Module {
       pairs.add(Pair.of(this.switchSword, this.swordSlot));
       pairs.add(Pair.of(this.switchPickaxe, this.pickaxeSlot));
       pairs.add(Pair.of(this.switchAxe, this.axeSlot));
+      pairs.add(Pair.of(this.switchMace, this.maceSlot));
       pairs.add(Pair.of(this.switchBow, this.bowSlot));
       pairs.add(Pair.of(this.switchWaterBucket, this.waterBucketSlot));
       pairs.add(Pair.of(this.switchEnderPearl, this.enderPearlSlot));
@@ -605,6 +617,14 @@ public class InventoryManager extends Module {
                && bestAxe.getItem() instanceof AxeItem
                && (InventoryUtils.getToolScore(bestAxe) > InventoryUtils.getToolScore(currentAxe) || !(currentAxe.getItem() instanceof AxeItem))) {
                this.swapItem(slotxxx, bestAxe);
+            }
+         }
+
+         if (this.switchMace.getCurrentValue()) {
+            int slotxxx = (int)(this.maceSlot.getCurrentValue() - 1.0F);
+            ItemStack mace = InventoryUtils.getMace();
+            if (mace != null && this.shouldSwapItem(slotxxx, mace)) {
+               this.swapItem(slotxxx, mace);
             }
          }
 
@@ -957,6 +977,14 @@ public class InventoryManager extends Module {
          if (bestAxe != null && bestAxe.getItem() instanceof AxeItem
                  && (InventoryUtils.getToolScore(bestAxe) > InventoryUtils.getToolScore(currentAxe) || !(currentAxe.getItem() instanceof AxeItem))
                  && this.shouldSwapItem(slot, bestAxe)) {
+            return true;
+         }
+      }
+
+      if (this.switchMace.getCurrentValue()) {
+         int slot = (int)(this.maceSlot.getCurrentValue() - 1.0F);
+         ItemStack mace = InventoryUtils.getMace();
+         if (mace != null && this.shouldSwapItem(slot, mace)) {
             return true;
          }
       }

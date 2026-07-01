@@ -90,6 +90,7 @@ public class ModuleManager {
          new Island(),
          new ClientFriend(),
          new Protocol(),
+         new ViaVersionFix(),
          new NoJumpDelay(),
          new FastPlace(),
          new AntiFireball(),

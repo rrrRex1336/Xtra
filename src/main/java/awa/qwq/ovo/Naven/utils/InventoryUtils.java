@@ -1,12 +1,17 @@
 package awa.qwq.ovo.Naven.utils;
 
 import com.google.common.collect.Multimap;
+import awa.qwq.ovo.Naven.modules.impl.misc.ViaVersionFix;
+import awa.qwq.ovo.Naven.viaversionfix.items.ModItems;
 import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MobType;
 import net.minecraft.world.entity.ai.attributes.Attribute;
@@ -36,6 +41,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SkullBlock;
 
 public class InventoryUtils {
+   private static final int NBT_STRING = 8;
    public static final int INCLUDE_ARMOR_BEGIN = 5;
    public static final int EXCLUDE_ARMOR_BEGIN = 9;
    public static final int ONLY_HOT_BAR_BEGIN = 36;
@@ -93,12 +99,68 @@ public class InventoryUtils {
    public static boolean isSharpnessAxe(ItemStack stack) {
       if (stack.isEmpty()) {
          return false;
+      } else if (isMace(stack)) {
+         return false;
       } else if (!(stack.getItem() instanceof AxeItem)) {
          return false;
       } else {
          int itemEnchantmentLevel = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, stack);
          return itemEnchantmentLevel >= 8 && itemEnchantmentLevel < 50;
       }
+   }
+
+   public static boolean isMace(ItemStack stack) {
+      if (stack == null || stack.isEmpty()) {
+         return false;
+      }
+
+      return stack.is(ModItems.MACE) || (ViaVersionFix.isHighVersionItemFixEnabled() && isServerMace(stack));
+   }
+
+   public static boolean isServerMace(ItemStack stack) {
+      if (stack == null || stack.isEmpty() || !(stack.getItem() instanceof AxeItem)) {
+         return false;
+      }
+
+      String name = ChatFormatting.stripFormatting(getRawHoverName(stack));
+      if (name == null) {
+         return false;
+      }
+
+      String normalized = name.trim();
+      return normalized.equalsIgnoreCase("1.21 Mace") || normalized.equalsIgnoreCase("Mace");
+   }
+
+   private static String getRawHoverName(ItemStack stack) {
+      CompoundTag display = stack.getTagElement(ItemStack.TAG_DISPLAY);
+      if (display != null && display.contains(ItemStack.TAG_DISPLAY_NAME, NBT_STRING)) {
+         String rawName = display.getString(ItemStack.TAG_DISPLAY_NAME);
+         try {
+            Component component = Component.Serializer.fromJson(rawName);
+            if (component != null) {
+               return component.getString();
+            }
+         } catch (Exception ignored) {
+         }
+
+         if (rawName.length() >= 2 && rawName.startsWith("\"") && rawName.endsWith("\"")) {
+            return rawName.substring(1, rawName.length() - 1);
+         }
+
+         return rawName;
+      }
+
+      return stack.getItem().getName(stack).getString();
+   }
+
+   public static ItemStack getMace() {
+      for (ItemStack stack : mc.player.getInventory().items) {
+         if (isMace(stack)) {
+            return stack;
+         }
+      }
+
+      return null;
    }
 
    public static boolean isGodAxe(ItemStack stack) {
@@ -342,7 +404,7 @@ public class InventoryUtils {
    public static float getBestAxeScore() {
       return getAllItems()
               .stream()
-              .filter(item -> !item.isEmpty() && item.getItem() instanceof AxeItem && !isSharpnessAxe(item) && isItemValid(item))
+              .filter(item -> !item.isEmpty() && item.getItem() instanceof AxeItem && !isMace(item) && !isSharpnessAxe(item) && isItemValid(item))
               .map(InventoryUtils::getToolScore)
               .max(Float::compareTo)
               .orElse(0.0F);
@@ -351,7 +413,7 @@ public class InventoryUtils {
    public static ItemStack getBestAxe() {
       return getAllItems()
               .stream()
-              .filter(item -> !item.isEmpty() && item.getItem() instanceof AxeItem && !isSharpnessAxe(item) && isItemValid(item))
+              .filter(item -> !item.isEmpty() && item.getItem() instanceof AxeItem && !isMace(item) && !isSharpnessAxe(item) && isItemValid(item))
               .max(Comparator.comparingInt(s -> (int)(getToolScore(s) * 100.0F)))
               .orElse(null);
    }
@@ -359,7 +421,7 @@ public class InventoryUtils {
    public static ItemStack getBestShapeAxe() {
       return getAllItems()
               .stream()
-              .filter(item -> !item.isEmpty() && item.getItem() instanceof AxeItem && isSharpnessAxe(item) && isItemValid(item) && !isGodAxe(item))
+              .filter(item -> !item.isEmpty() && item.getItem() instanceof AxeItem && !isMace(item) && isSharpnessAxe(item) && isItemValid(item) && !isGodAxe(item))
               .max(Comparator.comparingInt(s -> (int)(getAxeDamage(s) * 100.0F)))
               .orElse(null);
    }
@@ -488,6 +550,8 @@ public class InventoryUtils {
          return 0.0F;
       } else if (stack.isEmpty()) {
          return 0.0F;
+      } else if (isMace(stack)) {
+         return 0.0F;
       } else if (isGodItem(stack)) {
          return 0.0F;
       } else if (isSharpnessAxe(stack)) {
@@ -519,6 +583,8 @@ public class InventoryUtils {
       if (stack == null) {
          return 0.0F;
       } else if (stack.isEmpty()) {
+         return 0.0F;
+      } else if (isMace(stack)) {
          return 0.0F;
       } else {
          if (stack.getItem() instanceof AxeItem && isSharpnessAxe(stack)) {

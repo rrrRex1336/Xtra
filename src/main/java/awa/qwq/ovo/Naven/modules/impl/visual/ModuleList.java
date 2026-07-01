@@ -12,7 +12,11 @@ import awa.qwq.ovo.Naven.modules.ModuleManager;
 import awa.qwq.ovo.Naven.utils.DragManager;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
+import awa.qwq.ovo.Naven.utils.renderer.Framebuffer;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
+import awa.qwq.ovo.Naven.utils.renderer.GL;
+import awa.qwq.ovo.Naven.utils.renderer.PostProcessRenderer;
+import awa.qwq.ovo.Naven.utils.renderer.Shader;
 import awa.qwq.ovo.Naven.utils.renderer.text.CustomTextRenderer;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
@@ -23,7 +27,11 @@ import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.renderer.GameRenderer;
 import org.joml.Vector4f;
+import org.lwjgl.opengl.GL11;
 
 @ModuleInfo(
         name = "ModuleList",
@@ -52,12 +60,12 @@ public class ModuleList extends Module {
 
     public ModeValue colorMode = ValueBuilder.create(this, "Color Mode")
             .setDefaultModeIndex(1)
-            .setModes("White", "Rainbow", "Water")
+            .setModes("White", "Rainbow", "Water", "Snow")
             .setVisibility(() -> !listMode.isCurrentMode("Adjust"))
             .build().getModeValue();
 
     public FloatValue colorSpeed = ValueBuilder.create(this, "Color Speed")
-            .setVisibility(() -> !listMode.isCurrentMode("White") && !listMode.isCurrentMode("Adjust"))
+            .setVisibility(() -> !colorMode.isCurrentMode("White") && !listMode.isCurrentMode("Adjust"))
             .setMinFloatValue(0.1F)
             .setMaxFloatValue(10.0F)
             .setDefaultFloatValue(1.0F)
@@ -66,13 +74,18 @@ public class ModuleList extends Module {
             .getFloatValue();
 
     public FloatValue colorOffset = ValueBuilder.create(this, "Color Offset")
-            .setVisibility(() -> !listMode.isCurrentMode("White") && !listMode.isCurrentMode("Adjust"))
+            .setVisibility(() -> !colorMode.isCurrentMode("White") && !listMode.isCurrentMode("Adjust"))
             .setMinFloatValue(1.0F)
             .setMaxFloatValue(20.0F)
             .setDefaultFloatValue(10.0F)
             .setFloatStep(0.1F)
             .build()
             .getFloatValue();
+
+    public BooleanValue glowShader = ValueBuilder.create(this, "Glow Shader")
+            .setDefaultBooleanValue(true)
+            .setVisibility(() -> !listMode.isCurrentMode("Adjust"))
+            .build().getBooleanValue();
 
     public ModeValue direction = ValueBuilder.create(this, "Direction")
             .setDefaultModeIndex(0)
@@ -109,7 +122,13 @@ public class ModuleList extends Module {
 
     private List<Module> renderModules;
     private List<Vector4f> blurMatrices = new ArrayList<>();
+    private final List<GlowRect> glowRects = new ArrayList<>();
     private final DragManager dragManager = new DragManager(this.xOffset, this.yOffset);
+    private Shader moduleListGlowShader;
+    private Framebuffer glowMaskBuffer;
+    private Framebuffer glowCutoutBuffer;
+    private Framebuffer glowBlurBuffer;
+    private boolean moduleListGlowFailed;
 
     public String getModuleDisplayName(Module module) {
         if (listMode.isCurrentMode("Adjust")) {
@@ -117,7 +136,7 @@ public class ModuleList extends Module {
             return name;
         }
         String name = this.prettyModuleName.getCurrentValue() ? module.getPrettyName() : module.getName();
-        return name + (module.getSuffix() == null ? "" : " §7" + module.getSuffix());
+        return name + (module.getSuffix() == null ? "" : " \u00a7f" + module.getSuffix());
     }
 
     @EventTarget
@@ -138,6 +157,8 @@ public class ModuleList extends Module {
         CustomTextRenderer font = Fonts.opensans;
 
         this.blurMatrices.clear();
+        this.renderCustomGlow(e);
+        this.glowRects.clear();
         e.getStack().pushPose();
 
         ModuleManager moduleManager = Naven.getInstance().getModuleManager();
@@ -217,18 +238,8 @@ public class ModuleList extends Module {
                     );
                     this.blurMatrices.add(new Vector4f(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight));
 
-                    int color = -1;
-                    if (this.colorMode.isCurrentMode("Rainbow")) {
-                        float mappedSpeed = 21.0F - (this.colorSpeed.getCurrentValue() * 1.9F);
-                        color = RenderUtils.getRainbowOpaque(
-                                (int) (-height * this.colorOffset.getCurrentValue()),
-                                1.0F,
-                                1.0F,
-                                mappedSpeed * 1000.0F
-                        );
-                    } else if (this.colorMode.isCurrentMode("Water")) {
-                        color = getWaterColor((int) (-height * this.colorOffset.getCurrentValue()), this.colorSpeed.getCurrentValue());
-                    }
+                    int color = this.getModuleColor(height);
+                    this.addGlowRect(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight, color);
 
                     float alpha = animation.value / 100.0F;
                     font.setAlpha(alpha);
@@ -288,19 +299,8 @@ public class ModuleList extends Module {
                     );
                     this.blurMatrices.add(new Vector4f(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight));
 
-                    int color = -1;
-
-                    if (this.colorMode.isCurrentMode("Rainbow")) {
-                        float mappedSpeed = 21.0F - (this.colorSpeed.getCurrentValue() * 1.9F);
-                        color = RenderUtils.getRainbowOpaque(
-                                (int) (-height * this.colorOffset.getCurrentValue()),
-                                1.0F,
-                                1.0F,
-                                mappedSpeed * 1000.0F
-                        );
-                    } else if (this.colorMode.isCurrentMode("Water")) {
-                        color = getWaterColor((int) (-height * this.colorOffset.getCurrentValue()), this.colorSpeed.getCurrentValue());
-                    }
+                    int color = this.getModuleColor(height);
+                    this.addGlowRect(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight, color);
 
                     float fontSizeVal = this.fontSize.getCurrentValue();
                     float iconBoxHeight = moduleHeight;
@@ -324,6 +324,7 @@ public class ModuleList extends Module {
                             backgroundColor
                     );
                     this.blurMatrices.add(new Vector4f(iconBoxX, iconBoxY, iconBoxWidth, iconBoxHeight));
+                    this.addGlowRect(iconBoxX, iconBoxY, iconBoxWidth, iconBoxHeight, color);
 
                     String iconChar = getCategoryIcon(module.getCategory());
 
@@ -385,10 +386,191 @@ public class ModuleList extends Module {
         return count * lineHeight + Math.max(0, count - 1) * spacing + 4.0F;
     }
 
+    private void addGlowRect(float x, float y, float width, float height, int color) {
+        if (!this.glowShader.getCurrentValue() || this.listMode.isCurrentMode("Adjust") || width <= 0.0F || height <= 0.0F) {
+            return;
+        }
+
+        this.glowRects.add(new GlowRect(x, y, width, height, color));
+    }
+
+    private void renderCustomGlow(EventRender2D event) {
+        if (this.moduleListGlowFailed || !this.glowShader.getCurrentValue() || this.listMode.isCurrentMode("Adjust") || this.glowRects.isEmpty()) {
+            return;
+        }
+
+        try {
+            this.ensureGlowResources();
+            boolean depthWasEnabled = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+            boolean blendWasEnabled = GL11.glIsEnabled(GL11.GL_BLEND);
+            boolean stencilWasEnabled = GL11.glIsEnabled(GL11.GL_STENCIL_TEST);
+
+            try {
+                this.glowMaskBuffer.bind();
+                this.glowMaskBuffer.setViewport();
+                GL11.glDisable(GL11.GL_STENCIL_TEST);
+                GL11.glDisable(GL11.GL_DEPTH_TEST);
+                RenderSystem.enableBlend();
+                RenderSystem.defaultBlendFunc();
+                GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+                GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
+                RenderSystem.setShader(GameRenderer::getPositionColorShader);
+                RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+
+                for (GlowRect rect : this.glowRects) {
+                    this.drawGlowSource(event.getStack(), rect);
+                }
+
+                this.glowCutoutBuffer.bind();
+                this.glowCutoutBuffer.setViewport();
+                GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+                GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
+                RenderSystem.setShader(GameRenderer::getPositionColorShader);
+                RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+
+                for (GlowRect rect : this.glowRects) {
+                    this.drawGlowCutout(event.getStack(), rect);
+                }
+
+                this.renderGlowLayer(event, 4, 3.4F, 0.94F);
+                this.renderGlowLayer(event, 9, 2.05F, 0.62F);
+            } finally {
+                if (stencilWasEnabled) {
+                    GL11.glEnable(GL11.GL_STENCIL_TEST);
+                } else {
+                    GL11.glDisable(GL11.GL_STENCIL_TEST);
+                }
+
+                if (depthWasEnabled) {
+                    GL11.glEnable(GL11.GL_DEPTH_TEST);
+                } else {
+                    GL11.glDisable(GL11.GL_DEPTH_TEST);
+                }
+
+                if (blendWasEnabled) {
+                    RenderSystem.enableBlend();
+                    RenderSystem.defaultBlendFunc();
+                } else {
+                    RenderSystem.disableBlend();
+                }
+
+                RenderSystem.colorMask(true, true, true, true);
+                RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+                GL.resetTextureSlot();
+            }
+        } catch (Exception exception) {
+            this.moduleListGlowFailed = true;
+            exception.printStackTrace();
+        }
+    }
+
+    private void ensureGlowResources() {
+        if (this.moduleListGlowShader == null) {
+            this.moduleListGlowShader = new Shader("modulelist_glow.vert", "modulelist_glow.frag");
+        }
+
+        if (this.glowMaskBuffer == null) {
+            this.glowMaskBuffer = new Framebuffer();
+            this.glowCutoutBuffer = new Framebuffer();
+            this.glowBlurBuffer = new Framebuffer();
+            return;
+        }
+
+        int width = mc.getWindow().getWidth();
+        int height = mc.getWindow().getHeight();
+        if (this.glowMaskBuffer.width != width || this.glowMaskBuffer.height != height) {
+            this.glowMaskBuffer.resize();
+            this.glowCutoutBuffer.resize();
+            this.glowBlurBuffer.resize();
+        }
+    }
+
+    private void drawGlowSource(PoseStack stack, GlowRect rect) {
+        int glowColor = mixColor(rect.color(), 0xFFFFFF, 0.08F);
+        RenderUtils.drawRoundedRect(stack, rect.x() - 5.5F, rect.y() - 2.0F, rect.width() + 11.0F, rect.height() + 4.0F, 5.0F, withAlpha(glowColor, 70));
+        RenderUtils.drawRoundedRect(stack, rect.x() - 3.75F, rect.y() - 1.35F, rect.width() + 7.5F, rect.height() + 2.7F, 4.5F, withAlpha(glowColor, 120));
+        RenderUtils.drawRoundedRect(stack, rect.x() - 2.0F, rect.y() - 0.75F, rect.width() + 4.0F, rect.height() + 1.5F, 3.75F, withAlpha(glowColor, 185));
+        RenderUtils.drawRoundedRect(stack, rect.x() - 0.75F, rect.y() - 0.25F, rect.width() + 1.5F, rect.height() + 0.5F, 3.0F, withAlpha(glowColor, 235));
+    }
+
+    private void drawGlowCutout(PoseStack stack, GlowRect rect) {
+        RenderUtils.drawRoundedRect(stack, rect.x(), rect.y(), rect.width(), rect.height(), 3.0F, 0xFFFFFFFF);
+    }
+
+    private void renderGlowLayer(EventRender2D event, int radius, float softness, float intensity) {
+        this.glowBlurBuffer.bind();
+        this.glowBlurBuffer.setViewport();
+        GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+        GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
+        this.renderGlowTexture(event.getStack(), this.glowMaskBuffer.texture, this.glowCutoutBuffer.texture, this.glowMaskBuffer.width, this.glowMaskBuffer.height, 1.0F, 0.0F, 1.0F, radius, softness, false);
+
+        mc.getMainRenderTarget().bindWrite(false);
+        GL.viewport(0, 0, mc.getWindow().getWidth(), mc.getWindow().getHeight());
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
+        this.renderGlowTexture(event.getStack(), this.glowBlurBuffer.texture, this.glowCutoutBuffer.texture, this.glowBlurBuffer.width, this.glowBlurBuffer.height, 0.0F, 1.0F, intensity, radius, softness, true);
+    }
+
+    private void renderGlowTexture(PoseStack stack, int texture, int maskTexture, int width, int height, float directionX, float directionY, float intensity, int radius, float softness, boolean cutoutSource) {
+        this.moduleListGlowShader.bind();
+        GL.bindTexture(texture, 0);
+        GL.bindTexture(maskTexture, 1);
+        this.moduleListGlowShader.set("u_Texture", 0);
+        this.moduleListGlowShader.set("u_MaskTexture", 1);
+        this.moduleListGlowShader.set("u_Size", (double) width, (double) height);
+        this.moduleListGlowShader.set("u_Direction", directionX, directionY);
+        this.moduleListGlowShader.set("u_Intensity", intensity);
+        this.moduleListGlowShader.set("u_Radius", radius);
+        this.moduleListGlowShader.set("u_Softness", softness);
+        this.moduleListGlowShader.set("u_CutoutSource", cutoutSource);
+        PostProcessRenderer.beginRender(stack);
+        PostProcessRenderer.render(stack);
+        PostProcessRenderer.endRender();
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return (Math.max(0, Math.min(255, alpha)) << 24) | (color & 0x00FFFFFF);
+    }
+
+    private static int mixColor(int c1, int c2, float t) {
+        float clamped = Math.max(0.0F, Math.min(1.0F, t));
+        int r = (int) (((c1 >> 16) & 0xFF) + (((c2 >> 16) & 0xFF) - ((c1 >> 16) & 0xFF)) * clamped);
+        int g = (int) (((c1 >> 8) & 0xFF) + (((c2 >> 8) & 0xFF) - ((c1 >> 8) & 0xFF)) * clamped);
+        int b = (int) ((c1 & 0xFF) + ((c2 & 0xFF) - (c1 & 0xFF)) * clamped);
+        return (r << 16) | (g << 8) | b;
+    }
+
     private static final int[] WATER_COLORS = {
             0x0CE8C7,  // RGB(12, 232, 199) 青绿色
             0x0CA3E8   // RGB(12, 163, 232) 蓝色
     };
+
+    private static final int[] SNOW_COLORS = {
+            0xF7FCFF,
+            0xDEEFFF,
+            0xC0D8F5,
+            0x9EBBEA,
+            0x78A8E8
+    };
+
+    private int getModuleColor(float height) {
+        int index = (int) (-height * this.colorOffset.getCurrentValue());
+        if (this.colorMode.isCurrentMode("Rainbow")) {
+            float mappedSpeed = 21.0F - (this.colorSpeed.getCurrentValue() * 1.9F);
+            return RenderUtils.getRainbowOpaque(index, 1.0F, 1.0F, mappedSpeed * 1000.0F);
+        }
+
+        if (this.colorMode.isCurrentMode("Water")) {
+            return getWaterColor(index, this.colorSpeed.getCurrentValue());
+        }
+
+        if (this.colorMode.isCurrentMode("Snow")) {
+            return getSnowColor(index, this.colorSpeed.getCurrentValue());
+        }
+
+        return -1;
+    }
 
     private int getWaterColor(int index, float speed) {
         long time = System.currentTimeMillis();
@@ -405,8 +587,29 @@ public class ModuleList extends Module {
         return (r << 16) | (g << 8) | b;
     }
 
+    private int getSnowColor(int index, float speed) {
+        long time = System.currentTimeMillis();
+        long period = Math.max(800L, (long) ((21.0F - speed * 1.9F) * 1000.0F));
+        float progress = (float) Math.floorMod(time + index * 50L, period) / (float) period;
+        float scaled = progress * SNOW_COLORS.length;
+        int colorIndex = (int) scaled;
+        float t = scaled - colorIndex;
+        t = t * t * (3.0F - 2.0F * t);
+
+        int c1 = SNOW_COLORS[colorIndex % SNOW_COLORS.length];
+        int c2 = SNOW_COLORS[(colorIndex + 1) % SNOW_COLORS.length];
+        return blendColor(c1, c2, t);
+    }
+
+    private static int blendColor(int c1, int c2, float t) {
+        return mixColor(c1, c2, t);
+    }
+
     private String getCategoryIcon(Category category) {
         if (category == null) return "?";
         return category.getIcon();
+    }
+
+    private record GlowRect(float x, float y, float width, float height, int color) {
     }
 }

@@ -8,6 +8,10 @@
     "accessors.AbstractFurnaceMenuAccessor",
     "accessors.BrewingStandMenuAccessor",
     "accessors.ChestMenuAccessor",
+    "MixinBlockPlaceContext",
+    "MixinItemStack",
+    "MixinMetadataRewriter1_9To1_8",
+    "MixinViaInventoryAcknowledgements",
     "accessors.ConnectionAccessor"
   ],
   "client": [
@@ -30,6 +34,7 @@
     "MixinItemEntityRenderer",
     "MixinItemInHandLayer",
     "MixinItemInHandRenderer",
+    "MixinItemRenderer",
     "MixinKeyboardHandler",
     "MixinKeyboardInput",
     "MixinLivingEntity",

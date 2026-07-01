@@ -299,6 +299,10 @@ public class ContainerStealer extends Module {
    }
 
    private boolean isBestItemInChest(ChestMenu menu, ItemStack stack) {
+      if (InventoryUtils.isMace(stack)) {
+         return true;
+      }
+
       if (!InventoryUtils.isGodItem(stack) && !InventoryUtils.isSharpnessAxe(stack)) {
          for (int i = 0; i < menu.getRowCount() * 9; i++) {
             ItemStack checkStack = menu.getSlot(i).getItem();
@@ -327,6 +331,8 @@ public class ContainerStealer extends Module {
    public static boolean isItemUseful(ItemStack stack) {
       if (stack.isEmpty()) {
          return false;
+      } else if (InventoryUtils.isMace(stack)) {
+         return true;
       } else if (InventoryUtils.isGodItem(stack) || InventoryUtils.isSharpnessAxe(stack)) {
          return true;
       } else if (stack.getItem() instanceof ArmorItem) {

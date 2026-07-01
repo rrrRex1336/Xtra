@@ -4,6 +4,9 @@ import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventAttack;
 import awa.qwq.ovo.Naven.events.impl.EventDestroyBlock;
 import awa.qwq.ovo.Naven.events.impl.EventPositionItem;
+import awa.qwq.ovo.Naven.modules.impl.misc.ViaVersionFix;
+import awa.qwq.ovo.Naven.utils.InventoryUtils;
+import awa.qwq.ovo.Naven.viaversionfix.MaceLogic;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.core.BlockPos;
@@ -55,6 +58,10 @@ public class MixinMultiPlayerGameMode {
 
    @Inject(method = {"attack"}, at = {@At("RETURN")})
    private void onAttackPost(Player player, Entity entity, CallbackInfo ci) {
+      if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace(player.getMainHandItem())) {
+         MaceLogic.playClientSmashSound(player.level(), entity, player);
+      }
+
       Naven.getInstance().getEventManager().call(new EventAttack(true, entity));  // 已经是 entity，保持
    }
 }

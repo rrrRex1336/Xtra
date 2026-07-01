@@ -1,0 +1,7 @@
+/.gradle/
+/build/
+/run/*
+!/run/mods/
+/run/mods/*
+!/run/mods/.compileOnly/
+!/run/mods/.compileOnly/*.jar
