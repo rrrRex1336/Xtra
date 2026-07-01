@@ -37,7 +37,7 @@ public class Loader {
                 throw new Error("Unsupported platform");
             }
 
-            String resourcePath = "/linyanli1337/" + arch + "-" + libName;
+            String resourcePath = "/assets/naven-modern/client/native/" + arch + "-" + libName;
 
             try (InputStream inputStream = Loader.class.getResourceAsStream(resourcePath)) {
                 if (inputStream == null) {

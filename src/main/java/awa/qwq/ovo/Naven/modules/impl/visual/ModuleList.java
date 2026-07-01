@@ -58,6 +58,12 @@ public class ModuleList extends Module {
             .setDefaultBooleanValue(false)
             .build().getBooleanValue();
 
+    public final ModeValue animationScale = ValueBuilder.create(this, "Animation Scale")
+            .setModes("Move", "Zoom", "Direct")
+            .setDefaultModeIndex(0)
+            .build()
+            .getModeValue();
+
     public ModeValue colorMode = ValueBuilder.create(this, "Color Mode")
             .setDefaultModeIndex(1)
             .setModes("White", "Rainbow", "Water", "Snow")
@@ -191,12 +197,22 @@ public class ModuleList extends Module {
             }
 
             for (Module module : this.renderModules) {
-                if (!module.isEnabled() || module.isHidden()) continue;
+                float progress = this.updateModuleAnimation(module);
+                if (progress <= 0.0F) continue;
 
                 String displayName = this.getModuleDisplayName(module);
-                adjustFont.render(e.getStack(), displayName, xOffset, yOffset, Color.WHITE, true, fontSize);
-                yOffset += lineHeight + lineSpacing;
+                float stringWidth = adjustFont.getWidth(displayName, fontSize);
+                float renderFontSize = this.animationScale.isCurrentMode("Zoom") ? fontSize * progress : fontSize;
+                float renderHeight = (float) adjustFont.getHeight(true, renderFontSize);
+                float moveX = this.animationScale.isCurrentMode("Move") ? -stringWidth * (1.0F - progress) : 0.0F;
+                float textY = yOffset + (lineHeight - renderHeight) / 2.0F;
+
+                adjustFont.setAlpha(progress);
+                adjustFont.render(e.getStack(), displayName, xOffset + moveX, textY, Color.WHITE, true, renderFontSize);
+                yOffset += this.getAnimatedAdvance(lineHeight, lineSpacing, progress);
             }
+
+            adjustFont.setAlpha(1.0F);
         } else if (listMode.isCurrentMode("Naven")) {
             float maxWidth = this.renderModules.isEmpty() ? 0.0F :
                     font.getWidth(this.getModuleDisplayName(this.renderModules.get(0)), this.fontSize.getCurrentValue());
@@ -212,22 +228,19 @@ public class ModuleList extends Module {
             float moduleListY = this.dragManager.getY(baseY);
 
             for (Module module : this.renderModules) {
-                SmoothAnimationTimer animation = module.getAnimation();
-                if (module.isEnabled() && !module.isHidden()) {
-                    animation.target = 100.0F;
-                } else {
-                    animation.target = 0.0F;
-                }
-
-                animation.update(true);
-                if (animation.value > 0.0F) {
+                float progress = this.updateModuleAnimation(module);
+                if (progress > 0.0F) {
                     String displayName = this.getModuleDisplayName(module);
-                    float stringWidth = font.getWidth(displayName, this.fontSize.getCurrentValue());
-                    float left = -stringWidth * (1.0F - animation.value / 100.0F);
-                    float right = maxWidth - stringWidth * (animation.value / 100.0F);
-                    float innerX = this.direction.isCurrentMode("Left") ? left : right;
-                    float moduleHeight = (float) ((double) (animation.value / 100.0F) * fontHeight);
-                    float moduleWidth = stringWidth + 3.0F;
+                    float fontSizeVal = this.fontSize.getCurrentValue();
+                    float zoom = this.getZoomScale(progress);
+                    float stringWidth = font.getWidth(displayName, fontSizeVal);
+                    float renderFontSize = fontSizeVal * zoom;
+                    float renderStringWidth = font.getWidth(displayName, renderFontSize);
+                    float alignX = this.direction.isCurrentMode("Left") ? 0.0F : maxWidth - renderStringWidth;
+                    float moveX = this.getMoveOffset(stringWidth, progress);
+                    float innerX = alignX + moveX;
+                    float moduleHeight = this.getAnimatedSize((float) fontHeight, progress);
+                    float moduleWidth = renderStringWidth + 3.0F * zoom;
 
                     RenderUtils.fillBound(e.getStack(),
                             moduleListX + innerX,
@@ -241,16 +254,15 @@ public class ModuleList extends Module {
                     int color = this.getModuleColor(height);
                     this.addGlowRect(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight, color);
 
-                    float alpha = animation.value / 100.0F;
-                    font.setAlpha(alpha);
+                    font.setAlpha(progress);
                     font.render(e.getStack(), displayName,
-                            moduleListX + innerX + 1.5F,
-                            moduleListY + height + 1.0F,
+                            moduleListX + innerX + 1.5F * zoom,
+                            moduleListY + height + 1.0F * zoom,
                             new Color(color),
                             true,
-                            this.fontSize.getCurrentValue()
+                            renderFontSize
                     );
-                    height += (float) ((double) (animation.value / 100.0F) * fontHeight);
+                    height += this.getAnimatedAdvance((float) fontHeight, 0.0F, progress);
                 }
             }
 
@@ -262,32 +274,30 @@ public class ModuleList extends Module {
                     font.getWidth(this.getModuleDisplayName(this.renderModules.get(0)), (double) this.fontSize.getCurrentValue());
             float height = 0.0F;
             double fontHeight = font.getHeight(true, (double) this.fontSize.getCurrentValue());
+            float lineSpacing = 4.0F;
             float baseX = this.direction.isCurrentMode("Right") ?
                     (float) mc.getWindow().getGuiScaledWidth() - maxWidth - 6.0F :
                     3.0F;
             float baseY = 0.0F;
 
-            this.dragManager.update(baseX, baseY, maxWidth + (float) fontHeight + 10.0F, this.getEnabledModuleListHeight((float) fontHeight, 2.0F));
+            this.dragManager.update(baseX, baseY, maxWidth + (float) fontHeight + 10.0F, this.getEnabledModuleListHeight((float) fontHeight, lineSpacing));
             float moduleListX = this.dragManager.getX(baseX);
             float moduleListY = this.dragManager.getY(baseY);
 
             for (Module module : this.renderModules) {
-                SmoothAnimationTimer animation = module.getAnimation();
-                if (module.isEnabled() && !module.isHidden()) {
-                    animation.target = 100.0F;
-                } else {
-                    animation.target = 0.0F;
-                }
-
-                animation.update(true);
-                if (animation.value > 0.0F) {
+                float progress = this.updateModuleAnimation(module);
+                if (progress > 0.0F) {
                     String displayName = this.getModuleDisplayName(module);
-                    float stringWidth = font.getWidth(displayName, (double) this.fontSize.getCurrentValue());
-                    float left = -stringWidth * (1.0F - animation.value / 100.0F);
-                    float right = maxWidth - stringWidth * (animation.value / 100.0F);
-                    float innerX = this.direction.isCurrentMode("Left") ? left : right;
-                    float moduleHeight = (float) ((double) (animation.value / 100.0F) * fontHeight);
-                    float moduleWidth = stringWidth + 6.0F;
+                    float fontSizeVal = this.fontSize.getCurrentValue();
+                    float zoom = this.getZoomScale(progress);
+                    float stringWidth = font.getWidth(displayName, (double) fontSizeVal);
+                    float renderFontSize = fontSizeVal * zoom;
+                    float renderStringWidth = font.getWidth(displayName, (double) renderFontSize);
+                    float alignX = this.direction.isCurrentMode("Left") ? 0.0F : maxWidth - renderStringWidth;
+                    float moveX = this.getMoveOffset(stringWidth, progress);
+                    float innerX = alignX + moveX;
+                    float moduleHeight = this.getAnimatedSize((float) fontHeight, progress);
+                    float moduleWidth = renderStringWidth + 6.0F * zoom;
 
                     RenderUtils.drawRoundedRect(e.getStack(),
                             moduleListX + innerX,
@@ -302,7 +312,6 @@ public class ModuleList extends Module {
                     int color = this.getModuleColor(height);
                     this.addGlowRect(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight, color);
 
-                    float fontSizeVal = this.fontSize.getCurrentValue();
                     float iconBoxHeight = moduleHeight;
                     float iconBoxWidth = iconBoxHeight;
 
@@ -310,9 +319,9 @@ public class ModuleList extends Module {
                     float iconBoxX;
 
                     if (this.direction.isCurrentMode("Right")) {
-                        iconBoxX = moduleListX + innerX + moduleWidth + 1.5F;
+                        iconBoxX = moduleListX + innerX + moduleWidth + 1.5F * zoom;
                     } else {
-                        iconBoxX = moduleListX + innerX - iconBoxWidth - 1.5F;
+                        iconBoxX = moduleListX + innerX - iconBoxWidth - 1.5F * zoom;
                     }
 
                     RenderUtils.drawRoundedRect(e.getStack(),
@@ -328,14 +337,13 @@ public class ModuleList extends Module {
 
                     String iconChar = getCategoryIcon(module.getCategory());
 
-                    float iconSize = fontSizeVal * 0.65F;
+                    float iconSize = fontSizeVal * 0.65F * zoom;
                     float iconCharHeightSmall = (float) font.getHeight(true, iconSize);
                     float iconWidth = iconFont.getWidth(iconChar, iconSize);
                     float iconRenderX = iconBoxX + (iconBoxWidth - iconWidth) / 2.0F - 0.2F;
                     float iconRenderY = iconBoxY + (iconBoxHeight - iconCharHeightSmall) / 2.0F - 0.0F;
 
-                    float alpha = animation.value / 100.0F;
-                    iconFont.setAlpha(alpha);
+                    iconFont.setAlpha(progress);
                     iconFont.render(e.getStack(), iconChar,
                             (double) iconRenderX,
                             (double) iconRenderY,
@@ -343,12 +351,12 @@ public class ModuleList extends Module {
                             true,
                             (double) iconSize);
 
-                    font.setAlpha(alpha);
-                    float textX = moduleListX + innerX + (moduleWidth - stringWidth) / 2.0F;
-                    float textY = moduleListY + height + 2.0F + (moduleHeight - (float) fontHeight) / 2.0F;
+                    font.setAlpha(progress);
+                    float textX = moduleListX + innerX + (moduleWidth - renderStringWidth) / 2.0F;
+                    float textY = moduleListY + height + 2.0F + (moduleHeight - (float) font.getHeight(true, (double) renderFontSize)) / 2.0F;
 
-                    font.render(e.getStack(), displayName, (double) textX, (double) textY, new Color(color), true, (double) fontSizeVal);
-                    height += (float) ((double) (animation.value / 100.0F) * fontHeight) + 2.0F;
+                    font.render(e.getStack(), displayName, (double) textX, (double) textY, new Color(color), true, (double) renderFontSize);
+                    height += this.getAnimatedAdvance((float) fontHeight, lineSpacing, progress);
                 }
             }
 
@@ -365,6 +373,49 @@ public class ModuleList extends Module {
         if (listMode.isCurrentMode("Adjust")) return 0.65F;
         if (listMode.isCurrentMode("Naven")) return this.fontSize.getCurrentValue();
         return this.fontSize.getCurrentValue();
+    }
+
+    private float updateModuleAnimation(Module module) {
+        SmoothAnimationTimer animation = module.getAnimation();
+        boolean visible = module.isEnabled() && !module.isHidden();
+        animation.target = visible ? 100.0F : 0.0F;
+
+        if (this.animationScale.isCurrentMode("Direct")) {
+            animation.value = animation.target;
+        } else {
+            animation.update(true);
+        }
+
+        return animation.value / 100.0F;
+    }
+
+    private float getMoveOffset(float width, float progress) {
+        if (!this.animationScale.isCurrentMode("Move")) {
+            return 0.0F;
+        }
+
+        float offset = width * (1.0F - progress);
+        return this.direction.isCurrentMode("Right") ? offset : -offset;
+    }
+
+    private float getAnimatedSize(float size, float progress) {
+        if (this.animationScale.isCurrentMode("Zoom")) {
+            return size * progress;
+        }
+
+        return size;
+    }
+
+    private float getZoomScale(float progress) {
+        return this.animationScale.isCurrentMode("Zoom") ? progress : 1.0F;
+    }
+
+    private float getAnimatedAdvance(float lineHeight, float spacing, float progress) {
+        if (this.animationScale.isCurrentMode("Direct")) {
+            return progress > 0.0F ? lineHeight + spacing : 0.0F;
+        }
+
+        return (lineHeight + spacing) * progress;
     }
 
     private float getEnabledModuleListHeight(float lineHeight, float spacing) {

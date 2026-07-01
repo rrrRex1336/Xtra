@@ -57,7 +57,7 @@ public class Shader {
     private String read(String path) {
         try {
             return IOUtils.toString(
-                    Shader.class.getResourceAsStream("/assets/heypixel/VcX6svVqmeT8/shader/" + path),
+                    Shader.class.getResourceAsStream("/assets/naven-modern/client/shaders/" + path),
                     StandardCharsets.UTF_8);
         } catch (Exception e) {
             throw new IllegalStateException("Could not read shader '" + path + "'", e);

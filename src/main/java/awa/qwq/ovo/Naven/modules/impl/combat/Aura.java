@@ -675,7 +675,7 @@ public class Aura extends Module {
             RenderSystem.disableCull();
             RenderSystem.setShader(GameRenderer::getPositionTexShader);
 
-            ResourceLocation texture = new ResourceLocation("heypixel", "targets/rectangle.png");
+            ResourceLocation texture = new ResourceLocation("naven-modern", "client/textures/targets/rectangle.png");
             RenderSystem.setShaderTexture(0, texture);
             if (color == -1) {
                 RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 0.8f);

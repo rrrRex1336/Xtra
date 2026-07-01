@@ -40,7 +40,7 @@ public class Shader {
 
    private String read(String path) {
       try {
-         return IOUtils.toString(this.getClass().getResourceAsStream("/assets/heypixel/VcX6svVqmeT8/shader/" + path), StandardCharsets.UTF_8);
+         return IOUtils.toString(this.getClass().getResourceAsStream("/assets/naven-modern/client/shaders/" + path), StandardCharsets.UTF_8);
       } catch (IOException var3) {
          var3.printStackTrace();
          return "";

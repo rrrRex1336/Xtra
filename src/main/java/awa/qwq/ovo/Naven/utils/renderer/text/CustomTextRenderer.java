@@ -21,7 +21,7 @@ public class CustomTextRenderer {
    private final Font font;
 
    public CustomTextRenderer(String name, int size, int from, int to, int textureSize) {
-      InputStream in = this.getClass().getResourceAsStream("/assets/heypixel/VcX6svVqmeT8/fonts/" + name + ".ttf");
+      InputStream in = this.getClass().getResourceAsStream("/assets/naven-modern/client/fonts/" + name + ".ttf");
       if (in == null) {
          throw new RuntimeException("Font not found: " + name);
       } else {
