@@ -1,5 +1,7 @@
 package awa.qwq.ovo.Naven.viaversionfix.items;
 
+import awa.qwq.ovo.Naven.viaversionfix.items.mace.MaceItem;
+import awa.qwq.ovo.Naven.viaversionfix.items.mace.MaceTier;
 import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;

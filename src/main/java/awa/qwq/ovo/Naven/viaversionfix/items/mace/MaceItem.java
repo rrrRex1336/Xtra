@@ -1,4 +1,4 @@
-package awa.qwq.ovo.Naven.viaversionfix.items;
+package awa.qwq.ovo.Naven.viaversionfix.items.mace;
 
 import awa.qwq.ovo.Naven.viaversionfix.MaceLogic;
 import net.minecraft.core.BlockPos;

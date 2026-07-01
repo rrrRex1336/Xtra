@@ -1,4 +1,4 @@
-package awa.qwq.ovo.Naven.viaversionfix.items;
+package awa.qwq.ovo.Naven.viaversionfix.items.mace;
 
 import net.minecraft.world.item.Tier;
 import net.minecraft.world.item.crafting.Ingredient;

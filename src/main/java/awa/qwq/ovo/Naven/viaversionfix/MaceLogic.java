@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.viaversionfix;
 
-import awa.qwq.ovo.Naven.viaversionfix.items.MaceItem;
 import awa.qwq.ovo.Naven.viaversionfix.items.ModSounds;
+import awa.qwq.ovo.Naven.viaversionfix.items.mace.MaceItem;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
