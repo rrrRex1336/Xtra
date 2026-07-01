@@ -77,6 +77,11 @@ jar {
 		rename { "${it}_${inputs.properties.archivesName}" }
 	}
 }
+
+tasks.named("remapJar") {
+	archiveFileName = "Naven-Modern-output.jar"
+}
+
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
@@ -115,7 +120,7 @@ task autoDeployAndRun {
 		// 1. 获取构建出的 mod jar 文件（排除 sources）
 		def buildDir = file("build/libs")
 		def modFile = fileTree(buildDir).matching {
-			include "${project.archives_base_name}-${project.version}.jar"
+			include "Naven-Modern-output.jar"
 			exclude "*-sources.jar"
 			exclude "*-dev.jar"
 		}.singleFile
@@ -142,6 +147,7 @@ task autoDeployAndRun {
 		// 4. 删除旧版本的同名 mod
 		fileTree(targetModsDir).matching {
 			include "${project.archives_base_name}-*.jar"
+			include "Naven-Modern-output.jar"
 			exclude targetModFile.name
 		}.each { oldFile ->
 			oldFile.delete()
@@ -195,6 +201,7 @@ task cleanDeploy {
 		if (targetModsDir.exists()) {
 			fileTree(targetModsDir).matching {
 				include "${project.archives_base_name}-*.jar"
+				include "Naven-Modern-output.jar"
 			}.each {
 				it.delete()
 				println "✓ 删除: ${it.name}"
