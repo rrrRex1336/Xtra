@@ -57,9 +57,10 @@ import java.util.stream.IntStream;
 )
 public class ContainerStealer extends Module {
 
-   private static final TickTimeHelper timer = new TickTimeHelper();
-   private static final TickTimeHelper timer1 = new TickTimeHelper();
-   private static final TickTimeHelper timer2 = new TickTimeHelper();
+   private static final TickTimeHelper workingTimer = new TickTimeHelper();
+   private final TickTimeHelper startTimer = new TickTimeHelper();
+   private final TickTimeHelper clickTimer = new TickTimeHelper();
+   private final TickTimeHelper closeTimer = new TickTimeHelper();
 
    public BooleanValue pickTrash = ValueBuilder.create(this, "Pick Trash")
            .setDefaultBooleanValue(false)
@@ -84,7 +85,7 @@ public class ContainerStealer extends Module {
            .build()
            .getFloatValue();
 
-   private final FloatValue stopDelay = ValueBuilder.create(this, "Close Delay")
+   private final FloatValue closeDelay = ValueBuilder.create(this, "Close Delay")
            .setDefaultFloatValue(5.0F)
            .setFloatStep(1.0F)
            .setMinFloatValue(1.0F)
@@ -136,9 +137,11 @@ public class ContainerStealer extends Module {
 
    private Screen lastTickScreen;
    private int lastContainerId = -1;
+   private boolean startedStealing;
+   private boolean waitingToClose;
 
    public static boolean isWorking() {
-      return !timer.delay(3);
+      return !workingTimer.delay(3);
    }
 
    @EventTarget
@@ -154,18 +157,17 @@ public class ContainerStealer extends Module {
    public void onMotion(EventMotion e) {
       if (e.getType() == EventType.PRE) return;
       if (mc.player == null) return;
-      boolean silent = false;
       Screen currentScreen = mc.screen;
       AbstractContainerMenu menu = mc.player.containerMenu;
 
       if (menu == null || menu == mc.player.inventoryMenu) {
          this.lastTickScreen = currentScreen;
          this.lastContainerId = -1;
+         resetContainerState();
          return;
       }
       if (currentScreen != this.lastTickScreen || menu.containerId != this.lastContainerId) {
-         timer1.reset();
-         timer2.reset();
+         resetContainerState();
       }
       String title;
       boolean isSilent = motionMode.getCurrentMode().equals("Silent");
@@ -186,25 +188,38 @@ public class ContainerStealer extends Module {
       }
 
       boolean isEmpty = isContainerEmpty(menu, containerInfo);
-      if (isEmpty && timer2.delay(this.stopDelay.getCurrentValue())) {
-         if (isSilent) {
-            mc.player.connection.send(new ServerboundContainerClosePacket(menu.containerId));
-            mc.player.clientSideCloseContainer();
-         } else {
-            mc.player.closeContainer();
-         }
-         timer.reset();
-         timer2.reset();
-         remember(currentScreen, menu);
-         return;
-      }
-
       if (isEmpty) {
+         if (!this.waitingToClose) {
+            this.waitingToClose = true;
+            this.closeTimer.reset();
+         }
+
+         if (this.closeTimer.delay(this.closeDelay.getCurrentValue())) {
+            if (isSilent) {
+               mc.player.connection.send(new ServerboundContainerClosePacket(menu.containerId));
+               mc.player.clientSideCloseContainer();
+            } else {
+               mc.player.closeContainer();
+            }
+            workingTimer.reset();
+            resetContainerState();
+         }
+
          remember(currentScreen, menu);
          return;
       }
 
-      if (instant.getCurrentValue() && timer1.delay(this.startDelay.getCurrentValue())) {
+      if (this.waitingToClose) {
+         this.waitingToClose = false;
+         this.closeTimer.reset();
+      }
+
+      if (!this.startTimer.delay(this.startDelay.getCurrentValue())) {
+         remember(currentScreen, menu);
+         return;
+      }
+
+      if (instant.getCurrentValue()) {
          List<Integer> usefulSlots = new ArrayList<>();
          for (int i = 0; i < containerInfo.size(); i++) {
             ItemStack stack = menu.getSlot(i).getItem();
@@ -213,24 +228,26 @@ public class ContainerStealer extends Module {
             }
          }
          for (int slotId : usefulSlots) {
-            if (silent) sendClickPacket(menu.containerId, slotId);
+            if (isSilent) sendClickPacket(menu.containerId, slotId);
             else clickSlot(menu, slotId);
          }
          if (!usefulSlots.isEmpty()) {
-            timer.reset();
+            this.startedStealing = true;
+            workingTimer.reset();
          }
-         if (usefulSlots.isEmpty() || isContainerEmpty(menu, containerInfo)) timer1.reset();
       } else if (!instant.getCurrentValue()) {
          List<Integer> slots = IntStream.range(0, containerInfo.size()).boxed().collect(Collectors.toList());
          Collections.shuffle(slots);
          for (int slotId : slots) {
             ItemStack stack = menu.getSlot(slotId).getItem();
+            boolean clickReady = !this.startedStealing || this.clickTimer.delay(getDelay());
             if (!stack.isEmpty() && shouldSteal(menu, containerInfo, stack)
-                    && timer1.delay(getDelay()) && timer1.delay(this.startDelay.getCurrentValue())) {
-               if (silent) sendClickPacket(menu.containerId, slotId);
+                    && clickReady) {
+               if (isSilent) sendClickPacket(menu.containerId, slotId);
                else clickSlot(menu, slotId);
-               timer.reset();
-               timer1.reset();
+               this.startedStealing = true;
+               workingTimer.reset();
+               this.clickTimer.reset();
                break;
             }
          }
@@ -299,7 +316,7 @@ public class ContainerStealer extends Module {
    }
 
    private boolean isBestItemInChest(ChestMenu menu, ItemStack stack) {
-      if (InventoryUtils.isMace(stack)) {
+      if (InventoryUtils.isMace(stack) || InventoryUtils.isWindCharge(stack) || InventoryUtils.isSpear(stack)) {
          return true;
       }
 
@@ -332,6 +349,10 @@ public class ContainerStealer extends Module {
       if (stack.isEmpty()) {
          return false;
       } else if (InventoryUtils.isMace(stack)) {
+         return true;
+      } else if (InventoryUtils.isWindCharge(stack)) {
+         return true;
+      } else if (InventoryUtils.isSpear(stack)) {
          return true;
       } else if (InventoryUtils.isGodItem(stack) || InventoryUtils.isSharpnessAxe(stack)) {
          return true;
@@ -382,7 +403,8 @@ public class ContainerStealer extends Module {
          return false;
       } else if (stack.getItem() instanceof FishingRodItem && InventoryUtils.getItemCount(Items.FISHING_ROD) >= 1) {
          return false;
-      } else if (stack.getItem() != Items.SNOWBALL && stack.getItem() != Items.EGG
+      } else if (InventoryUtils.isWindCharge(stack)
+              || stack.getItem() != Items.SNOWBALL && stack.getItem() != Items.EGG
               || InventoryUtils.getItemCount(Items.SNOWBALL) + InventoryUtils.getItemCount(Items.EGG) + stack.getCount() < InventoryManager.getMaxProjectileSize()
               && InventoryManager.shouldKeepProjectile()) {
          return stack.getItem() instanceof ItemNameBlockItem ? false : InventoryUtils.isCommonItemUseful(stack);
@@ -456,6 +478,14 @@ public class ContainerStealer extends Module {
    private void remember(Screen screen, AbstractContainerMenu menu) {
       this.lastTickScreen = screen;
       this.lastContainerId = menu == null ? -1 : menu.containerId;
+   }
+
+   private void resetContainerState() {
+      this.startTimer.reset();
+      this.clickTimer.reset();
+      this.closeTimer.reset();
+      this.startedStealing = false;
+      this.waitingToClose = false;
    }
 
    private record ContainerInfo(boolean allowed, int size, boolean chestLike) {
