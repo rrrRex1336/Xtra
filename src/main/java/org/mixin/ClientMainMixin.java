@@ -15,7 +15,10 @@ public class ClientMainMixin {
     private static void onMainStart(String[] args, CallbackInfo ci) {
         Loader.isVerified();
         if (!VerifyClient.verify()) {
-            System.exit(1);
+            // If a web login was just started, let the game continue so we can show the login screen
+            if (!VerifyClient.hasPendingWebLogin()) {
+                System.exit(1);
+            }
         }
     }
 }

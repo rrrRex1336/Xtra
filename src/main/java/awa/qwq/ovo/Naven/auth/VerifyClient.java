@@ -1,287 +1,303 @@
 package awa.qwq.ovo.Naven.auth;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-
+import hoprc.obf.neko.NekoExclude;
+import hoprc.obf.neko.NekoInclude;
+import hoprc.obf.zkm.ZKMIndy;
+import net.fabricmc.loader.api.FabricLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 public class VerifyClient {
-    private static final Logger logger = LogManager.getLogger("VerifyClient");
-    private static final String REPO_OWNER = "MengZeYu1337";
-    private static final String REPO_NAME = "HWIDVerify";
-    private static final String FILE_PATH = "HWID.txt";
+    private static final Logger LOGGER = LogManager.getLogger("VerifyClient");
+    private static final String API_BASE  = "http://neko.antichest.pw/api/index.php?route=";
+    private static final String ENDPOINT  = API_BASE + "/verify";
+    private static final String WL_START  = API_BASE + "/web-login/start";
+    private static final String WL_POLL   = API_BASE + "/web-login/poll";
+    public  static final String CLIENT_NAME = "LinYiLI";
+    private static final int    TIMEOUT_MS  = 8000;
 
-    private static boolean isVerified = false;
-    private static String userRole = "development";
-    private static String userName = "LinYanLi1337";
-    private static String boundQQ = null; // 绑定的QQ号
-    private static boolean isFirstTime = false;
+    static final Path KEY_FILE = FabricLoader.getInstance()
+            .getGameDir()
+            .resolve(CLIENT_NAME)
+            .resolve("license.key");
 
-    private static final Map<String, String> roleWelcomeMessages = new HashMap<>();
-    static {
-        roleWelcomeMessages.put("development", "🚀 开发者通道已开启");
-        roleWelcomeMessages.put("beta", "🔧 Beta测试者通道已开启");
-        roleWelcomeMessages.put("user", "✨ 用户通道已开启");
-        roleWelcomeMessages.put("unknown", "🌌 欢迎使用");
-    }
+    private static volatile String verifiedToken = "";
+    private static volatile String verifiedHwid  = "";
+    private static volatile String verifiedOwner = "";
+    private static volatile String verifiedRole  = "";
+    private static volatile String pendingWebLoginUrl = null;
 
+    @ZKMIndy
+    @NekoInclude
     public static boolean verify() {
-        try {
-            String localHWID = HWIDCheck.getHWID();
-            String enhancedHWID = HWIDCheck.getEnhancedHWID();
-            logger.info("You HWID: {}", enhancedHWID);
-            String hwidList = fetchHwidListFromGitHub();
-            if (hwidList == null || hwidList.isEmpty()) {
+        String hwid = HWIDCheck.getHWID();
+
+        // 1. Try stored .auth-session
+        String token = LinYiLITokenStore.loadToken();
+
+        // 2. No session — try legacy license.key (backward compat, one-time migration)
+        if (token.isEmpty() && Files.isRegularFile(KEY_FILE)) {
+            try {
+                String key = Files.readString(KEY_FILE, StandardCharsets.UTF_8).trim();
+                if (!key.isEmpty()) token = key;
+            } catch (Exception ignored) {}
+        }
+
+        // 3. No token at all — try pending web login or start a new one
+        if (token.isEmpty()) {
+            return handleNoToken(hwid);
+        }
+
+        // 4. Verify token with server
+        return verifyWithServer(token, hwid);
+    }
+
+    @ZKMIndy
+    @NekoInclude
+    private static boolean handleNoToken(String hwid) {
+        String pendingCode = LinYiLITokenStore.loadPendingCode();
+        if (!pendingCode.isEmpty()) {
+            // Poll the pending web login
+            String result = pollWebLogin(pendingCode, hwid);
+            if (result == null) {
+                // Expired or rejected — start fresh
+                LinYiLITokenStore.clearPending();
+                LOGGER.error("[{}] Web login expired. Starting a new one...", CLIENT_NAME);
+                return doStartWebLogin(hwid);
+            }
+            if (result.isEmpty()) {
+                // Still waiting
+                LOGGER.info("[{}] Web login not yet confirmed. Confirm in browser, then restart the game.", CLIENT_NAME);
                 return false;
             }
-            String[] lines = hwidList.split("\n");
-            boolean hwidMatched = false;
-            String matchedLine = null;
-
-            for (String line : lines) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith("#") || line.startsWith("//")) {
-                    continue;
-                }
-
-                String lineHWID = extractHWIDFromLine(line);
-                if (lineHWID.equals(localHWID) || lineHWID.equals(enhancedHWID)) {
-                    hwidMatched = true;
-                    matchedLine = line;
-                    break;
-                }
-            }
-
-            if (!hwidMatched) {
-                return false;
-            }
-            String expectedQQ = extractQQFromLine(matchedLine);
-            if (expectedQQ == null || expectedQQ.isEmpty()) {
-                logger.warn("Skip Other");
-                isVerified = true;
-                parseUserInfo(matchedLine);
-                sendWelcomeMessage();
-                return true;
-            }
-            Set<String> currentQQSet = QQUtils.getAllQQFromLocal();
-            String currentQQ = QQUtils.getRecentQQ();
-            if (currentQQ != null && currentQQ.equals(expectedQQ)) {
-                isVerified = true;
-                boundQQ = currentQQ;
-                parseUserInfo(matchedLine);
-                sendWelcomeMessage();
-                return true;
-            } else {
-                String warningMessage = generateQQWarningMessage(expectedQQ, currentQQ, currentQQSet);
-                logger.warn(warningMessage);
-                System.out.println("\n⚠️ " + warningMessage);
-                return false;
-            }
-
-        } catch (Exception e) {
-            logger.error("验证过程发生异常", e);
-            return false;
+            // Got token from web login — now verify it
+            return verifyWithServer(result, hwid);
         }
+        return doStartWebLogin(hwid);
     }
 
-    private static String extractQQFromLine(String line) {
-        if (line == null || !line.contains("[")) {
-            return null;
-        }
-        int start = line.indexOf("[");
-        while (start != -1) {
-            int end = line.indexOf("]", start);
-            if (end == -1) break;
-
-            String bracketContent = line.substring(start + 1, end);
-            if (bracketContent.startsWith("QQ:") || bracketContent.startsWith("QQ_")) {
-                String qqPart = bracketContent.substring(3);
-                if (qqPart.matches("\\d{5,11}")) {
-                    return qqPart;
-                }
-            }
-            else if (bracketContent.matches("\\d{5,11}")) {
-                return bracketContent;
-            }
-
-            start = line.indexOf("[", start + 1);
-        }
-
-        return null;
-    }
-
-    private static void parseUserInfo(String line) {
-        if (line == null || !line.contains("[")) return;
-
-        try {
-            int start = line.indexOf("[");
-            int end = line.lastIndexOf("]");
-            if (start < end) {
-                String info = line.substring(start + 1, end);
-                String[] parts = info.split("\\]\\[");
-                for (String part : parts) {
-                    if (part.startsWith("QQ:") || part.startsWith("QQ_")) {
-                        continue;
-                    }
-                    if (part.matches("\\d{5,11}")) {
-                        continue;
-                    }
-                }
-                String[] filteredParts = new String[parts.length];
-                int idx = 0;
-                for (String part : parts) {
-                    if (!part.startsWith("QQ:") && !part.startsWith("QQ_") && !part.matches("\\d{5,11}")) {
-                        filteredParts[idx++] = part;
-                    }
-                }
-
-                if (idx >= 2) {
-                    userName = filteredParts[0];
-                    userRole = filteredParts[1];
-                } else if (idx == 1) {
-                    userName = filteredParts[0];
-                }
-            }
-        } catch (Exception e) {
-            logger.debug("Failed user Session", e);
-        }
-    }
-
-    private static String generateQQWarningMessage(String expectedQQ, String currentQQ, Set<String> allQQ) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("sb?");
-        sb.append("sb?");
-        sb.append("sb?");
-
-        if (currentQQ == null || allQQ == null || allQQ.isEmpty()) {
-        } else if (!allQQ.contains(expectedQQ)) {
-        } else if (currentQQ != null && !currentQQ.equals(expectedQQ)) {
-        }
-
-        return sb.toString();
-    }
-
-    public static boolean verifyHWIDOnly() {
-        try {
-            String localHWID = HWIDCheck.getHWID();
-            String enhancedHWID = HWIDCheck.getEnhancedHWID();
-            String hwidList = fetchHwidListFromGitHub();
-
-            if (hwidList == null || hwidList.isEmpty()) {
-                return false;
-            }
-
-            String[] lines = hwidList.split("\n");
-            for (String line : lines) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith("#") || line.startsWith("//")) {
-                    continue;
-                }
-
-                String lineHWID = extractHWIDFromLine(line);
-                if (lineHWID.equals(localHWID) || lineHWID.equals(enhancedHWID)) {
-                    parseUserInfo(line);
-                    return true;
-                }
-            }
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    public static String getBoundQQ() {
-        return boundQQ;
-    }
-
-    private static String extractHWIDFromLine(String line) {
-        if (line.contains("[")) {
-            return line.substring(0, line.indexOf("[")).trim();
-        }
-        if (line.contains(" ")) {
-            return line.substring(0, line.indexOf(" ")).trim();
-        }
-        return line.trim();
-    }
-
-    private static String fetchHwidListFromGitHub() {
+    @ZKMIndy
+    @NekoInclude
+    private static boolean verifyWithServer(String token, String hwid) {
         HttpURLConnection conn = null;
         try {
-            String token = linyanli1337.Loader.getGitHubToken();
-            if (token == null || token.isEmpty() || token.equals("DEBUG_DETECTED")) {
-                logger.error("Invalid GitHub token: {}", token);
-                return null;
-            }
-            if (!linyanli1337.Loader.verifyIntegrity()) {
-                logger.error("Integrity check failed");
-                return null;
-            }
+            conn = (HttpURLConnection) URI.create(ENDPOINT).toURL().openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(TIMEOUT_MS);
+            conn.setReadTimeout(TIMEOUT_MS);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            conn.setRequestProperty("User-Agent", CLIENT_NAME + "-Auth/1.0");
 
-            URL url = new URL("https://api.github.com/repos/" + REPO_OWNER + "/" +
-                    REPO_NAME + "/contents/" + FILE_PATH);
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "token " + token);
-            conn.setRequestProperty("Accept", "application/vnd.github.v3.raw");
-            conn.setRequestProperty("User-Agent", "Naven-MayRainEdit-Auth");
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(10000);
+            String body = "{"
+                    + "\"token\":\"" + esc(token) + "\","
+                    + "\"hwid\":\"" + esc(hwid) + "\","
+                    + "\"client\":\"" + CLIENT_NAME + "\","
+                    + "\"version\":\"1.0\""
+                    + "}";
+            writeBody(conn, body);
 
-            if (conn.getResponseCode() == 200) {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(conn.getInputStream(), "UTF-8"))) {
-                    StringBuilder content = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        content.append(line).append("\n");
-                    }
-                    return content.toString();
-                }
+            int status = conn.getResponseCode();
+            String resp = readResponse(conn, status);
+
+            boolean allowed = resp.contains("\"allowed\":true");
+            boolean ok      = resp.contains("\"ok\":true");
+
+            if (allowed && ok) {
+                verifiedToken = token;
+                verifiedHwid  = hwid;
+                verifiedOwner = extractStr(resp, "owner");
+                verifiedRole  = extractStr(resp, "role");
+                long expiry   = parseExpiryEpoch(resp);
+                LinYiLITokenStore.saveToken(token, expiry);
+                LOGGER.info("[{}] Auth OK — owner: {}", CLIENT_NAME, verifiedOwner);
+                return true;
             } else {
-                logger.error("GitHub API returned: {}", conn.getResponseCode());
+                String reason = extractStr(resp, "reason");
+                LOGGER.error("[{}] Auth denied: {}", CLIENT_NAME, reason.isEmpty() ? resp : reason);
+                // Token rejected — clear and start fresh web login
+                LinYiLITokenStore.clearToken();
+                return doStartWebLogin(hwid);
             }
         } catch (Exception e) {
-            logger.error("Error fetching HWID list", e);
+            LOGGER.error("[{}] Auth error: {}", CLIENT_NAME, e.getMessage());
+            return false;
         } finally {
             if (conn != null) conn.disconnect();
         }
-        return null;
     }
 
-    private static void sendWelcomeMessage() {
+    @ZKMIndy
+    @NekoInclude
+    private static boolean doStartWebLogin(String hwid) {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) URI.create(WL_START).toURL().openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(TIMEOUT_MS);
+            conn.setReadTimeout(TIMEOUT_MS);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            conn.setRequestProperty("User-Agent", CLIENT_NAME + "-Auth/1.0");
 
-        logger.info("User: {}, Rank: {}, QQ: {}", userName, userRole, boundQQ);
-    }
+            String body = "{"
+                    + "\"hwid\":\"" + esc(hwid) + "\","
+                    + "\"username\":\"\","
+                    + "\"client\":\"" + CLIENT_NAME + "\","
+                    + "\"version\":\"1.0\""
+                    + "}";
+            writeBody(conn, body);
 
-    public static boolean isVerified() {
-        return isVerified;
-    }
+            int status = conn.getResponseCode();
+            String resp = readResponse(conn, status);
 
-    public static String getUserRole() {
-        return userRole;
-    }
-
-    public static String getUserName() {
-        return userName;
-    }
-
-    public static void setFirstTime(boolean firstTime) {
-        isFirstTime = firstTime;
-    }
-
-    public static void main(String[] args) {
-        boolean result = verify();
-        System.out.println("\n: " + (result ? "C" : "sb?"));
-        if (result) {
-            System.out.println("User: " + getUserName());
-            System.out.println("Rank: " + getUserRole());
-            System.out.println("Bind QQ: " + getBoundQQ());
+            if (resp.contains("\"ok\":true")) {
+                String code = extractStr(resp, "code");
+                String url  = extractStr(resp, "url");
+                if (!code.isEmpty() && !url.isEmpty()) {
+                    LinYiLITokenStore.savePending(code);
+                    writeWebLoginFile(url);
+                    printWebLoginBanner(url);
+                    pendingWebLoginUrl = url;
+                    return false;
+                }
+            }
+            LOGGER.error("[{}] Failed to start web login. Check server connectivity.", CLIENT_NAME);
+            return false;
+        } catch (Exception e) {
+            LOGGER.error("[{}] Web login start error: {}", CLIENT_NAME, e.getMessage());
+            return false;
+        } finally {
+            if (conn != null) conn.disconnect();
         }
+    }
+
+    // Returns: null=expired/failed, ""=pending, token string=success
+    @ZKMIndy
+    @NekoInclude
+    private static String pollWebLogin(String code, String hwid) {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) URI.create(WL_POLL).toURL().openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(TIMEOUT_MS);
+            conn.setReadTimeout(TIMEOUT_MS);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            conn.setRequestProperty("User-Agent", CLIENT_NAME + "-Auth/1.0");
+
+            String body = "{"
+                    + "\"code\":\"" + esc(code) + "\","
+                    + "\"hwid\":\"" + esc(hwid) + "\","
+                    + "\"client\":\"" + CLIENT_NAME + "\","
+                    + "\"version\":\"1.0\""
+                    + "}";
+            writeBody(conn, body);
+
+            int status = conn.getResponseCode();
+            String resp = readResponse(conn, status);
+
+            boolean allowed = resp.contains("\"allowed\":true");
+            boolean pending = resp.contains("\"pending\":true");
+
+            if (allowed) {
+                String token = extractStr(resp, "token");
+                verifiedOwner = extractStr(resp, "owner");
+                long expiry = parseExpiryEpoch(resp);
+                LinYiLITokenStore.saveToken(token, expiry);
+                LinYiLITokenStore.clearPending();
+                return token;
+            }
+            if (pending) return "";   // still waiting
+            return null;              // expired / rejected
+        } catch (Exception e) {
+            LOGGER.error("[{}] Web login poll error: {}", CLIENT_NAME, e.getMessage());
+            return "";
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    @NekoExclude
+    private static void printWebLoginBanner(String url) {
+        LOGGER.error("[{}] ============================================================", CLIENT_NAME);
+        LOGGER.error("[{}]  WEB LOGIN REQUIRED", CLIENT_NAME);
+        LOGGER.error("[{}]  Open this URL in your browser:", CLIENT_NAME);
+        LOGGER.error("[{}]  {}", CLIENT_NAME, url);
+        LOGGER.error("[{}]  After confirming on the website, RESTART the game.", CLIENT_NAME);
+        LOGGER.error("[{}]  URL also saved to: {}", CLIENT_NAME,
+                KEY_FILE.getParent().resolve("weblogin.txt"));
+        LOGGER.error("[{}] ============================================================", CLIENT_NAME);
+    }
+
+    @NekoExclude
+    private static void writeWebLoginFile(String url) {
+        try {
+            Path f = KEY_FILE.getParent().resolve("weblogin.txt");
+            Files.createDirectories(f.getParent());
+            Files.writeString(f,
+                    "[LinYiLI] Web Login\n\n"
+                    + "Please open this URL in your browser:\n"
+                    + url + "\n\n"
+                    + "After confirming on the website, restart the game.\n",
+                    StandardCharsets.UTF_8);
+        } catch (Exception ignored) {}
+    }
+
+    @NekoExclude public static String getToken()    { return verifiedToken; }
+    @NekoExclude public static String getHwid()     { return verifiedHwid; }
+    @NekoExclude public static String getOwner()    { return verifiedOwner; }
+    @NekoExclude public static String getUserName() { return verifiedOwner; }
+    @NekoExclude public static String getUserRole() { return verifiedRole; }
+    @NekoExclude public static boolean hasPendingWebLogin() { return pendingWebLoginUrl != null; }
+    @NekoExclude public static String getPendingWebLoginUrl() { return pendingWebLoginUrl; }
+    @NekoExclude public static void clearPendingWebLoginUrl() { pendingWebLoginUrl = null; }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    @NekoExclude
+    private static void writeBody(HttpURLConnection conn, String body) throws Exception {
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        conn.setFixedLengthStreamingMode(bytes.length);
+        try (OutputStream out = conn.getOutputStream()) { out.write(bytes); }
+    }
+
+    private static String readResponse(HttpURLConnection conn, int status) {
+        try {
+            InputStream is = (status >= 200 && status < 300) ? conn.getInputStream() : conn.getErrorStream();
+            if (is == null) return "";
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static long parseExpiryEpoch(String json) {
+        String v = extractStr(json, "expiresAt");
+        if (!v.isEmpty()) {
+            try { return Long.parseLong(v); } catch (NumberFormatException ignored) {}
+        }
+        return 0;
+    }
+
+    static String extractStr(String json, String key) {
+        String search = "\"" + key + "\":\"";
+        int i = json.indexOf(search);
+        if (i < 0) return "";
+        int start = i + search.length();
+        int end   = json.indexOf('"', start);
+        return end > start ? json.substring(start, end) : "";
+    }
+
+    static String esc(String s) {
+        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

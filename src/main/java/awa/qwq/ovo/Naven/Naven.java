@@ -1,6 +1,8 @@
 package awa.qwq.ovo.Naven;
 
 import awa.qwq.ovo.Naven.auth.HWIDCheck;
+import awa.qwq.ovo.Naven.auth.VerifyClient;
+import awa.qwq.ovo.Naven.chat.IrcClient;
 import awa.qwq.ovo.Naven.commands.CommandManager;
 import awa.qwq.ovo.Naven.events.api.EventManager;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
@@ -90,6 +92,9 @@ public class Naven {
       this.eventManager.register(new ServerUtils());
       this.eventManager.register(new EntityWatcher());
       this.hWIDCheck = new HWIDCheck();
+      if (!VerifyClient.getToken().isEmpty()) {
+         IrcClient.init();
+      }
       isReady = true;
    }
 

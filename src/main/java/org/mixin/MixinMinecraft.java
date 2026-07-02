@@ -1,5 +1,7 @@
 package org.mixin;
 
+import awa.qwq.ovo.Naven.auth.VerifyClient;
+import awa.qwq.ovo.Naven.auth.WebLoginScreen;
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.Version;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
@@ -49,6 +51,9 @@ public class MixinMinecraft implements ISkipTicks {
       return this.skipTicks;
    }
 
+   @Unique
+   private boolean naven_Modern$webLoginScreenShown = false;
+
    @Inject(method = "<init>", at = @At("TAIL"))
    private void onInit(CallbackInfo info) {
    }
@@ -72,6 +77,14 @@ public class MixinMinecraft implements ISkipTicks {
    private void onTick(CallbackInfo ci) {
       if (skipTicks > 0) {
          skipTicks--;
+      }
+      // Show web login screen once Minecraft is ready (overlay gone, title screen visible)
+      if (!naven_Modern$webLoginScreenShown && VerifyClient.hasPendingWebLogin()) {
+         Minecraft mc = (Minecraft) (Object) this;
+         if (mc.getOverlay() == null && mc.screen != null) {
+            naven_Modern$webLoginScreenShown = true;
+            mc.setScreen(new WebLoginScreen(VerifyClient.getPendingWebLoginUrl(), mc.screen));
+         }
       }
    }
 
