@@ -3,6 +3,8 @@ package awa.qwq.ovo.Naven.utils;
 import com.google.common.collect.Multimap;
 import awa.qwq.ovo.Naven.modules.impl.misc.ViaVersionFix;
 import awa.qwq.ovo.Naven.viaversionfix.items.ModItems;
+import awa.qwq.ovo.Naven.viaversionfix.items.spear.SpearItem;
+import awa.qwq.ovo.Naven.viaversionfix.items.spear.SpearMaterial;
 import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -10,8 +12,10 @@ import java.util.Iterator;
 import java.util.List;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MobType;
 import net.minecraft.world.entity.ai.attributes.Attribute;
@@ -117,6 +121,22 @@ public class InventoryUtils {
       return stack.is(ModItems.MACE) || (ViaVersionFix.isHighVersionItemFixEnabled() && isServerMace(stack));
    }
 
+   public static boolean isWindCharge(ItemStack stack) {
+      if (stack == null || stack.isEmpty()) {
+         return false;
+      }
+
+      return stack.is(ModItems.WIND_CHARGE) || (ViaVersionFix.isHighVersionItemFixEnabled() && isServerWindCharge(stack));
+   }
+
+   public static boolean isSpear(ItemStack stack) {
+      if (stack == null || stack.isEmpty()) {
+         return false;
+      }
+
+      return stack.getItem() instanceof SpearItem || (ViaVersionFix.isHighVersionItemFixEnabled() && isServerSpear(stack));
+   }
+
    public static boolean isServerMace(ItemStack stack) {
       if (stack == null || stack.isEmpty() || !(stack.getItem() instanceof AxeItem)) {
          return false;
@@ -129,6 +149,64 @@ public class InventoryUtils {
 
       String normalized = name.trim();
       return normalized.equalsIgnoreCase("1.21 Mace") || normalized.equalsIgnoreCase("Mace");
+   }
+
+   public static boolean isServerWindCharge(ItemStack stack) {
+      if (stack == null || stack.isEmpty() || stack.getItem() != Items.SNOWBALL) {
+         return false;
+      }
+
+      String name = ChatFormatting.stripFormatting(getRawHoverName(stack));
+      if (name == null) {
+         return false;
+      }
+
+      String normalized = name.trim();
+      String lower = normalized.toLowerCase();
+      return lower.equals("wind charge") || lower.endsWith(" wind charge") && lower.startsWith("1.");
+   }
+
+   public static boolean isServerSpear(ItemStack stack) {
+      if (stack == null || stack.isEmpty()) {
+         return false;
+      }
+
+      String name = ChatFormatting.stripFormatting(getRawHoverName(stack));
+      if (name == null) {
+         return false;
+      }
+
+      return SpearMaterial.fromServerName(name) != null;
+   }
+
+   public static SpearMaterial getServerSpearMaterial(ItemStack stack) {
+      if (stack == null || stack.isEmpty()) {
+         return null;
+      }
+
+      String name = ChatFormatting.stripFormatting(getRawHoverName(stack));
+      return SpearMaterial.fromServerName(name);
+   }
+
+   private static String stripVersionPrefix(String name) {
+      int firstSpace = name.indexOf(' ');
+      if (firstSpace <= 0 || firstSpace == name.length() - 1) {
+         return name;
+      }
+
+      String prefix = name.substring(0, firstSpace);
+      if (!prefix.startsWith("1.")) {
+         return name;
+      }
+
+      for (int i = 0; i < prefix.length(); i++) {
+         char c = prefix.charAt(i);
+         if ((c < '0' || c > '9') && c != '.') {
+            return name;
+         }
+      }
+
+      return name.substring(firstSpace + 1);
    }
 
    private static String getRawHoverName(ItemStack stack) {
@@ -150,12 +228,23 @@ public class InventoryUtils {
          return rawName;
       }
 
-      return stack.getItem().getName(stack).getString();
+      ResourceLocation key = BuiltInRegistries.ITEM.getKey(stack.getItem());
+      return key == null ? "" : key.toString();
    }
 
    public static ItemStack getMace() {
       for (ItemStack stack : mc.player.getInventory().items) {
          if (isMace(stack)) {
+            return stack;
+         }
+      }
+
+      return null;
+   }
+
+   public static ItemStack getWindCharge() {
+      for (ItemStack stack : mc.player.getInventory().items) {
+         if (isWindCharge(stack)) {
             return stack;
          }
       }
@@ -324,7 +413,11 @@ public class InventoryUtils {
    public static int getItemSlot(Item item) {
       for (int i = 0; i < mc.player.getInventory().items.size(); i++) {
          ItemStack itemStack = (ItemStack)mc.player.getInventory().items.get(i);
-         if (itemStack.getItem() == item) {
+         if (item == ModItems.WIND_CHARGE && isWindCharge(itemStack)) {
+            return i;
+         }
+
+         if (itemStack.getItem() == item && !isServerWindCharge(itemStack)) {
             return i;
          }
       }
@@ -335,7 +428,7 @@ public class InventoryUtils {
    public static ItemStack getBestProjectile() {
       return getAllItems()
               .stream()
-              .filter(item -> !item.isEmpty() && (item.getItem() == Items.EGG || item.getItem() == Items.SNOWBALL) && isItemValid(item))
+              .filter(item -> !item.isEmpty() && (item.getItem() == Items.EGG || item.getItem() == Items.SNOWBALL) && !isWindCharge(item) && isItemValid(item))
               .max(Comparator.comparingInt(ItemStack::getCount))
               .orElse(null);
    }
@@ -355,7 +448,7 @@ public class InventoryUtils {
    public static ItemStack getWorstProjectile() {
       return getAllItems()
               .stream()
-              .filter(item -> !item.isEmpty() && (item.getItem() == Items.EGG || item.getItem() == Items.SNOWBALL))
+              .filter(item -> !item.isEmpty() && (item.getItem() == Items.EGG || item.getItem() == Items.SNOWBALL) && !isWindCharge(item))
               .min(Comparator.comparingInt(ItemStack::getCount))
               .orElse(null);
    }
@@ -503,11 +596,19 @@ public class InventoryUtils {
    }
 
    public static boolean hasItem(Item checkItem) {
-      return getAllItems().stream().anyMatch(item -> !item.isEmpty() && item.getItem() == checkItem);
+      if (checkItem == ModItems.WIND_CHARGE) {
+         return getAllItems().stream().anyMatch(InventoryUtils::isWindCharge);
+      }
+
+      return getAllItems().stream().anyMatch(item -> !item.isEmpty() && item.getItem() == checkItem && !isServerWindCharge(item));
    }
 
    public static int getItemCount(Item checkItem) {
-      return getAllItems().stream().filter(item -> !item.isEmpty() && item.getItem() == checkItem).mapToInt(ItemStack::getCount).sum();
+      if (checkItem == ModItems.WIND_CHARGE) {
+         return getAllItems().stream().filter(InventoryUtils::isWindCharge).mapToInt(ItemStack::getCount).sum();
+      }
+
+      return getAllItems().stream().filter(item -> !item.isEmpty() && item.getItem() == checkItem && !isServerWindCharge(item)).mapToInt(ItemStack::getCount).sum();
    }
 
    public static float getPunchBowScore(ItemStack stack) {
@@ -695,6 +796,10 @@ public class InventoryUtils {
 
    public static boolean isCommonItemUseful(ItemStack stack) {
       if (stack.isEmpty()) {
+         return true;
+      } else if (isWindCharge(stack)) {
+         return true;
+      } else if (isSpear(stack)) {
          return true;
       } else {
          Item item = stack.getItem();

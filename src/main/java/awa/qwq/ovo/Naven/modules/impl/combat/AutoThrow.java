@@ -16,6 +16,7 @@ import awa.qwq.ovo.Naven.utils.TimeHelper;
 import awa.qwq.ovo.Naven.utils.Vector2f;
 import awa.qwq.ovo.Naven.managers.rotation.utils.Rotation;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
+import awa.qwq.ovo.Naven.utils.InventoryUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.AddonsValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
@@ -264,7 +265,7 @@ public class AutoThrow extends Module {
     }
 
     private boolean isThrowable(ItemStack stack) {
-        return !stack.isEmpty() && (stack.getItem() == Items.EGG || stack.getItem() == Items.SNOWBALL);
+        return !stack.isEmpty() && (stack.getItem() == Items.EGG || stack.getItem() == Items.SNOWBALL) && !InventoryUtils.isWindCharge(stack);
     }
 
     private static class ThrowPlan {

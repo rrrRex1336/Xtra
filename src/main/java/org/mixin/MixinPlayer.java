@@ -4,6 +4,8 @@ import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventAttackSlowdown;
 import awa.qwq.ovo.Naven.events.impl.EventAttackYaw;
 import awa.qwq.ovo.Naven.events.impl.EventStayingOnGroundSurface;
+import awa.qwq.ovo.Naven.viaversionfix.items.spear.SpearLogic;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -14,11 +16,19 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin({Player.class})
 public abstract class MixinPlayer extends LivingEntity {
    protected MixinPlayer(EntityType<? extends LivingEntity> pEntityType, Level pLevel) {
       super(pEntityType, pLevel);
+   }
+
+   @Inject(method = {"attack"}, at = {@At("HEAD")}, cancellable = true)
+   private void attackWithSpear(Entity target, CallbackInfo ci) {
+      if (SpearLogic.piercingAttack((Player)(Object)this, target)) {
+         ci.cancel();
+      }
    }
 
    @Redirect(

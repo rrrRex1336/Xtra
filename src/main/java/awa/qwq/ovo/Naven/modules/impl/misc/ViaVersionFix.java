@@ -8,16 +8,28 @@ import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.modules.impl.world.OldHitting;
+import awa.qwq.ovo.Naven.utils.InventoryUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
+import awa.qwq.ovo.Naven.viaversionfix.items.ModSounds;
 import com.mojang.datafixers.util.Pair;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Map;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+import net.minecraft.network.protocol.game.ClientboundExplodePacket;
+import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
@@ -26,6 +38,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.phys.Vec3;
 
 @ModuleInfo(
    name = "ViaVersionFix",
@@ -37,7 +50,16 @@ public class ViaVersionFix extends Module {
    private static final String PROTOCOL_TRANSLATOR = "de.florianmichael.viafabricplus.protocoltranslator.ProtocolTranslator";
    private static final String PROTOCOL_VERSION = "com.viaversion.viaversion.api.protocol.version.ProtocolVersion";
    private static final String VIAFABRICPLUS_HAND_ITEM_PROVIDER = "de.florianmichael.viafabricplus.protocoltranslator.impl.provider.viaversion.ViaFabricPlusHandItemProvider";
+   private static final int WIND_CHARGE_SPAWN_GRACE_TICKS = 10;
+   private static final int WIND_CHARGE_TRACK_TICKS = 80;
+   private static final double WIND_CHARGE_SPAWN_DISTANCE_SQR = 36.0D;
+   private static final double WIND_CHARGE_BURST_DISTANCE_SQR = 25.0D;
    private static boolean serverLegacyBlockingShield;
+   private final Map<Integer, TrackedViaWindCharge> viaWindCharges = new HashMap<>();
+   private int lastServerWindChargeUseTick = -1000;
+   private int lastWindChargeThrowSoundTick = -1000;
+   private int lastWindChargeBurstSoundTick = -1000;
+   private Vec3 lastWindChargeBurstPos = Vec3.ZERO;
 
    public final BooleanValue blocking = ValueBuilder.create(this, "Blocking")
       .setDefaultBooleanValue(true)
@@ -207,6 +229,10 @@ public class ViaVersionFix extends Module {
          return;
       }
 
+      if (this.highVersionItem.getCurrentValue()) {
+         this.handleWindChargePackets(event);
+      }
+
       if (event.getType() == EventType.RECEIVE && this.blocking.getCurrentValue()) {
          this.handleBlockingReceive(event);
       }
@@ -225,6 +251,131 @@ public class ViaVersionFix extends Module {
    @Override
    public void onDisable() {
       serverLegacyBlockingShield = false;
+      this.viaWindCharges.clear();
+      this.lastServerWindChargeUseTick = -1000;
+   }
+
+   private void handleWindChargePackets(EventPacket event) {
+      Packet<?> packet = event.getPacket();
+      if (event.getType() == EventType.SEND) {
+         if (packet instanceof ServerboundUseItemPacket useItemPacket) {
+            this.rememberServerWindChargeUse(useItemPacket.getHand());
+         } else if (packet instanceof ServerboundUseItemOnPacket useItemOnPacket) {
+            this.rememberServerWindChargeUse(useItemOnPacket.getHand());
+         }
+
+         return;
+      }
+
+      if (event.getType() != EventType.RECEIVE) {
+         return;
+      }
+
+      this.pruneViaWindCharges();
+
+      if (packet instanceof ClientboundAddEntityPacket addEntityPacket) {
+         this.handleWindChargeEntitySpawn(addEntityPacket);
+      } else if (packet instanceof ClientboundExplodePacket explodePacket) {
+         this.handleWindChargeExplosion(explodePacket);
+      } else if (packet instanceof ClientboundRemoveEntitiesPacket removeEntitiesPacket) {
+         this.handleWindChargeEntityRemove(removeEntitiesPacket);
+      }
+   }
+
+   private void rememberServerWindChargeUse(InteractionHand hand) {
+      ItemStack stack = mc.player.getItemInHand(hand);
+      if (InventoryUtils.isServerWindCharge(stack)) {
+         this.lastServerWindChargeUseTick = mc.player.tickCount;
+      }
+   }
+
+   private void handleWindChargeEntitySpawn(ClientboundAddEntityPacket packet) {
+      if (packet.getType() != EntityType.SHULKER_BULLET || !this.isRecentServerWindChargeUse()) {
+         return;
+      }
+
+      Vec3 pos = new Vec3(packet.getX(), packet.getY(), packet.getZ());
+      if (pos.distanceToSqr(mc.player.getEyePosition()) > WIND_CHARGE_SPAWN_DISTANCE_SQR) {
+         return;
+      }
+
+      this.viaWindCharges.put(packet.getId(), new TrackedViaWindCharge(pos, mc.player.tickCount));
+      this.playWindChargeThrow(pos);
+   }
+
+   private boolean isRecentServerWindChargeUse() {
+      return mc.player.tickCount - this.lastServerWindChargeUseTick <= WIND_CHARGE_SPAWN_GRACE_TICKS;
+   }
+
+   private void handleWindChargeExplosion(ClientboundExplodePacket packet) {
+      Vec3 pos = new Vec3(packet.getX(), packet.getY(), packet.getZ());
+      Integer id = this.findTrackedWindChargeNear(pos);
+      if (id == null) {
+         return;
+      }
+
+      this.viaWindCharges.remove(id);
+      this.playWindChargeBurst(pos);
+   }
+
+   private Integer findTrackedWindChargeNear(Vec3 pos) {
+      Integer closestId = null;
+      double closestDistance = WIND_CHARGE_BURST_DISTANCE_SQR;
+
+      for (Map.Entry<Integer, TrackedViaWindCharge> entry : this.viaWindCharges.entrySet()) {
+         Vec3 trackedPos = this.getTrackedWindChargePosition(entry.getKey(), entry.getValue());
+         double distance = trackedPos.distanceToSqr(pos);
+         if (distance <= closestDistance) {
+            closestDistance = distance;
+            closestId = entry.getKey();
+         }
+      }
+
+      return closestId;
+   }
+
+   private void handleWindChargeEntityRemove(ClientboundRemoveEntitiesPacket packet) {
+      for (int entityId : packet.getEntityIds()) {
+         TrackedViaWindCharge tracked = this.viaWindCharges.remove(entityId);
+         if (tracked != null) {
+            this.playWindChargeBurst(this.getTrackedWindChargePosition(entityId, tracked));
+         }
+      }
+   }
+
+   private Vec3 getTrackedWindChargePosition(int entityId, TrackedViaWindCharge tracked) {
+      Entity entity = mc.level.getEntity(entityId);
+      return entity != null ? entity.position() : tracked.lastKnownPos;
+   }
+
+   private void pruneViaWindCharges() {
+      Iterator<Map.Entry<Integer, TrackedViaWindCharge>> iterator = this.viaWindCharges.entrySet().iterator();
+      while (iterator.hasNext()) {
+         Map.Entry<Integer, TrackedViaWindCharge> entry = iterator.next();
+         if (mc.player.tickCount - entry.getValue().spawnTick > WIND_CHARGE_TRACK_TICKS) {
+            iterator.remove();
+         }
+      }
+   }
+
+   private void playWindChargeThrow(Vec3 pos) {
+      if (mc.player.tickCount - this.lastWindChargeThrowSoundTick <= 1) {
+         return;
+      }
+
+      this.lastWindChargeThrowSoundTick = mc.player.tickCount;
+      mc.level.playLocalSound(pos.x, pos.y, pos.z, ModSounds.WIND_CHARGE_THROW, SoundSource.NEUTRAL, 0.5F, 1.0F, false);
+   }
+
+   private void playWindChargeBurst(Vec3 pos) {
+      if (mc.player.tickCount - this.lastWindChargeBurstSoundTick <= 1 && this.lastWindChargeBurstPos.distanceToSqr(pos) <= 4.0D) {
+         return;
+      }
+
+      this.lastWindChargeBurstSoundTick = mc.player.tickCount;
+      this.lastWindChargeBurstPos = pos;
+      mc.level.addParticle(ParticleTypes.GUST_EMITTER, pos.x, pos.y, pos.z, 0.0D, 0.0D, 0.0D);
+      mc.level.playLocalSound(pos.x, pos.y, pos.z, ModSounds.WIND_CHARGE_WIND_BURST, SoundSource.NEUTRAL, 1.0F, 1.25F, false);
    }
 
    private void handleBlockingReceive(EventPacket event) {
@@ -320,5 +471,15 @@ public class ViaVersionFix extends Module {
       }
 
       return null;
+   }
+
+   private static final class TrackedViaWindCharge {
+      private final Vec3 lastKnownPos;
+      private final int spawnTick;
+
+      private TrackedViaWindCharge(Vec3 lastKnownPos, int spawnTick) {
+         this.lastKnownPos = lastKnownPos;
+         this.spawnTick = spawnTick;
+      }
    }
 }

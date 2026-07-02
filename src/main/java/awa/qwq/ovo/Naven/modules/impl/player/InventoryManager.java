@@ -294,6 +294,10 @@ public class InventoryManager extends Module {
          return true;
       } else if (InventoryUtils.isMace(stack)) {
          return true;
+      } else if (InventoryUtils.isWindCharge(stack)) {
+         return true;
+      } else if (InventoryUtils.isSpear(stack)) {
+         return true;
       } else if (stack.getDisplayName().getString().contains("点击使用")) {
          return true;
       } else if (stack.getItem() instanceof ArmorItem) {
@@ -327,7 +331,7 @@ public class InventoryManager extends Module {
          return false;
       } else if (stack.getItem() instanceof FishingRodItem && InventoryUtils.getItemCount(Items.FISHING_ROD) > 1) {
          return false;
-      } else if ((stack.getItem() == Items.SNOWBALL || stack.getItem() == Items.EGG) && !shouldKeepProjectile()) {
+      } else if ((stack.getItem() == Items.SNOWBALL || stack.getItem() == Items.EGG) && !InventoryUtils.isWindCharge(stack) && !shouldKeepProjectile()) {
          return false;
       } else {
          return stack.getItem() instanceof ItemNameBlockItem ? false : InventoryUtils.isCommonItemUseful(stack);

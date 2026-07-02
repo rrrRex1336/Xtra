@@ -8,6 +8,7 @@ import awa.qwq.ovo.Naven.modules.impl.visual.FullBright;
 import awa.qwq.ovo.Naven.modules.impl.visual.MotionBlur;
 import awa.qwq.ovo.Naven.modules.impl.visual.NoHurtCam;
 import awa.qwq.ovo.Naven.modules.ModuleManager;
+import awa.qwq.ovo.Naven.viaversionfix.items.spear.SpearLogic;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -32,6 +33,11 @@ public class MixinGameRenderer {
    private RenderBuffers renderBuffers;
 
    private boolean skijaFrameStarted = false;
+
+   @Inject(method = {"pick"}, at = {@At("TAIL")})
+   private void updateSpearPick(float partialTicks, CallbackInfo ci) {
+      SpearLogic.updateClientPick(this.minecraft, partialTicks);
+   }
 
    @Inject(
       method = {"renderLevel"},
