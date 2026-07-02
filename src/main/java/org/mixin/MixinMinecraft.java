@@ -8,6 +8,7 @@ import awa.qwq.ovo.Naven.events.impl.EventDisconnect;
 import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.events.impl.EventShutdown;
 import awa.qwq.ovo.Naven.modules.impl.visual.Glow;
+import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.utils.animation.AnimationUtils;
 import awa.qwq.ovo.Naven.utils.ISkipTicks;
 import com.mojang.blaze3d.platform.Window;
@@ -50,7 +51,6 @@ public class MixinMinecraft implements ISkipTicks {
 
    @Inject(method = "<init>", at = @At("TAIL"))
    private void onInit(CallbackInfo info) {
-      Naven.modRegister();
    }
 
    @Inject(method = "<init>", at = @At("RETURN"))
@@ -84,14 +84,21 @@ public class MixinMinecraft implements ISkipTicks {
 
    @Inject(method = "setLevel", at = @At("HEAD"))
    private void onSetLevel(CallbackInfo ci) {
-      if (Naven.getInstance().isReady()) {
+      if (Naven.getInstance() != null && Naven.getInstance().isReady()) {
          Naven.getInstance().getEventManager().call(new EventDisconnect());
       }
    }
 
    @Inject(method = "tick", at = @At("HEAD"))
    private void tickPre(CallbackInfo ci) {
+      Naven.mc = (Minecraft)(Object)this;
+      Module.refreshMinecraft();
+      if (Naven.getInstance() == null) {
+         Naven.modRegister();
+      }
+
       if (Naven.getInstance() != null && Naven.getInstance().getEventManager() != null) {
+         Naven.getInstance().enablePendingModulesIfReady();
          Naven.getInstance().getEventManager().call(new EventRunTicks(EventType.PRE));
       }
    }

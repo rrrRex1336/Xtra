@@ -12,7 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundEvents;
 
 public class Module extends HasValue {
-   protected static final Minecraft mc = Minecraft.getInstance();
+   protected static Minecraft mc = Minecraft.getInstance();
    public static boolean update = true;
    private final SmoothAnimationTimer animation = new SmoothAnimationTimer(100.0F);
    private String name;
@@ -31,6 +31,10 @@ public class Module extends HasValue {
       this.category = category;
       super.setName(name);
       this.setPrettyName();
+   }
+
+   public static void refreshMinecraft() {
+      mc = Minecraft.getInstance();
    }
 
    public void setSuffix(String suffix) {

@@ -38,7 +38,11 @@ public class ModuleFile extends ClientFile {
                Module module = moduleManager.getModule(name);
                module.setKey(key);
                module.setHidden(hidden);
-               module.setEnabled(enabled);
+               if (enabled && (Naven.mc == null || Naven.mc.player == null || Naven.mc.level == null)) {
+                  Naven.getInstance().queuePendingEnable(module);
+               } else {
+                  module.setEnabled(enabled);
+               }
             } catch (NoSuchModuleException var9) {
                logger.error("Failed to find module {}!", name);
             }

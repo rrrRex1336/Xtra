@@ -9,6 +9,7 @@ import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.events.impl.EventShutdown;
 import awa.qwq.ovo.Naven.files.FileManager;
 import awa.qwq.ovo.Naven.modules.ModuleManager;
+import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.impl.visual.ClickGUIModule;
 import awa.qwq.ovo.Naven.ui.notification.NotificationManager;
 import awa.qwq.ovo.Naven.utils.*;
@@ -23,6 +24,8 @@ import net.minecraft.client.Minecraft;
 
 import java.awt.FontFormatException;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -43,6 +46,7 @@ public class Naven {
    private final FileManager fileManager;
    private final NotificationManager notificationManager;
    private final HWIDCheck hWIDCheck;
+   private final List<Module> pendingEnableModules = new ArrayList<>();
    public static float TICK_TIMER = 1.0F;
    public static Queue<Runnable> skipTasks = new ConcurrentLinkedQueue<>();
    public static int skipTicks = 0;
@@ -102,6 +106,8 @@ public class Naven {
 
 
       try {
+         mc = Minecraft.getInstance();
+         Module.refreshMinecraft();
          new Naven();
          if (!Loader.isNativeLoaded()) {
             return;
@@ -122,6 +128,24 @@ public class Naven {
 
       } catch (Exception var1) {
          System.err.println("[Naven] Client load failed: " + var1.getMessage());
+      }
+   }
+
+   public void queuePendingEnable(Module module) {
+      if (module != null && !this.pendingEnableModules.contains(module)) {
+         this.pendingEnableModules.add(module);
+      }
+   }
+
+   public void enablePendingModulesIfReady() {
+      if (mc == null || mc.player == null || mc.level == null || this.pendingEnableModules.isEmpty()) {
+         return;
+      }
+
+      List<Module> modules = new ArrayList<>(this.pendingEnableModules);
+      this.pendingEnableModules.clear();
+      for (Module module : modules) {
+         module.setEnabled(true);
       }
    }
 
