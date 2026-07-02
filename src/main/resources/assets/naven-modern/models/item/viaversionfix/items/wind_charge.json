@@ -1,0 +1,6 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "naven-modern:item/viaversionfix/wind_charge/wind_charge"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "replace": false,
+  "values": [
+    "naven-modern:viaversionfix/items/spear/wooden_spear",
+    "naven-modern:viaversionfix/items/spear/stone_spear",
+    "naven-modern:viaversionfix/items/spear/copper_spear",
+    "naven-modern:viaversionfix/items/spear/iron_spear",
+    "naven-modern:viaversionfix/items/spear/golden_spear",
+    "naven-modern:viaversionfix/items/spear/diamond_spear",
+    "naven-modern:viaversionfix/items/spear/netherite_spear"
+  ]
+}

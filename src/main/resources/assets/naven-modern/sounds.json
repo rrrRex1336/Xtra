@@ -45,5 +45,150 @@
         "stream": false
       }
     ]
+  },
+  "wind_charge_throw": {
+    "subtitle": "subtitles.naven-modern.wind_charge_throw",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/wind_charge/throw",
+        "stream": false
+      }
+    ]
+  },
+  "wind_charge_wind_burst": {
+    "subtitle": "subtitles.naven-modern.wind_charge_wind_burst",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/wind_charge/wind_burst1",
+        "stream": false,
+        "attenuation_distance": 8,
+        "pitch": 1.25
+      },
+      {
+        "name": "naven-modern:viaversionfix/wind_charge/wind_burst2",
+        "stream": false,
+        "attenuation_distance": 8,
+        "pitch": 1.25
+      },
+      {
+        "name": "naven-modern:viaversionfix/wind_charge/wind_burst3",
+        "stream": false,
+        "attenuation_distance": 8,
+        "pitch": 1.25
+      }
+    ]
+  },
+  "spear_attack": {
+    "subtitle": "subtitles.naven-modern.spear_attack",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/spear/attack1",
+        "stream": false
+      },
+      {
+        "name": "naven-modern:viaversionfix/spear/attack2",
+        "stream": false
+      },
+      {
+        "name": "naven-modern:viaversionfix/spear/attack3",
+        "stream": false
+      }
+    ]
+  },
+  "spear_hit": {
+    "subtitle": "subtitles.naven-modern.spear_hit",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/spear/hit1",
+        "stream": false
+      },
+      {
+        "name": "naven-modern:viaversionfix/spear/hit2",
+        "stream": false
+      },
+      {
+        "name": "naven-modern:viaversionfix/spear/hit3",
+        "stream": false
+      }
+    ]
+  },
+  "spear_use": {
+    "subtitle": "subtitles.naven-modern.spear_use",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/spear/use",
+        "stream": false
+      }
+    ]
+  },
+  "spear_lunge_1": {
+    "subtitle": "subtitles.naven-modern.spear_lunge",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/spear/lunge1",
+        "stream": false
+      }
+    ]
+  },
+  "spear_lunge_2": {
+    "subtitle": "subtitles.naven-modern.spear_lunge",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/spear/lunge2",
+        "stream": false
+      }
+    ]
+  },
+  "spear_lunge_3": {
+    "subtitle": "subtitles.naven-modern.spear_lunge",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/spear/lunge3",
+        "stream": false
+      }
+    ]
+  },
+  "spear_wood_attack": {
+    "subtitle": "subtitles.naven-modern.spear_attack",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/spear/wood/attack1",
+        "stream": false
+      },
+      {
+        "name": "naven-modern:viaversionfix/spear/wood/attack2",
+        "stream": false
+      },
+      {
+        "name": "naven-modern:viaversionfix/spear/wood/attack3",
+        "stream": false
+      }
+    ]
+  },
+  "spear_wood_hit": {
+    "subtitle": "subtitles.naven-modern.spear_hit",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/spear/wood/hit1",
+        "stream": false
+      },
+      {
+        "name": "naven-modern:viaversionfix/spear/wood/hit2",
+        "stream": false
+      },
+      {
+        "name": "naven-modern:viaversionfix/spear/wood/hit3",
+        "stream": false
+      }
+    ]
+  },
+  "spear_wood_use": {
+    "subtitle": "subtitles.naven-modern.spear_use",
+    "sounds": [
+      {
+        "name": "naven-modern:viaversionfix/spear/wood/use",
+        "stream": false
+      }
+    ]
   }
 }

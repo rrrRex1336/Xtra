@@ -12,7 +12,8 @@
 	"license": "CC0-1.0",
 	"environment": "*",
 	"entrypoints": {
-		"main": ["tech.naven.NavenModLoader"]
+		"main": ["tech.naven.NavenModLoader"],
+		"client": ["tech.naven.NavenClientModLoader"]
 	},
 	"mixins": ["naven-modern.mixins.json"],
 	"depends": {
