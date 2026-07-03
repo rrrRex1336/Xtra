@@ -20,6 +20,7 @@ import awa.qwq.ovo.Naven.modules.impl.combat.*;
 import awa.qwq.ovo.Naven.modules.impl.misc.Helper;
 import awa.qwq.ovo.Naven.modules.impl.player.AutoMLG;
 import awa.qwq.ovo.Naven.modules.impl.movement.LongJump;
+import awa.qwq.ovo.Naven.modules.impl.world.AntiFireball;
 import awa.qwq.ovo.Naven.modules.impl.world.BedAura;
 import awa.qwq.ovo.Naven.modules.impl.world.ChestAura;
 import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
@@ -66,6 +67,7 @@ public class RotationManager {
          Surround surround = (Surround) Naven.getInstance().getModuleManager().getModule(Surround.class);
          AutoThrow autoThrow = (AutoThrow) Naven.getInstance().getModuleManager().getModule(AutoThrow.class);
          Velocity velocity = (Velocity) Naven.getInstance().getModuleManager().getModule(Velocity.class);
+         AntiFireball antiFireball = (AntiFireball) Naven.getInstance().getModuleManager().getModule(AntiFireball.class);
 
          active = true;
          boolean killAuraTargeting = isKillAuraTargeting(killAura);
@@ -89,6 +91,9 @@ public class RotationManager {
             active = true;
          } else if (longJump.isEnabled() && LongJump.rotation != null) {
             setRotations(LongJump.rotation.toVec2f());
+         } else if (antiFireball != null && antiFireball.shouldApplyRotation()) {
+            setRotations(antiFireball.getFireballRotation());
+            active = true;
          } else if (chestAura.isEnabled() && chestAura.rotations != null) {
             Vector2f rot = chestAura.chestRotations;
             setRotations(rot);
@@ -227,7 +232,7 @@ public class RotationManager {
 
       Aura aura = (Aura) Naven.getInstance().getModuleManager().getModule(Aura.class);
       if (aura != null && aura.isEnabled() && aura.working) {
-         return aura.movementCorrection.getCurrentValue();
+         return true;
       }
 
       return true;

@@ -4,7 +4,6 @@ import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRender;
-import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.managers.friends.FriendManager;
 import awa.qwq.ovo.Naven.modules.Category;
@@ -12,11 +11,10 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.modules.impl.misc.Teams;
 import awa.qwq.ovo.Naven.modules.impl.visual.ModuleList;
-import awa.qwq.ovo.Naven.modules.impl.visual.WaterMark;
+import awa.qwq.ovo.Naven.modules.impl.visual.TargetHUD;
 import awa.qwq.ovo.Naven.utils.*;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
 import awa.qwq.ovo.Naven.managers.rotation.utils.RotationUtils;
-import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.AddonsValue;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
@@ -26,7 +24,6 @@ import com.mojang.blaze3d.vertex.*;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import org.joml.Matrix4f;
-import org.joml.Vector4f;
 import org.mixin.accessors.MinecraftAccessor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.KeyMapping;
@@ -48,7 +45,6 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import org.lwjgl.opengl.GL11;
 
-import java.awt.*;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -72,9 +68,7 @@ public class Aura extends Module {
     private int currentTargetIndex = 0;
     private int attackCountOnCurrentTarget = 0;
     public static Entity target;
-    private Vector4f blurMatrix;
     public static List<Entity> targets = new ArrayList<>();
-    private List<Entity> currentTargets = new ArrayList<>();
     private static final float[] targetColorRed = new float[]{0.78431374F, 0.0F, 0.0F, 0.23529412F};
     private static final float[] targetColorGreen = new float[]{0.0F, 0.78431374F, 0.0F, 0.23529412F};
     private float espRotationAngle = 0;
@@ -140,11 +134,6 @@ public class Aura extends Module {
             .setModes("Health", "FoV", "Range", "None")
             .build()
             .getModeValue();
-
-    public BooleanValue movementCorrection = ValueBuilder.create(this, "Movement Correction")
-            .setDefaultBooleanValue(true)
-            .build()
-            .getBooleanValue();
 
     FloatValue minCPS = ValueBuilder.create(this, "Min CPS")
             .setVisibility(() -> !attackCooldowns.getCurrentValue() && attackMode.isCurrentMode("Delay"))
@@ -223,29 +212,6 @@ public class Aura extends Module {
     }
 
     @EventTarget
-    public void onRender(EventRender2D e) {
-        this.blurMatrix = null;
-        if (target instanceof LivingEntity) {
-            LivingEntity living = (LivingEntity)target;
-            e.getStack().pushPose();
-            float x = mc.getWindow().getGuiScaledWidth() / 2.0F + 10.0F;
-            float y = mc.getWindow().getGuiScaledHeight() / 2.0F + 10.0F;
-            String targetName = target.getName().getString() + (living.isBaby() ? " (Baby)" : "");
-            float width = Math.max(Fonts.harmony.getWidth(targetName, 0.4F) + 10.0F, 60.0F);
-            this.blurMatrix = new Vector4f(x, y, width, 30.0F);
-            StencilUtils.write(false);
-            RenderUtils.drawRoundedRect(e.getStack(), x, y, width, 30.0F, 5.0F, WaterMark.headerColor);
-            StencilUtils.erase(true);
-            RenderUtils.fillBound(e.getStack(), x, y, width, 30.0F, WaterMark.bodyColor);
-            RenderUtils.fillBound(e.getStack(), x, y, width * (living.getHealth() / living.getMaxHealth()), 3.0F, WaterMark.headerColor);
-            StencilUtils.dispose();
-            Fonts.harmony.render(e.getStack(), targetName, x + 5.0F, y + 6.0F, Color.WHITE, true, 0.35F);
-            Fonts.harmony.render(e.getStack(), "HP: " + Math.round(living.getHealth()) + (living.getAbsorptionAmount() > 0.0F ? "+" + Math.round(living.getAbsorptionAmount()) : ""), x + 5.0F, y + 17.0F, Color.WHITE, true, 0.35F);
-            e.getStack().popPose();
-        }
-    }
-
-    @EventTarget
     public void onMotion(EventRunTicks e) {
         if (mc.player == null || mc.level == null) {
             this.working = false;
@@ -279,7 +245,7 @@ public class Aura extends Module {
                 if (smooth.getCurrentValue()) {
                     float minSpeed = this.rotateMinSpeed.getCurrentValue();
                     float maxSpeed = this.rotateMaxSpeed.getCurrentValue();
-                    float currentSpeed = (minSpeed + (random.nextFloat() * (maxSpeed - minSpeed))) / 20.0F;
+                    float currentSpeed = minSpeed + (random.nextFloat() * (maxSpeed - minSpeed));
                     float currentYaw = this.targetRotation.getX();
                     float yawDiff = getAngleDifference(targetYaw, currentYaw);
                     float yawStep = Math.min(Math.abs(yawDiff), currentSpeed) * Math.signum(yawDiff);
@@ -297,7 +263,7 @@ public class Aura extends Module {
             } else if (smooth.getCurrentValue()) {
                 float minSpeed = this.rotateMinSpeed.getCurrentValue();
                 float maxSpeed = this.rotateMaxSpeed.getCurrentValue();
-                float currentSpeed = (minSpeed + (random.nextFloat() * (maxSpeed - minSpeed))) / 20.0F;
+                float currentSpeed = minSpeed + (random.nextFloat() * (maxSpeed - minSpeed));
 
                 float originalYaw = mc.player.getYRot();
                 float currentYaw = this.targetRotation.getX();
@@ -319,7 +285,7 @@ public class Aura extends Module {
                 doAttack();
             }
         }
-        if (e.getType() == EventType.POST && attackTiming.isCurrentMode("Post") || attackTiming.isCurrentMode("Both")) {
+        if (e.getType() == EventType.POST && (attackTiming.isCurrentMode("Post") || attackTiming.isCurrentMode("Both"))) {
             doAttack();
         }
     }
@@ -330,9 +296,9 @@ public class Aura extends Module {
         boolean hasValidTarget = false;
 
         if (targetEntity != null) {
-            Vec3 closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePosition(), targetEntity.getBoundingBox());
-            double distance = closestPoint.distanceTo(mc.player.getEyePosition());
-            hasValidTarget = distance <= this.attackRange.getCurrentValue();
+            hasValidTarget = this.targetTrack.isCurrentMode("Multi")
+                    ? hasAttackableTarget()
+                    : isWithinAttackRange(targetEntity);
         }
 
         if (hasValidTarget && targetEntity != null) {
@@ -375,6 +341,21 @@ public class Aura extends Module {
         }
     }
 
+    private boolean hasAttackableTarget() {
+        for (Entity entity : getAllValidTargets()) {
+            if (isWithinAttackRange(entity)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean isWithinAttackRange(Entity entity) {
+        Vec3 closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePosition(), entity.getBoundingBox());
+        return closestPoint.distanceTo(mc.player.getEyePosition()) <= this.attackRange.getCurrentValue();
+    }
+
     private float getAngleDifference(float target, float current) {
         float difference = target - current;
         while (difference > 180) difference -= 360;
@@ -398,22 +379,15 @@ public class Aura extends Module {
 
         if (mode.equals("Multi")) {
             List<Entity> validTargets = getAllValidTargets();
-            boolean attacked = false;
 
             for (Entity entity : validTargets) {
-                Vec3 closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePosition(), entity.getBoundingBox());
-                if (closestPoint.distanceTo(mc.player.getEyePosition()) <= this.rotationRange.getCurrentValue()) {
+                if (isWithinAttackRange(entity)) {
                     performAttack(entity, method);
-                    attacked = true;
                 }
-            }
-            if (!attacked && !validTargets.isEmpty()) {
-                performAttack(validTargets.get(0), method);
             }
         } else {
             if (primaryTarget != null) {
-                Vec3 closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePosition(), primaryTarget.getBoundingBox());
-                if (closestPoint.distanceTo(mc.player.getEyePosition()) <= this.rotationRange.getCurrentValue()) {
+                if (isWithinAttackRange(primaryTarget)) {
                     performAttack(primaryTarget, method);
                     this.attackCountOnCurrentTarget++;
                 }
@@ -422,15 +396,21 @@ public class Aura extends Module {
     }
 
     private void performAttack(Entity target, String method) {
+        if (mc.player == null || target == null) {
+            return;
+        }
+
+        TargetHUD.trackTarget(target);
         if (method.equals("Direct")) {
             if (mc.gameMode != null) {
                 mc.gameMode.attack(mc.player, target);
+                mc.player.swing(InteractionHand.MAIN_HAND);
             }
-            mc.player.swing(InteractionHand.MAIN_HAND);
         } else if (method.equals("Packet")) {
             if (mc.getConnection() != null && mc.player != null) {
-                ServerboundInteractPacket packet = ServerboundInteractPacket.createAttackPacket(target, false);
+                ServerboundInteractPacket packet = ServerboundInteractPacket.createAttackPacket(target, mc.player.isShiftKeyDown());
                 mc.getConnection().send(packet);
+                mc.player.attack(target);
                 mc.player.swing(InteractionHand.MAIN_HAND);
                 mc.player.resetAttackStrengthTicker();
             }
@@ -642,25 +622,7 @@ public class Aura extends Module {
             ModuleList moduleList = (ModuleList) Naven.getInstance().getModuleManager().getModule(ModuleList.class);
             int color = -1;
             if (moduleList != null && moduleList.isEnabled()) {
-                String colorMode = moduleList.colorMode.getCurrentMode();
-                float speed = moduleList.colorSpeed.getCurrentValue();
-                float offset = moduleList.colorOffset.getCurrentValue();
-
-                if (colorMode.equals("Rainbow")) {
-                    float mappedSpeed = 21.0F - (speed * 1.9F);
-                    color = RenderUtils.getRainbowOpaque((int) (System.currentTimeMillis() / 10 * offset), 1.0F, 1.0F, mappedSpeed * 1000.0F);
-                } else if (colorMode.equals("Water")) {
-                    long time = System.currentTimeMillis();
-                    float period = speed * 300;
-                    float progress = (float) ((time + (long) (System.currentTimeMillis() / 50 * offset)) % (long) period) / period;
-                    float t = (float) ((Math.cos(progress * Math.PI * 2) + 1) / 2);
-                    int c1 = 0x0CE8C7;
-                    int c2 = 0x0CA3E8;
-                    int r = (int) (((c1 >> 16) & 0xFF) + (((c2 >> 16) & 0xFF) - ((c1 >> 16) & 0xFF)) * t);
-                    int g = (int) (((c1 >> 8) & 0xFF) + (((c2 >> 8) & 0xFF) - ((c1 >> 8) & 0xFF)) * t);
-                    int b = (int) ((c1 & 0xFF) + ((c2 & 0xFF) - (c1 & 0xFF)) * t);
-                    color = (r << 16) | (g << 8) | b;
-                }
+                color = moduleList.getModuleColor(espRotationAngle);
             }
 
             PoseStack stack = e.getPMatrixStack();

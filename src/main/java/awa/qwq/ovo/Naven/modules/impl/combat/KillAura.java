@@ -11,9 +11,7 @@ import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.modules.impl.misc.Teams;
 import awa.qwq.ovo.Naven.modules.impl.player.Blink;
 import awa.qwq.ovo.Naven.modules.impl.movement.Stuck;
-import awa.qwq.ovo.Naven.modules.impl.visual.WaterMark;
 import awa.qwq.ovo.Naven.utils.*;
-import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
 import awa.qwq.ovo.Naven.managers.rotation.utils.RotationUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
@@ -23,7 +21,6 @@ import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 
-import java.awt.*;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -51,7 +48,6 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.HitResult.Type;
-import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
 
 @ModuleInfo(
@@ -66,7 +62,6 @@ public class KillAura extends Module {
    public static Entity aimingTarget;
    public static List<Entity> targets = new ArrayList<>();
    public static Vector2f rotation;
-   BooleanValue targetHud = ValueBuilder.create(this, "Target Interface").setDefaultBooleanValue(true).build().getBooleanValue();
    BooleanValue targetEsp = ValueBuilder.create(this, "Target ESP").setDefaultBooleanValue(true).build().getBooleanValue();
    BooleanValue attackPlayer = ValueBuilder.create(this, "Attack Player").setDefaultBooleanValue(true).build().getBooleanValue();
    BooleanValue attackInvisible = ValueBuilder.create(this, "Attack Invisible").setDefaultBooleanValue(false).build().getBooleanValue();
@@ -172,38 +167,7 @@ public class KillAura extends Module {
    int attackTimes = 0;
    float attacks = 0.0F;
    private int index;
-   private Vector4f blurMatrix;
    private final Random random = new Random();
-
-   @EventTarget
-   public void onShader(EventShader e) {
-      if (this.blurMatrix != null && this.targetHud.getCurrentValue()) {
-         RenderUtils.drawRoundedRect(e.getStack(), this.blurMatrix.x(), this.blurMatrix.y(), this.blurMatrix.z(), this.blurMatrix.w(), 3.0F, 1073741824);
-      }
-   }
-
-   @EventTarget
-   public void onRender(EventRender2D e) {
-      this.blurMatrix = null;
-      if (target instanceof LivingEntity && this.targetHud.getCurrentValue()) {
-         LivingEntity living = (LivingEntity)target;
-         e.getStack().pushPose();
-         float x = mc.getWindow().getGuiScaledWidth() / 2.0F + 10.0F;
-         float y = mc.getWindow().getGuiScaledHeight() / 2.0F + 10.0F;
-         String targetName = target.getName().getString() + (living.isBaby() ? " (Baby)" : "");
-         float width = Math.max(Fonts.harmony.getWidth(targetName, 0.4F) + 10.0F, 60.0F);
-         this.blurMatrix = new Vector4f(x, y, width, 30.0F);
-         StencilUtils.write(false);
-         RenderUtils.drawRoundedRect(e.getStack(), x, y, width, 30.0F, 5.0F, WaterMark.headerColor);
-         StencilUtils.erase(true);
-         RenderUtils.fillBound(e.getStack(), x, y, width, 30.0F, WaterMark.bodyColor);
-         RenderUtils.fillBound(e.getStack(), x, y, width * (living.getHealth() / living.getMaxHealth()), 3.0F, WaterMark.headerColor);
-         StencilUtils.dispose();
-         Fonts.harmony.render(e.getStack(), targetName, x + 5.0F, y + 6.0F, Color.WHITE, true, 0.35F);
-         Fonts.harmony.render(e.getStack(), "HP: " + Math.round(living.getHealth()) + (living.getAbsorptionAmount() > 0.0F ? "+" + Math.round(living.getAbsorptionAmount()) : ""), x + 5.0F, y + 17.0F, Color.WHITE, true, 0.35F);
-         e.getStack().popPose();
-      }
-   }
 
    @EventTarget
    public void onRender(EventRender e) {

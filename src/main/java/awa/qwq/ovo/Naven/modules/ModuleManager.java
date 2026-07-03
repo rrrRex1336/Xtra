@@ -53,7 +53,7 @@ public class ModuleManager {
          new KillerDetection(),
          new TNTWarning(),
          new AutoOffHand(),
-         new TargetInterface(),
+         new TargetHUD(),
          new WaterMark(),
          new ModuleList(),
          new HotKeys(),

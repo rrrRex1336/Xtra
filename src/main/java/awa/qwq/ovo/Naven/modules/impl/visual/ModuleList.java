@@ -605,7 +605,7 @@ public class ModuleList extends Module {
             0x78A8E8
     };
 
-    private int getModuleColor(float height) {
+    public int getModuleColor(float height) {
         int index = (int) (-height * this.colorOffset.getCurrentValue());
         if (this.colorMode.isCurrentMode("Rainbow")) {
             float mappedSpeed = 21.0F - (this.colorSpeed.getCurrentValue() * 1.9F);
