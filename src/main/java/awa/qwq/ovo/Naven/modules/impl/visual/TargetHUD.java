@@ -7,6 +7,8 @@ import awa.qwq.ovo.Naven.events.impl.EventShader;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
+import awa.qwq.ovo.Naven.modules.impl.combat.Aura;
+import awa.qwq.ovo.Naven.modules.impl.combat.KillAura;
 import awa.qwq.ovo.Naven.utils.DragManager;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.StencilUtils;
@@ -25,6 +27,7 @@ public class TargetHUD extends Module {
 
     private static LivingEntity target;
     private static long targetUpdateTime;
+    private static boolean combatModuleTarget;
 
     private final ModeValue mode = ValueBuilder.create(this, "Mode")
             .setModes("Naven")
@@ -36,9 +39,15 @@ public class TargetHUD extends Module {
     private Vector4f blurMatrix;
 
     public static void trackTarget(Entity entity) {
-        if (entity instanceof LivingEntity living && living.isAlive() && !living.isRemoved()) {
+        if (!(entity instanceof LivingEntity living) || living == mc.player) {
+            clearTarget();
+            return;
+        }
+
+        if (isValidTarget(living)) {
             target = living;
             targetUpdateTime = System.currentTimeMillis();
+            combatModuleTarget = isCurrentCombatTarget(living);
         }
     }
 
@@ -96,19 +105,54 @@ public class TargetHUD extends Module {
     @Override
     public void onDisable() {
         this.blurMatrix = null;
+        clearTarget();
         super.onDisable();
     }
 
     private static LivingEntity getDisplayTarget() {
-        if (target == null
-                || !target.isAlive()
-                || target.isRemoved()
-                || System.currentTimeMillis() - targetUpdateTime > TARGET_TIMEOUT_MS) {
-            target = null;
+        if (target == null) {
+            return null;
+        }
+
+        if (!isValidTarget(target)
+                || combatModuleTarget && !isCurrentCombatTarget(target)
+                || !combatModuleTarget && System.currentTimeMillis() - targetUpdateTime > TARGET_TIMEOUT_MS) {
+            clearTarget();
             return null;
         }
 
         return target;
+    }
+
+    private static boolean isValidTarget(LivingEntity living) {
+        if (living == null || mc.player == null || mc.level == null) {
+            return false;
+        }
+
+        if (living == mc.player || living.level() != mc.level || living.isRemoved() || !living.isAlive() || living.isDeadOrDying() || living.getHealth() <= 0.0F) {
+            return false;
+        }
+
+        for (Entity entity : mc.level.entitiesForRendering()) {
+            if (entity == living) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isCurrentCombatTarget(Entity entity) {
+        return KillAura.target == entity
+                || KillAura.targets.contains(entity)
+                || Aura.target == entity
+                || Aura.targets.contains(entity);
+    }
+
+    private static void clearTarget() {
+        target = null;
+        targetUpdateTime = 0L;
+        combatModuleTarget = false;
     }
 
     private static float getHealthPercent(LivingEntity living) {
