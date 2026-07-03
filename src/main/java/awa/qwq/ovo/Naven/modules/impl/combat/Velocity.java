@@ -6,6 +6,7 @@ import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.*;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
 import awa.qwq.ovo.Naven.managers.rotation.utils.Rotation;
+import awa.qwq.ovo.Naven.managers.rotation.utils.RotationUtils;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
@@ -56,6 +57,8 @@ import java.util.concurrent.LinkedBlockingDeque;
 public class Velocity extends Module {
 
     public static final int mainColor = new Color(150, 45, 45, 255).getRGB();
+    private static final float PROGRESS_WIDTH = 100.0F;
+    private static final float PROGRESS_HEIGHT = 5.0F;
 
     public final ModeValue mode = ValueBuilder.create(this, "Mode")
             .setDefaultModeIndex(0)
@@ -157,6 +160,10 @@ public class Velocity extends Module {
             .build()
             .getFloatValue();
 
+    private final FloatValue progressXOffset = DragManager.createHiddenPositionValue(this, "Progress Drag X", 0.0F);
+    private final FloatValue progressYOffset = DragManager.createHiddenPositionValue(this, "Progress Drag Y", 0.0F);
+    private final DragManager progressDragManager = new DragManager(this.progressXOffset, this.progressYOffset);
+
     private final Queue<Packet<?>> packetQueue = new ConcurrentLinkedQueue<>();
     private final Queue<Packet<?>> movePacketQueue = new ConcurrentLinkedQueue<>();
     private final Map<Entity, Vector3d> targets = new HashMap<>();
@@ -168,10 +175,13 @@ public class Velocity extends Module {
     private boolean isFlushing = false;
     private boolean shouldFlushMotion = false;
     private Entity attackTarget = null;
+    private Entity velocityTarget = null;
     private int attacksRemaining = 0;
     private int totalAttacks = 0;
     public boolean rotateActive = false;
     private int attackCooldown = 0;
+    private int releaseRotateTicks = 0;
+    private Vector2f velocityRotation = null;
     private boolean jump = false;
     private int stuckCooldown = 0;
     private int s08Cooldown = 0;
@@ -217,10 +227,17 @@ public class Velocity extends Module {
     }
 
     private void disableRotate() {
-        if (rotateActive) {
-            RotationManager.active = false;
-            rotateActive = false;
-        }
+        rotateActive = false;
+        releaseRotateTicks = 0;
+        velocityRotation = null;
+    }
+
+    public boolean shouldApplyRotation() {
+        return this.isEnabled() && isBufferMode() && rotateActive && velocityRotation != null;
+    }
+
+    public Vector2f getVelocityRotation() {
+        return velocityRotation;
     }
 
     private void flushPackets() {
@@ -256,6 +273,7 @@ public class Velocity extends Module {
         isSuspending = false;
         suspendTicks = 0;
         attackTarget = null;
+        velocityTarget = null;
         attacksRemaining = 0;
         totalAttacks = 0;
         targets.clear();
@@ -336,14 +354,17 @@ public class Velocity extends Module {
 
     private boolean isTargetLost() {
         Entity currentCombatTarget = getCombatModuleTarget();
-        if (currentCombatTarget == null && attackTarget == null) return true;
+        if (attackTarget == null) return true;
         if (multiTarget.getCurrentValue()) {
-            return currentCombatTarget == null;
+            if (currentCombatTarget != null) {
+                return !currentCombatTarget.equals(attackTarget) && !currentCombatTarget.equals(velocityTarget);
+            }
+            return !isValidTarget(attackTarget);
         }
         if (currentCombatTarget != null && attackTarget != null) {
             return !currentCombatTarget.equals(attackTarget);
         }
-        return currentCombatTarget == null && attackTarget == null;
+        return !isValidTarget(attackTarget);
     }
 
     private double getDistanceToEntity(Entity entity) {
@@ -458,6 +479,11 @@ public class Velocity extends Module {
                 log("§4Reset, reason:player invalid");
 
             }
+            attackTarget = null;
+            velocityTarget = null;
+            attacksRemaining = 0;
+            totalAttacks = 0;
+            attackCooldown = 0;
             return;
         }
         if (isFlushing) return;
@@ -492,6 +518,11 @@ public class Velocity extends Module {
             isFlushing = false;
             shouldFlushMotion = false;
             attackCooldown = 0;
+            attackTarget = null;
+            velocityTarget = null;
+            attacksRemaining = 0;
+            totalAttacks = 0;
+            releaseRotateTicks = 0;
             return;
         }
 
@@ -520,7 +551,7 @@ public class Velocity extends Module {
         }
 
         if (packet instanceof ClientboundSetEntityMotionPacket motion && motion.getId() == mc.player.getId()) {
-            if (attackCooldown > 0 && mode19Plus.getCurrentValue()) {
+            if (attackCooldown > 0 && mode19Plus.getCurrentValue() && attacksRemaining > 0) {
                 return;
             }
             e.setCancelled(true);
@@ -528,6 +559,11 @@ public class Velocity extends Module {
             double velZ = -motion.getZa() / 8000.0;
             if (Math.abs(velX) <= 0.01 && Math.abs(velZ) <= 0.01) return;
 
+            attackTarget = null;
+            velocityTarget = null;
+            attacksRemaining = 0;
+            totalAttacks = 0;
+            attackCooldown = 0;
             clientboundSetEntityMotionPacket = motion;
             suspendTicks = 0;
 
@@ -550,9 +586,10 @@ public class Velocity extends Module {
             }
 
             if (!isValidTarget(attackTarget) || attackTarget == null) {
-                Entity target = getLookTarget();
+                Entity target = getCurrentTarget();
                 if (isValidTarget(target) && mc.player.isSprinting()) {
                     attackTarget = target;
+                    velocityTarget = target;
                 }
             }
 
@@ -742,6 +779,11 @@ public class Velocity extends Module {
                 endSuspending();
                 disableRotate();
             }
+            attackTarget = null;
+            velocityTarget = null;
+            attacksRemaining = 0;
+            totalAttacks = 0;
+            attackCooldown = 0;
             stuckCooldown = 5;
             return;
         }
@@ -751,6 +793,13 @@ public class Velocity extends Module {
         }
         if (e.type() != EventType.PRE) return;
 
+        if (releaseRotateTicks > 0 && !jump) {
+            releaseRotateTicks--;
+            if (releaseRotateTicks <= 0) {
+                disableRotate();
+            }
+        }
+
         if (shouldIgnore()) {
             if (isSuspending) {
                 flushPackets();
@@ -758,6 +807,11 @@ public class Velocity extends Module {
                 disableRotate();
                 log("§4Reset, reason:player invalid");
             }
+            attackTarget = null;
+            velocityTarget = null;
+            attacksRemaining = 0;
+            totalAttacks = 0;
+            attackCooldown = 0;
             return;
         }
 
@@ -836,16 +890,11 @@ public class Velocity extends Module {
 
             if (shouldRelease) {
                 targets.clear();
-                if (reduceAddons.isSelected("Rotate") && clientboundSetEntityMotionPacket != null) {
-                    double motionX = -clientboundSetEntityMotionPacket.getXa() / 8000.0;
-                    double motionZ = -clientboundSetEntityMotionPacket.getZa() / 8000.0;
-                    double motionLength = Math.sqrt(motionX * motionX + motionZ * motionZ);
-                    if (motionLength > 0) {
-                        float kbYaw = (float) Math.toDegrees(Math.atan2(-motionX, motionZ));
-                        RotationManager.setRotations(new Vector2f(kbYaw, mc.player.getXRot()));
-                        RotationManager.active = true;
-                        rotateActive = true;
-                    }
+                Entity rotateTarget = isValidTarget(velocityTarget) ? velocityTarget : attackTarget;
+                if (reduceAddons.isSelected("Rotate") && onGround && isValidTarget(rotateTarget)) {
+                    velocityRotation = RotationUtils.getRotations(mc.player.getEyePosition(1.0F), rotateTarget.getBoundingBox().getCenter()).toVec2f();
+                    rotateActive = true;
+                    releaseRotateTicks = 1;
                 }
                 flushPackets();
                 isSuspending = false;
@@ -854,50 +903,88 @@ public class Velocity extends Module {
             return;
         }
 
-        if (!isSuspending && attacksRemaining > 0 && attackTarget != null && isValidTarget(attackTarget) && attackCooldown == 0) {
+        if (!isSuspending && attacksRemaining > 0) {
+            if (attackTarget == null || !isValidTarget(attackTarget)) {
+                log("Hit complete");
+                attackTarget = null;
+                velocityTarget = null;
+                attacksRemaining = 0;
+                totalAttacks = 0;
+                attackCooldown = 0;
+                disableRotate();
+                return;
+            }
+
+            if (attackCooldown > 0) {
+                return;
+            }
+
+            if (reduceAddons.isSelected("Auto sprint") && !mc.player.isSprinting()) {
+                mc.options.keySprint.setDown(true);
+                mc.options.toggleSprint().set(false);
+                mc.player.setSprinting(true);
+            }
+
             if (mode19Plus.getCurrentValue() && mc.player.getAttackStrengthScale(0.5F) < 1.0F) {
-                attacksRemaining--;
-                attackCooldown = mode19Plus.getCurrentValue() ? Math.max(1, (int) (20 / mc.player.getCurrentItemAttackStrengthDelay())) : 0;
+                log("Hit complete");
+                attackTarget = null;
+                velocityTarget = null;
+                attacksRemaining = 0;
+                totalAttacks = 0;
+                attackCooldown = 0;
+                disableRotate();
                 return;
             }
 
             if (isTargetLost()) {
                 log("Hit complete");
                 attackTarget = null;
+                velocityTarget = null;
                 attacksRemaining = 0;
+                totalAttacks = 0;
+                attackCooldown = 0;
                 disableRotate();
                 return;
             }
 
             if (mc.player.isUsingItem()) {
+                log("Hit complete");
+                attackTarget = null;
+                velocityTarget = null;
+                attacksRemaining = 0;
+                totalAttacks = 0;
+                attackCooldown = 0;
+                disableRotate();
                 return;
             }
 
-            if (attackTarget != null && isValidTarget(attackTarget)) {
-                if (attackTarget instanceof Player targetPlayer) {
-                    if (AntiBots.isBot(targetPlayer)) {
-                        attacksRemaining--;
-                        attackCooldown = mode19Plus.getCurrentValue() ? Math.max(1, (int) (20 / mc.player.getCurrentItemAttackStrengthDelay())) : 1;
-                        return;
-                    }
-                }
-                doAttack(attackTarget);
-                attacksRemaining--;
-                attackCooldown = mode19Plus.getCurrentValue() ? Math.max(1, (int) (20 / mc.player.getCurrentItemAttackStrengthDelay())) : 1;
-                double decay = 0.6D;
-                int kbLevel = EnchantmentHelper.getKnockbackBonus(mc.player);
-                if (kbLevel > 0) {
-                    decay = Math.max(0.4D, 0.6D - kbLevel * 0.05D);
-                }
-                log("Reduce(Info:Attack, set motion: " + String.format("%.2f", decay) + (kbLevel > 0 ? " kb:" + kbLevel : "") + ")");
-
-                if (attacksRemaining <= 0) {
+            if (attackTarget instanceof Player targetPlayer) {
+                if (AntiBots.isBot(targetPlayer)) {
                     log("Hit complete");
                     attackTarget = null;
+                    velocityTarget = null;
+                    attacksRemaining = 0;
+                    totalAttacks = 0;
+                    attackCooldown = 0;
                     disableRotate();
+                    return;
                 }
-                return;
             }
+
+            doAttack(attackTarget);
+            attacksRemaining--;
+            attackCooldown = mode19Plus.getCurrentValue() ? Math.max(1, (int) (20 / mc.player.getCurrentItemAttackStrengthDelay())) : 1;
+            log("Reduce(Info: Attack Reduce)");
+
+            if (attacksRemaining <= 0) {
+                log("Hit complete");
+                attackTarget = null;
+                velocityTarget = null;
+                totalAttacks = 0;
+                attackCooldown = 0;
+                disableRotate();
+            }
+            return;
         }
 
         if (shouldFlushMotion) {
@@ -926,31 +1013,51 @@ public class Velocity extends Module {
         if (jump) {
             if (mc.player != null) {
                 e.setJump(true);
-                ChatUtils.addChatMessage("Reduce(Info:Jump Reset)");
+                ChatUtils.addChatMessage("Reduce(Info: Jump Reset)");
             }
             jump = false;
+            if (releaseRotateTicks > 0) {
+                releaseRotateTicks = 0;
+                disableRotate();
+            }
         }
 
-        if (reduceAddons.isSelected("Auto sprint") && attacksRemaining > 0) {
-            e.setForward(1);
-            e.setStrafe(0);
+        Entity moveTarget = isValidTarget(velocityTarget) ? velocityTarget : attackTarget;
+        if (!isSuspending && attacksRemaining > 0 && isValidTarget(moveTarget)) {
+            if (reduceAddons.isSelected("Auto sprint") && !mc.player.isSprinting() && MoveUtils.isMoving()) {
+                mc.options.keySprint.setDown(true);
+                mc.options.toggleSprint().set(false);
+                mc.player.setSprinting(true);
+            }
+
+            if (reduceAddons.isSelected("Movement override")) {
+                e.setForward(1.0F);
+                e.setStrafe(0.0F);
+                Vector2f rotations = RotationUtils.getRotations(mc.player.getEyePosition(1.0F), moveTarget.getBoundingBox().getCenter()).toVec2f();
+                MoveUtils.correctionMovement(e, rotations.x);
+            }
         }
     }
 
     @EventTarget
     public void onRender2D(EventRender2D e) {
         if (!isBufferMode()) return;
-        if (!isSuspending) return;
+        boolean preview = !isSuspending && DragManager.isHudEditorActive();
+        if (!isSuspending && !preview) return;
         CustomTextRenderer font = Fonts.misans;
-        int x = mc.getWindow().getGuiScaledWidth() / 2 - 50;
-        int y = mc.getWindow().getGuiScaledHeight() / 2 + 15;
-        int ticks = suspendTicks;
-        String text = "Delay SPacket Ticks : " + ticks;
+        float baseX = mc.getWindow().getGuiScaledWidth() / 2.0F - PROGRESS_WIDTH / 2.0F;
+        float baseY = mc.getWindow().getGuiScaledHeight() / 2.0F + 15.0F;
+        int ticks = preview ? 20 : suspendTicks;
+        String text = preview ? "Velocity Progress" : "Delaying SPacket Ticks : " + ticks;
         double textWidth = font.getWidth(text, true, 0.65);
-        font.drawString(e.getStack(), text, mc.getWindow().getGuiScaledWidth() / 2 - textWidth / 2, y - 12,
+        float dragWidth = Math.max(PROGRESS_WIDTH, (float) textWidth);
+        this.progressDragManager.update(baseX, baseY - 12.0F, dragWidth, 17.0F);
+        float x = this.progressDragManager.getX(baseX);
+        float y = this.progressDragManager.getY(baseY);
+        font.drawString(e.getStack(), text, x + PROGRESS_WIDTH / 2.0F - textWidth / 2.0F, y - 12.0F,
                 new Color(255, 255, 255, 255), true, 0.65);
-        RenderUtils.drawRoundedRect(e.getStack(), x, y, 100f, 5f, 2f, Integer.MIN_VALUE);
-        RenderUtils.drawRoundedRect(e.getStack(), x, y, Math.min(100f, ticks / 40f * 100f), 5f, 2f, mainColor);
+        RenderUtils.drawRoundedRect(e.getStack(), x, y, PROGRESS_WIDTH, PROGRESS_HEIGHT, 2f, Integer.MIN_VALUE);
+        RenderUtils.drawRoundedRect(e.getStack(), x, y, Math.min(PROGRESS_WIDTH, ticks / 40f * PROGRESS_WIDTH), PROGRESS_HEIGHT, 2f, mainColor);
     }
 
     @EventTarget
@@ -1007,8 +1114,10 @@ public class Velocity extends Module {
         attackCooldown = 0;
         s08Cooldown = 0;
         attackTarget = null;
+        velocityTarget = null;
         attacksRemaining = 0;
         totalAttacks = 0;
+        releaseRotateTicks = 0;
         jump = false;
         suspendTicks = 0;
         rotateActive = false;

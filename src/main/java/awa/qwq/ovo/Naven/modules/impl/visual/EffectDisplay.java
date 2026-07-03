@@ -17,6 +17,7 @@ import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import com.google.common.collect.Lists;
 import com.mojang.blaze3d.systems.RenderSystem;
 import java.awt.Color;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,7 @@ import net.minecraft.client.resources.language.I18n;
 import net.minecraft.util.StringUtil;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
 
@@ -39,6 +41,8 @@ import org.lwjgl.opengl.GL11;
    category = Category.VISUAL
 )
 public class EffectDisplay extends Module {
+   private static final String PREVIEW_EFFECT_NAME = "EffectDisplay\u7684\u6548\u679c";
+
    private List<Runnable> list;
    private final Map<MobEffect, EffectDisplay.MobEffectInfo> infos = new ConcurrentHashMap<>();
    private final Color headerColor = new Color(150, 45, 45, 255);
@@ -47,6 +51,7 @@ public class EffectDisplay extends Module {
    private final FloatValue xOffset = DragManager.createHiddenPositionValue(this, "Drag X", 0.0F);
    private final FloatValue yOffset = DragManager.createHiddenPositionValue(this, "Drag Y", 0.0F);
    private final DragManager dragManager = new DragManager(this.xOffset, this.yOffset);
+   private final EffectDisplay.MobEffectInfo previewInfo = new EffectDisplay.MobEffectInfo();
 
    @EventTarget(4)
    public void renderIcons(EventRender2D e) {
@@ -98,30 +103,43 @@ public class EffectDisplay extends Module {
             info.shouldDisappear = false;
          }
 
-         int startY = mc.getWindow().getGuiScaledHeight() / 2 - this.infos.size() * 16;
-         this.list = Lists.newArrayListWithExpectedSize(this.infos.size());
+         boolean hasRealEffects = !mc.player.getActiveEffects().isEmpty();
+         boolean preview = !hasRealEffects && DragManager.isHudEditorActive();
+         if (preview) {
+            this.infos.clear();
+         }
+
+         List<Entry<MobEffect, EffectDisplay.MobEffectInfo>> displayEntries = new ArrayList<>(this.infos.entrySet());
+         if (preview) {
+            this.preparePreviewInfo();
+            displayEntries.add(new AbstractMap.SimpleEntry<>(MobEffects.MOVEMENT_SPEED, this.previewInfo));
+         }
+
+         int startY = mc.getWindow().getGuiScaledHeight() / 2 - displayEntries.size() * 16;
+         this.list = Lists.newArrayListWithExpectedSize(displayEntries.size());
          this.blurMatrices.clear();
          Fonts.harmony.setAlpha(1.0F);
 
          CustomTextRenderer harmony = Fonts.harmony;
          float maxWidth = 0.0F;
-         for (Entry<MobEffect, EffectDisplay.MobEffectInfo> entry : this.infos.entrySet()) {
+         for (Entry<MobEffect, EffectDisplay.MobEffectInfo> entry : displayEntries) {
             EffectDisplay.MobEffectInfo effectInfo = entry.getValue();
-            String text = this.getDisplayName(entry.getKey(), effectInfo);
+            String text = effectInfo == this.previewInfo ? PREVIEW_EFFECT_NAME : this.getDisplayName(entry.getKey(), effectInfo);
             effectInfo.width = 25.0F + harmony.getWidth(text, 0.3) + 20.0F;
             maxWidth = Math.max(maxWidth, effectInfo.width);
          }
 
-         float stackHeight = this.infos.isEmpty() ? 0.0F : this.infos.size() * 34.0F - 4.0F;
+         float stackHeight = displayEntries.isEmpty() ? 0.0F : displayEntries.size() * 34.0F - 4.0F;
          this.dragManager.update(10.0F, (float) startY, maxWidth, stackHeight);
          float stackX = this.dragManager.getX(10.0F);
          float rowY = this.dragManager.getY((float) startY);
 
-         for (Entry<MobEffect, EffectDisplay.MobEffectInfo> entry : this.infos.entrySet()) {
+         for (Entry<MobEffect, EffectDisplay.MobEffectInfo> entry : displayEntries) {
             e.getStack().pushPose();
             try {
                EffectDisplay.MobEffectInfo effectInfo = entry.getValue();
-               String text = this.getDisplayName(entry.getKey(), effectInfo);
+               boolean previewEntry = effectInfo == this.previewInfo;
+               String text = previewEntry ? PREVIEW_EFFECT_NAME : this.getDisplayName(entry.getKey(), effectInfo);
                if (effectInfo.yTimer.value == -1.0F) {
                   effectInfo.yTimer.value = rowY;
                }
@@ -129,7 +147,7 @@ public class EffectDisplay extends Module {
                harmony.setAlpha(1.0F);
                float x = effectInfo.xTimer.value;
                float y = effectInfo.yTimer.value;
-               effectInfo.shouldDisappear = !mc.player.hasEffect(entry.getKey());
+               effectInfo.shouldDisappear = !previewEntry && !mc.player.hasEffect(entry.getKey());
                if (effectInfo.shouldDisappear) {
                   effectInfo.xTimer.target = -effectInfo.width - 20.0F;
                   if (x <= -effectInfo.width - 20.0F) {
@@ -158,7 +176,7 @@ public class EffectDisplay extends Module {
                harmony.setAlpha(1.0F);
                harmony.render(e.getStack(), text, (double)(x + 27.0F), (double)(y + 7.0F), this.headerColor, true, 0.3);
                float tickRate = Minecraft.getInstance().level != null ? Minecraft.getInstance().level.tickRateManager().tickrate() : 20.0F;
-               String duration = StringUtil.formatTickDuration(effectInfo.duration, tickRate);
+               String duration = previewEntry ? "00:30" : StringUtil.formatTickDuration(effectInfo.duration, tickRate);
                harmony.render(e.getStack(), duration, (double)(x + 27.0F), (double)(y + 17.0F), Color.WHITE, true, 0.25);
                MobEffectTextureManager mobeffecttexturemanager = mc.getMobEffectTextures();
                TextureAtlasSprite textureatlassprite = mobeffecttexturemanager.get(entry.getKey());
@@ -195,6 +213,16 @@ public class EffectDisplay extends Module {
       }
 
       return effectName + amplifierName;
+   }
+
+   private void preparePreviewInfo() {
+      this.previewInfo.maxDuration = 600;
+      this.previewInfo.duration = 600;
+      this.previewInfo.amplifier = 0;
+      this.previewInfo.shouldDisappear = false;
+      if (this.previewInfo.durationTimer.value <= 0.0F) {
+         this.previewInfo.durationTimer.value = 0.0F;
+      }
    }
 
    private void prepareHudRenderState() {

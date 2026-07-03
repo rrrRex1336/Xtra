@@ -5,7 +5,6 @@ import awa.qwq.ovo.Naven.events.impl.*;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
-import awa.qwq.ovo.Naven.utils.MoveUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
 
@@ -18,43 +17,19 @@ public class KeepSprint extends Module {
             .build()
             .getModeValue();
 
-    private int sprintTickCounter = 0;
-    private boolean shouldAttack = false;
-
     @EventTarget
     public void onAttackSlowdown(EventAttackSlowdown e) {
-        if (mode.isCurrentMode("Vanilla") || mode.isCurrentMode("Grim")) {
+        if (mode.isCurrentMode("Vanilla")) {
             e.setCancelled(true);
         } else if (mode.isCurrentMode("Prediction")) {
             if (e.getType() == EventAttackSlowdown.Type.Sprinting) {
                 e.setCancelled(true);
             }
-        }
-    }
-
-    @EventTarget
-    public void onSprint(EventSprint event) {
-        if (!isEnabled()) return;
-
-        if (mode.isCurrentMode("Grim")) {
-            sprintTickCounter++;
-            if (mc.player != null) {
-                if (sprintTickCounter % 2 == 0) {
-                    mc.player.setSprinting(false);
-                    shouldAttack = true;
-                } else {
-                    mc.player.setSprinting(true);
-                    shouldAttack = false;
-                }
-            }
-        }
-    }
-
-    @EventTarget
-    public void onAttack(EventAttack event) {
-        if (mode.isCurrentMode("Grim")) {
-            if (!shouldAttack) {
-                event.setCancelled(true);
+        } else if (mode.isCurrentMode("Grim")) {
+            if (e.getType() == EventAttackSlowdown.Type.Sprinting) {
+                e.setCancelled(true);
+            } else if (e.getType() == EventAttackSlowdown.Type.Delta_Movement && mc.player.tickCount % 2 == 0) {
+                e.setCancelled(true);
             }
         }
     }

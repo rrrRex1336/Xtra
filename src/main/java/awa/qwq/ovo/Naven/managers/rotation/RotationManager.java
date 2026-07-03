@@ -65,6 +65,7 @@ public class RotationManager {
          ChestAura chestAura = (ChestAura) Naven.getInstance().getModuleManager().getModule(ChestAura.class);
          Surround surround = (Surround) Naven.getInstance().getModuleManager().getModule(Surround.class);
          AutoThrow autoThrow = (AutoThrow) Naven.getInstance().getModuleManager().getModule(AutoThrow.class);
+         Velocity velocity = (Velocity) Naven.getInstance().getModuleManager().getModule(Velocity.class);
 
          active = true;
          boolean killAuraTargeting = isKillAuraTargeting(killAura);
@@ -101,6 +102,9 @@ public class RotationManager {
             setRotations(new Vector2f(surround.rots.x, surround.rots.y));
          } else if (scaffold.isEnabled() && scaffold.rots != null) {
             setRotations(new Vector2f(scaffold.rots.x, scaffold.rots.y));
+         } else if (velocity != null && velocity.shouldApplyRotation()) {
+            setRotations(velocity.getVelocityRotation());
+            active = true;
          } else if (bedAuraYieldingToCombat && killAuraReady) {
             applyKillAuraRotation(killAura, autoThrow);
          } else if (bedAuraYieldingToCombat && auraReady) {

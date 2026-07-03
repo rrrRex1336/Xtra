@@ -17,17 +17,17 @@ import awa.qwq.ovo.Naven.utils.MoveUtils;
 public class Sprint extends Module {
     @EventTarget(0)
     public void onMotion(EventMotion e) {
+        if (e.getType() != EventType.PRE) {
+            return;
+        }
 
-        if (e.getType() == EventType.PRE || MoveUtils.isMoving()) {
-            mc.options.keySprint.setDown(true);
-            mc.options.toggleSprint().set(false);
-            if (InventoryMove.shouldStopSprintForSprintModule() || InventoryManager.shouldStopSprintForSprintModule()) {
-                mc.options.keySprint.setDown(false);
-                if (mc.player != null && mc.player.isSprinting()) {
-                    mc.player.setSprinting(false);
-                    mc.options.keySprint.setDown(false);
-                }
-            }
+        boolean shouldSprint = MoveUtils.isMoving()
+                && !InventoryMove.shouldStopSprintForSprintModule()
+                && !InventoryManager.shouldStopSprintForSprintModule();
+        mc.options.keySprint.setDown(shouldSprint);
+        mc.options.toggleSprint().set(false);
+        if (!shouldSprint && mc.player != null && mc.player.isSprinting()) {
+            mc.player.setSprinting(false);
         }
     }
 

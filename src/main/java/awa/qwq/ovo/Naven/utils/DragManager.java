@@ -1,10 +1,16 @@
 package awa.qwq.ovo.Naven.utils;
 
 import awa.qwq.ovo.Naven.Naven;
+import awa.qwq.ovo.Naven.ui.AkarinClickGUI;
+import awa.qwq.ovo.Naven.ui.ClickGUI;
 import awa.qwq.ovo.Naven.values.HasValue;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.OptionsScreen;
+import net.minecraft.client.gui.screens.OptionsSubScreen;
+import net.minecraft.client.gui.screens.Screen;
 import org.lwjgl.glfw.GLFW;
 
 public class DragManager {
@@ -72,6 +78,10 @@ public class DragManager {
         return baseY + this.yOffset.getCurrentValue();
     }
 
+    public static boolean isHudEditorActive() {
+        return canDrag();
+    }
+
     private void releaseIfNeeded(boolean mouseDown) {
         if (activeDrag == this && !mouseDown) {
             activeDrag = null;
@@ -82,12 +92,23 @@ public class DragManager {
     }
 
     private static boolean canDrag() {
-        return mc.player != null
-                && mc.level != null
-                && mc.screen != null
-                && !mc.screen.isPauseScreen()
-                && mc.mouseHandler != null
-                && mc.getWindow() != null;
+        if (mc.player == null
+                || mc.level == null
+                || mc.screen == null
+                || mc.mouseHandler == null
+                || mc.getWindow() == null) {
+            return false;
+        }
+
+        Screen screen = mc.screen;
+        if (screen instanceof OptionsScreen || screen instanceof OptionsSubScreen) {
+            return false;
+        }
+
+        return screen instanceof ChatScreen
+                || screen instanceof ClickGUI
+                || screen instanceof AkarinClickGUI
+                || !screen.isPauseScreen();
     }
 
     private static boolean isLeftMouseDown() {
