@@ -55,6 +55,10 @@ public class TargetHUD extends Module {
         setSuffix(this.mode.getCurrentMode());
 
         LivingEntity living = getDisplayTarget();
+        if (living == null && DragManager.isHudEditorActive() && mc.player != null) {
+            living = mc.player;
+        }
+
         if (living == null || !this.mode.isCurrentMode("Naven")) {
             return;
         }
