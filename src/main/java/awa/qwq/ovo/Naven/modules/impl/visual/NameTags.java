@@ -1,6 +1,7 @@
 package awa.qwq.ovo.Naven.modules.impl.visual;
 
 import awa.qwq.ovo.Naven.Naven;
+import awa.qwq.ovo.Naven.chat.IrcClient;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventMotion;
@@ -252,7 +253,7 @@ public class NameTags extends Module {
                text = text + "§cAiming§f | ";
             }
 
-            text = text + living.getName().getString();
+            text = text + this.formatPlayerName(living);
             text = text + "§f | §c" + Math.round(hp) + (living.getAbsorptionAmount() > 0.0F ? "+" + Math.round(living.getAbsorptionAmount()) : "") + "HP";
             float scale = this.scale.getCurrentValue();
             float width = Fonts.harmony.getWidth(text, (double)scale);
@@ -343,10 +344,10 @@ public class NameTags extends Module {
 
             // 添加杀手检测
             String playerName = living.getName().getString();
-            if (KillerDetection.getDetectedKillers().contains(playerName)) {
+            if (!IrcClient.isIrcUser(playerName) && KillerDetection.getDetectedKillers().contains(playerName)) {
                text = text + "§c" + playerName + " (Killer)§f";
             } else {
-               text = text + playerName;
+               text = text + this.formatPlayerName(living);
             }
 
             text = text + " | §c" + Math.round(hp) + (living.getAbsorptionAmount() > 0.0F ? "+" + Math.round(living.getAbsorptionAmount()) : "") + "HP";
@@ -427,6 +428,15 @@ public class NameTags extends Module {
          return displayName.substring(0, pipeIndex).trim();
       }
       return displayName;
+   }
+
+   private String formatPlayerName(Player player) {
+      String playerName = player.getName().getString();
+      String ircName = IrcClient.getIrcName(playerName);
+      if (!ircName.isEmpty()) {
+         return "§b" + playerName + " (" + ircName + ")§f";
+      }
+      return playerName;
    }
 
    private void updatePositions(float renderPartialTicks) {

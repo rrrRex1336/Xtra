@@ -19,7 +19,7 @@ public class WebLoginScreen extends Screen {
     private int tickCount = 0;
 
     public WebLoginScreen(String loginUrl, Screen previousScreen) {
-        super(Component.literal("LinYiLI 网页登录"));
+        super(Component.literal(VerifyClient.CLIENT_DISPLAY_NAME + "-LinYanLi 网页登录"));
         this.loginUrl = loginUrl;
         this.previousScreen = previousScreen;
     }
@@ -69,7 +69,7 @@ public class WebLoginScreen extends Screen {
         int centerY = this.height / 2;
 
         // 标题
-        guiGraphics.drawCenteredString(this.font, "LinYiLI 需要网页登录验证",
+        guiGraphics.drawCenteredString(this.font, VerifyClient.CLIENT_DISPLAY_NAME + " 需要网页登录验证",
                 centerX, centerY - 80, 0xFFFFFF);
 
         // 闪烁的提示文字

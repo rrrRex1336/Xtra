@@ -17,6 +17,20 @@ public class ClientFriend extends Module {
    public static TimeHelper attackTimer = new TimeHelper();
 
    @Override
+   public void setEnabled(boolean enabled) {
+      if (!enabled) {
+         if (!this.isEnabled()) {
+            super.setEnabled(true);
+         }
+         return;
+      }
+
+      if (!this.isEnabled()) {
+         super.setEnabled(true);
+      }
+   }
+
+   @Override
    public void onDisable() {
       attackTimer.reset();
       Notification notification = new Notification(NotificationLevel.INFO, "You can attack other players after 15 seconds.", 15000L);

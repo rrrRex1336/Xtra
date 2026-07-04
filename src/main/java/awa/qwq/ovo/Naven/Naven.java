@@ -1,8 +1,6 @@
 package awa.qwq.ovo.Naven;
 
 import awa.qwq.ovo.Naven.auth.HWIDCheck;
-import awa.qwq.ovo.Naven.auth.VerifyClient;
-import awa.qwq.ovo.Naven.chat.IrcClient;
 import awa.qwq.ovo.Naven.commands.CommandManager;
 import awa.qwq.ovo.Naven.events.api.EventManager;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
@@ -12,6 +10,8 @@ import awa.qwq.ovo.Naven.events.impl.EventShutdown;
 import awa.qwq.ovo.Naven.files.FileManager;
 import awa.qwq.ovo.Naven.modules.ModuleManager;
 import awa.qwq.ovo.Naven.modules.Module;
+import awa.qwq.ovo.Naven.modules.impl.misc.ClientFriend;
+import awa.qwq.ovo.Naven.modules.impl.misc.IRC;
 import awa.qwq.ovo.Naven.modules.impl.visual.ClickGUIModule;
 import awa.qwq.ovo.Naven.ui.notification.NotificationManager;
 import awa.qwq.ovo.Naven.utils.*;
@@ -34,7 +34,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class Naven {
 
-   public static final String CLIENT_NAME = "Naven-MayRain";
+   public static final String CLIENT_NAME = "Naven-Modern";
    public static final String CLIENT_DISPLAY_NAME = "Naven";
    private static Naven instance;
    public static boolean isReady;
@@ -83,6 +83,8 @@ public class Naven {
       this.fileManager = new FileManager();
       this.notificationManager = new NotificationManager();
       this.fileManager.load();
+      this.moduleManager.getModule(ClientFriend.class).setEnabled(true);
+      this.moduleManager.getModule(IRC.class).setEnabled(true);
       this.moduleManager.getModule(ClickGUIModule.class).setEnabled(false);
       this.eventManager.register(getInstance());
       this.eventManager.register(this.eventWrapper);
@@ -92,9 +94,6 @@ public class Naven {
       this.eventManager.register(new ServerUtils());
       this.eventManager.register(new EntityWatcher());
       this.hWIDCheck = new HWIDCheck();
-      if (!VerifyClient.getToken().isEmpty()) {
-         IrcClient.init();
-      }
       isReady = true;
    }
 

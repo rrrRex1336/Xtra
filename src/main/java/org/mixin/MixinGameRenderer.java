@@ -1,6 +1,7 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
+import awa.qwq.ovo.Naven.chat.IrcClient;
 import awa.qwq.ovo.Naven.events.impl.EventRender;
 import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventRenderAfterWorld;
@@ -14,7 +15,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.RenderBuffers;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -37,6 +43,16 @@ public class MixinGameRenderer {
    @Inject(method = {"pick"}, at = {@At("TAIL")})
    private void updateSpearPick(float partialTicks, CallbackInfo ci) {
       SpearLogic.updateClientPick(this.minecraft, partialTicks);
+      if (this.minecraft.player == null) {
+         return;
+      }
+
+      if (this.minecraft.hitResult instanceof EntityHitResult entityHitResult && IrcClient.isIrcPlayer(entityHitResult.getEntity())) {
+         Vec3 eye = this.minecraft.player.getEyePosition(partialTicks);
+         Vec3 view = this.minecraft.player.getViewVector(partialTicks);
+         this.minecraft.crosshairPickEntity = null;
+         this.minecraft.hitResult = BlockHitResult.miss(eye, Direction.getNearest(view.x, view.y, view.z), BlockPos.containing(eye));
+      }
    }
 
    @Inject(

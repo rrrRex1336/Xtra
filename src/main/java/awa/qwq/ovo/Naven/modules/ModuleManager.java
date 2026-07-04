@@ -89,6 +89,7 @@ public class ModuleManager {
          new InventoryMove(),
          new Island(),
          new ClientFriend(),
+         new IRC(),
          new Protocol(),
          new ViaVersionFix(),
          new NoJumpDelay(),

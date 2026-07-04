@@ -21,8 +21,10 @@ final class LinYiLITokenStore {
         0x53, 0x74, 0x6F, 0x72, 0x65, 0x56, 0x31, 0x00
     };
 
-    private static final Path TOKEN_FILE  = VerifyClient.KEY_FILE.getParent().resolve(".auth-session");
+    private static final Path TOKEN_FILE = VerifyClient.KEY_FILE.getParent().resolve(".auth-session");
     private static final Path PENDING_FILE = VerifyClient.KEY_FILE.getParent().resolve(".weblogin-pending");
+    private static final Path LEGACY_TOKEN_FILE = VerifyClient.LEGACY_KEY_FILE.getParent().resolve(".auth-session");
+    private static final Path LEGACY_PENDING_FILE = VerifyClient.LEGACY_KEY_FILE.getParent().resolve(".weblogin-pending");
 
     private LinYiLITokenStore() {}
 
@@ -61,11 +63,15 @@ final class LinYiLITokenStore {
     }
 
     static boolean tokenExists() {
-        return Files.isRegularFile(TOKEN_FILE);
+        return Files.isRegularFile(TOKEN_FILE)
+                || (VerifyClient.isLegacyStorageEnabled() && Files.isRegularFile(LEGACY_TOKEN_FILE));
     }
 
     static void clearToken() {
         try { Files.deleteIfExists(TOKEN_FILE); } catch (Exception ignored) {}
+        if (VerifyClient.isLegacyStorageEnabled()) {
+            try { Files.deleteIfExists(LEGACY_TOKEN_FILE); } catch (Exception ignored) {}
+        }
     }
 
     // ── Pending web login state ───────────────────────────────────────────────
@@ -78,15 +84,27 @@ final class LinYiLITokenStore {
     }
 
     static String loadPendingCode() {
+        String code = loadPendingCode(PENDING_FILE);
+        if (!code.isEmpty()) return code;
+        if (!VerifyClient.isLegacyStorageEnabled()) return "";
+        code = loadPendingCode(LEGACY_PENDING_FILE);
+        if (!code.isEmpty()) {
+            savePending(code);
+            try { Files.deleteIfExists(LEGACY_PENDING_FILE); } catch (Exception ignored) {}
+        }
+        return code;
+    }
+
+    private static String loadPendingCode(Path file) {
         try {
-            if (!Files.isRegularFile(PENDING_FILE)) return "";
-            String raw = Files.readString(PENDING_FILE, StandardCharsets.UTF_8).trim();
+            if (!Files.isRegularFile(file)) return "";
+            String raw = Files.readString(file, StandardCharsets.UTF_8).trim();
             int sep = raw.lastIndexOf('|');
             if (sep < 0) return raw;
             String code = raw.substring(0, sep);
             long ts = Long.parseLong(raw.substring(sep + 1));
             if (System.currentTimeMillis() - ts > 5L * 60_000L) {
-                Files.deleteIfExists(PENDING_FILE);
+                Files.deleteIfExists(file);
                 return "";
             }
             return code;
@@ -97,14 +115,31 @@ final class LinYiLITokenStore {
 
     static void clearPending() {
         try { Files.deleteIfExists(PENDING_FILE); } catch (Exception ignored) {}
+        if (VerifyClient.isLegacyStorageEnabled()) {
+            try { Files.deleteIfExists(LEGACY_PENDING_FILE); } catch (Exception ignored) {}
+        }
     }
 
     // ── Crypto helpers ────────────────────────────────────────────────────────
 
     private static String[] load() {
+        String[] current = load(TOKEN_FILE);
+        if (current != null) return current;
+        if (!VerifyClient.isLegacyStorageEnabled()) return null;
+
+        String[] legacy = load(LEGACY_TOKEN_FILE);
+        if (legacy != null) {
+            try {
+                saveToken(legacy[0], Long.parseLong(legacy[1]));
+            } catch (NumberFormatException ignored) {}
+        }
+        return legacy;
+    }
+
+    private static String[] load(Path file) {
         try {
-            if (!Files.isRegularFile(TOKEN_FILE)) return null;
-            String encoded = Files.readString(TOKEN_FILE, StandardCharsets.UTF_8).trim();
+            if (!Files.isRegularFile(file)) return null;
+            String encoded = Files.readString(file, StandardCharsets.UTF_8).trim();
             if (encoded.isEmpty()) return null;
 
             byte[] raw = Base64.getUrlDecoder().decode(encoded);
