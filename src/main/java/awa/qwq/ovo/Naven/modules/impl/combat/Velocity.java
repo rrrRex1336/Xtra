@@ -1023,19 +1023,20 @@ public class Velocity extends Module {
         }
 
         Entity moveTarget = isValidTarget(velocityTarget) ? velocityTarget : attackTarget;
-        if (!isSuspending && attacksRemaining > 0 && isValidTarget(moveTarget)) {
+        boolean hasMoveTarget = isValidTarget(moveTarget);
+        if (!isSuspending && attacksRemaining > 0 && hasMoveTarget) {
             if (reduceAddons.isSelected("Auto sprint") && !mc.player.isSprinting() && MoveUtils.isMoving()) {
                 mc.options.keySprint.setDown(true);
                 mc.options.toggleSprint().set(false);
                 mc.player.setSprinting(true);
             }
+        }
 
-            if (reduceAddons.isSelected("Movement override")) {
-                e.setForward(1.0F);
-                e.setStrafe(0.0F);
-                Vector2f rotations = RotationUtils.getRotations(mc.player.getEyePosition(1.0F), moveTarget.getBoundingBox().getCenter()).toVec2f();
-                MoveUtils.correctionMovement(e, rotations.x);
-            }
+        if (reduceAddons.isSelected("Movement override") && hasMoveTarget && (isSuspending || attacksRemaining > 0)) {
+            e.setForward(1.0F);
+            e.setStrafe(0.0F);
+            Vector2f rotations = RotationUtils.getRotations(mc.player.getEyePosition(1.0F), moveTarget.getBoundingBox().getCenter()).toVec2f();
+            MoveUtils.correctionMovement(e, rotations.x);
         }
     }
 
