@@ -46,6 +46,7 @@
     "MixinPacketThreadUtils",
     "MixinPacketUtils",
     "MixinPlayer",
+    "PlayerTabOverlayAccessor",
     "MixinPlayerTabOverlay",
     "MixinProjectileUtil",
     "MixinScreenEffectRenderer",

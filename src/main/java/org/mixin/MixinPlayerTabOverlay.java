@@ -3,6 +3,7 @@ package org.mixin;
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRenderTabOverlay;
+import awa.qwq.ovo.Naven.ui.Island.TabOverlayState;
 import java.util.List;
 
 import awa.qwq.ovo.Naven.modules.impl.visual.Island;
@@ -56,8 +57,10 @@ public abstract class MixinPlayerTabOverlay {
          Component component = (Component)pText;
          EventRenderTabOverlay event = new EventRenderTabOverlay(EventType.HEADER, component, null);
          Naven.getInstance().getEventManager().call(event);
+         TabOverlayState.setHeader(event.getComponent());
          return instance.split(event.getComponent(), pMaxWidth);
       } catch (Exception e) {
+         TabOverlayState.setHeader((Component)pText);
          return instance.split(pText, pMaxWidth);
       }
    }
@@ -77,8 +80,10 @@ public abstract class MixinPlayerTabOverlay {
          EventRenderTabOverlay event = new EventRenderTabOverlay(EventType.FOOTER, component, null);
 
          Naven.getInstance().getEventManager().call(event);
+         TabOverlayState.setFooter(event.getComponent());
          return instance.split(event.getComponent(), pMaxWidth);
       } catch (Exception e) {
+         TabOverlayState.setFooter((Component)pText);
          return instance.split(pText, pMaxWidth);
       }
    }

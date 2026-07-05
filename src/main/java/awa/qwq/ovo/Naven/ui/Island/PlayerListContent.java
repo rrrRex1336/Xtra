@@ -4,6 +4,7 @@ import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRenderTabOverlay;
 import awa.qwq.ovo.Naven.modules.impl.visual.Island;
+import awa.qwq.ovo.Naven.ui.Island.TabOverlayState;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -20,6 +21,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.PlayerModelPart;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.scores.PlayerTeam;
+import org.mixin.PlayerTabOverlayAccessor;
 
 import java.util.Comparator;
 import java.util.List;
@@ -108,11 +110,8 @@ public class PlayerListContent implements IslandContent {
         }
 
         int playerCount = playerList.size();
-        int rows = Math.min(playerCount, 20);
-        int columns;
-        for (columns = 1; rows > 20; rows = (playerCount + columns - 1) / columns) {
-            ++columns;
-        }
+        int columns = getColumnCount(playerCount);
+        int rows = getRowCount(playerCount, columns);
 
         int maxNameWidth = 0;
         int maxScoreWidth = 0;
@@ -213,21 +212,17 @@ public class PlayerListContent implements IslandContent {
     
     private Component getTabHeader() {
         try {
-            java.lang.reflect.Field field = net.minecraft.client.gui.components.PlayerTabOverlay.class.getDeclaredField("header");
-            field.setAccessible(true);
-            return (Component) field.get(null);
-        } catch (Exception e) {
-            return null;
+            return ((PlayerTabOverlayAccessor) mc.gui.getTabList()).getHeader();
+        } catch (Exception ignored) {
+            return TabOverlayState.getHeader();
         }
     }
     
     private Component getTabFooter() {
         try {
-            java.lang.reflect.Field field = net.minecraft.client.gui.components.PlayerTabOverlay.class.getDeclaredField("footer");
-            field.setAccessible(true);
-            return (Component) field.get(null);
-        } catch (Exception e) {
-            return null;
+            return ((PlayerTabOverlayAccessor) mc.gui.getTabList()).getFooter();
+        } catch (Exception ignored) {
+            return TabOverlayState.getFooter();
         }
     }
     
@@ -255,6 +250,20 @@ public class PlayerListContent implements IslandContent {
     private Component decorateName(PlayerInfo playerInfo, MutableComponent name) {
         return playerInfo.getGameMode() == GameType.SPECTATOR ? 
             name.withStyle(net.minecraft.ChatFormatting.ITALIC) : name;
+    }
+
+    private int getColumnCount(int playerCount) {
+        int columns = 1;
+        int rows = playerCount;
+        while (rows > 20) {
+            columns++;
+            rows = getRowCount(playerCount, columns);
+        }
+        return columns;
+    }
+
+    private int getRowCount(int playerCount, int columns) {
+        return Math.max(1, (playerCount + columns - 1) / columns);
     }
     
 
@@ -285,11 +294,8 @@ public class PlayerListContent implements IslandContent {
         }
         
         int playerCount = playerList.size();
-        int rows = Math.min(playerCount, 20);
-        int columns;
-        for (columns = 1; rows > 20; rows = (playerCount + columns - 1) / columns) {
-            ++columns;
-        }
+        int columns = getColumnCount(playerCount);
+        int rows = getRowCount(playerCount, columns);
         
         int columnWidth = maxNameWidth + maxScoreWidth + avatarWidth + columnPadding;
         int totalWidth = columns * columnWidth + (columns - 1) * 5;
@@ -343,11 +349,8 @@ public class PlayerListContent implements IslandContent {
             height += headerLines.size() * 9 + 2;
         }
         int playerCount = playerList.size();
-        int rows = Math.min(playerCount, 20);
-        int columns;
-        for (columns = 1; rows > 20; rows = (playerCount + columns - 1) / columns) {
-            ++columns;
-        }
+        int columns = getColumnCount(playerCount);
+        int rows = getRowCount(playerCount, columns);
         height += rows * 9;
 
         Component footer = getTabFooter();

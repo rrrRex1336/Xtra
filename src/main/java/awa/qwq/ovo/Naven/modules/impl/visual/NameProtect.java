@@ -21,15 +21,20 @@ public class NameProtect extends Module {
    }
 
    public static String getName(String string) {
-      if (!instance.isEnabled() || mc.player == null) {
+      if (string == null || instance == null || !instance.isEnabled() || mc.player == null) {
          return string;
-      } else {
-         return string.contains(mc.player.getName().getString()) ? StringUtils.replace(string, mc.player.getName().getString(), "§dPlana§7") : string;
       }
+
+      String playerName = mc.player.getName().getString();
+      return string.contains(playerName) ? StringUtils.replace(string, playerName, "\u00a7dPlana\u00a77") : string;
    }
 
    @EventTarget
-   public void onRenderTab(EventRenderTabOverlay e) {
-      e.setComponent(Component.literal(getName(e.getComponent().getString())));
+   public void onRenderTab(EventRenderTabOverlay event) {
+      if (event.getComponent() == null) {
+         return;
+      }
+
+      event.setComponent(Component.literal(getName(event.getComponent().getString())));
    }
 }

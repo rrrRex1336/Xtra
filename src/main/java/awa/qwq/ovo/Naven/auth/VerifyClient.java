@@ -55,29 +55,15 @@ public class VerifyClient {
     public static boolean verify() {
         String hwid = HWIDCheck.getHWID();
 
-        // 1. Try stored .auth-session
+        // 1. Try the local encrypted, HWID-bound .auth-session.
         String token = LinYiLITokenStore.loadToken();
 
-        // 2. No session — try legacy license.key (backward compat, one-time migration)
-        if (token.isEmpty() && Files.isRegularFile(KEY_FILE)) {
-            try {
-                String key = Files.readString(KEY_FILE, StandardCharsets.UTF_8).trim();
-                if (!key.isEmpty()) token = key;
-            } catch (Exception ignored) {}
-        }
-        if (token.isEmpty() && isLegacyStorageEnabled() && Files.isRegularFile(LEGACY_KEY_FILE)) {
-            try {
-                String key = Files.readString(LEGACY_KEY_FILE, StandardCharsets.UTF_8).trim();
-                if (!key.isEmpty()) token = key;
-            } catch (Exception ignored) {}
-        }
-
-        // 3. No token at all — try pending web login or start a new one
+        // 2. No token at all: try pending web login or start a new one.
         if (token.isEmpty()) {
             return handleNoToken(hwid);
         }
 
-        // 4. Verify token with server
+        // 3. Verify token with server.
         return verifyWithServer(token, hwid);
     }
 

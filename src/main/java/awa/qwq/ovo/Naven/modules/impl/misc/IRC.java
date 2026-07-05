@@ -1,5 +1,6 @@
 package awa.qwq.ovo.Naven.modules.impl.misc;
 
+import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.auth.VerifyClient;
 import awa.qwq.ovo.Naven.chat.IrcClient;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
@@ -9,10 +10,8 @@ import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
-import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.ui.notification.Notification;
 import awa.qwq.ovo.Naven.ui.notification.NotificationLevel;
-import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 
 @ModuleInfo(
@@ -28,7 +27,7 @@ public class IRC extends Module {
         if (!enabled) {
             if (this.isEnabled()) {
                 Naven.getInstance().getNotificationManager().addNotification(
-                        new Notification(NotificationLevel.WARNING, "让你关了?", 3000L)
+                        new Notification(NotificationLevel.WARNING, "IRC stays online for IRC friends.", 3000L)
                 );
             } else {
                 super.setEnabled(true);
@@ -78,14 +77,11 @@ public class IRC extends Module {
         }
 
         String playerName = event.getPlayerInfo().getProfile().getName();
-        String ircName = IrcClient.getIrcName(playerName);
-        if (ircName.isEmpty()) {
+        if (!IrcClient.isIrcUser(playerName)) {
             return;
         }
 
-        Component friend = Component.literal("[Friend]").withStyle(ChatFormatting.GREEN);
-        Component name = Component.literal(ircName + " " + playerName).withStyle(ChatFormatting.AQUA);
-        event.setComponent(friend.copy().append(name));
+        event.setComponent(Component.literal(ircStatusPrefix(playerName) + playerName));
     }
 
     private void tryConnect() {
@@ -93,5 +89,17 @@ public class IRC extends Module {
             return;
         }
         IrcClient.init();
+    }
+
+    public static String ircStatusPrefix(String mcName) {
+        if (!IrcClient.isIrcUser(mcName)) {
+            return "";
+        }
+        String ircName = IrcClient.getIrcName(mcName);
+        String client = IrcClient.getIrcClient(mcName);
+        String label = ircName.isEmpty() ? "IRC" : ircName;
+        String clientLabel = client.isEmpty() ? "" : "\u00a7d[" + client + "] ";
+        String friend = IrcClient.isIrcFriendEnabled(mcName) ? "\u00a7a[Friend] " : "";
+        return friend + clientLabel + IrcClient.getIrcColorCode(mcName) + "[" + label + "] \u00a7r";
     }
 }

@@ -253,95 +253,6 @@ public class NameTags extends Module {
                text = text + "§cAiming§f | ";
             }
 
-            text = text + this.formatPlayerName(living);
-            text = text + "§f | §c" + Math.round(hp) + (living.getAbsorptionAmount() > 0.0F ? "+" + Math.round(living.getAbsorptionAmount()) : "") + "HP";
-            float scale = this.scale.getCurrentValue();
-            float width = Fonts.harmony.getWidth(text, (double)scale);
-            float delta = 1.0F - living.getHealth() / living.getMaxHealth();
-            double height = Fonts.harmony.getHeight(true, (double)scale);
-            this.blurMatrices
-               .add(new Vector4f(position.x - width / 2.0F - 2.0F, position.y - 2.0F, position.x + width / 2.0F + 2.0F, (float)((double)position.y + height)));
-            RenderUtils.fill(
-               e.getStack(),
-               position.x - width / 2.0F - 2.0F,
-               position.y - 2.0F,
-               position.x + width / 2.0F + 2.0F,
-               (float)((double)position.y + height),
-               color1
-            );
-            RenderUtils.fill(
-               e.getStack(),
-               position.x - width / 2.0F - 2.0F,
-               position.y - 2.0F,
-               position.x + width / 2.0F + 2.0F - (width + 4.0F) * delta,
-               (float)((double)position.y + height),
-               color2
-            );
-            Fonts.harmony.setAlpha(0.8F);
-            Fonts.harmony.render(e.getStack(), text, (double)(position.x - width / 2.0F), (double)(position.y - 1.0F), Color.WHITE, true, (double)scale);
-            Fonts.harmony.setAlpha(1.0F);
-            e.getStack().popPose();
-         }
-      }
-
-      if (this.shared.getCurrentValue()) {
-         for (NameTags.NameTagData data : this.sharedPositions) {
-            e.getStack().pushPose();
-            Vector2f positionx = data.getRender();
-            String textx = "§aShared§f | " + data.getDisplayName();
-            float scale = this.scale.getCurrentValue();
-            float width = Fonts.harmony.getWidth(textx, (double)scale);
-            double delta = 1.0 - data.getHealth() / data.getMaxHealth();
-            double height = Fonts.harmony.getHeight(true, (double)scale);
-            this.blurMatrices
-               .add(
-                  new Vector4f(positionx.x - width / 2.0F - 2.0F, positionx.y - 2.0F, positionx.x + width / 2.0F + 2.0F, (float)((double)positionx.y + height))
-               );
-            RenderUtils.fill(
-               e.getStack(),
-               positionx.x - width / 2.0F - 2.0F,
-               positionx.y - 2.0F,
-               positionx.x + width / 2.0F + 2.0F,
-               (float)((double)positionx.y + height),
-               color1
-            );
-            RenderUtils.fill(
-               e.getStack(),
-               positionx.x - width / 2.0F - 2.0F,
-               positionx.y - 2.0F,
-               (float)((double)(positionx.x + width / 2.0F + 2.0F) - (double)(width + 4.0F) * delta),
-               (float)((double)positionx.y + height),
-               color2
-            );
-            Fonts.harmony.setAlpha(0.8F);
-            Fonts.harmony.render(e.getStack(), textx, (double)(positionx.x - width / 2.0F), (double)(positionx.y - 1.0F), Color.WHITE, true, (double)scale);
-            Fonts.harmony.setAlpha(1.0F);
-            e.getStack().popPose();
-         }
-      }
-      for (Entry<Entity, Vector2f> entry : this.entityPositions.entrySet()) {
-         if (entry.getKey() != mc.player && entry.getKey() instanceof Player) {
-            Player living = (Player)entry.getKey();
-            e.getStack().pushPose();
-            float hp = living.getHealth();
-            if (hp > 20.0F) {
-               living.setHealth(20.0F);
-            }
-
-            Vector2f position = entry.getValue();
-            String text = "";
-            if (Teams.isSameTeam(living)) {
-               text = text + "§aTeam§f | ";
-            }
-
-            if (FriendManager.isFriend(living)) {
-               text = text + "§aFriend§f | ";
-            }
-
-            if (this.aimingPlayer == living) {
-               text = text + "§cAiming§f | ";
-            }
-
             // 添加杀手检测
             String playerName = living.getName().getString();
             if (!IrcClient.isIrcUser(playerName) && KillerDetection.getDetectedKillers().contains(playerName)) {
@@ -432,9 +343,8 @@ public class NameTags extends Module {
 
    private String formatPlayerName(Player player) {
       String playerName = player.getName().getString();
-      String ircName = IrcClient.getIrcName(playerName);
-      if (!ircName.isEmpty()) {
-         return "§b" + playerName + " (" + ircName + ")§f";
+      if (IrcClient.isIrcUser(playerName)) {
+         return awa.qwq.ovo.Naven.modules.impl.misc.IRC.ircStatusPrefix(playerName) + playerName + "\u00a7f";
       }
       return playerName;
    }

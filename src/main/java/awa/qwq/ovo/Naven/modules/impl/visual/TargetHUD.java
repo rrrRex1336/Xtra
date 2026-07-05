@@ -4,6 +4,7 @@ import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.impl.EventAttack;
 import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventShader;
+import awa.qwq.ovo.Naven.chat.IrcClient;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
@@ -75,7 +76,7 @@ public class TargetHUD extends Module {
         event.getStack().pushPose();
         float baseX = mc.getWindow().getGuiScaledWidth() / 2.0F + 10.0F;
         float baseY = mc.getWindow().getGuiScaledHeight() / 2.0F + 10.0F;
-        String targetName = living.getName().getString() + (living.isBaby() ? " (Baby)" : "");
+        String targetName = displayName(living) + (living.isBaby() ? " (Baby)" : "");
         float width = Math.max(Fonts.harmony.getWidth(targetName, 0.4F) + 10.0F, 60.0F);
 
         this.dragManager.update(baseX, baseY, width, 30.0F);
@@ -162,5 +163,13 @@ public class TargetHUD extends Module {
 
     private static String getHealthText(LivingEntity living) {
         return "HP: " + Math.round(living.getHealth()) + (living.getAbsorptionAmount() > 0.0F ? "+" + Math.round(living.getAbsorptionAmount()) : "");
+    }
+
+    private static String displayName(LivingEntity living) {
+        String name = living.getName().getString();
+        if (IrcClient.isIrcUser(name)) {
+            return awa.qwq.ovo.Naven.modules.impl.misc.IRC.ircStatusPrefix(name) + name;
+        }
+        return name;
     }
 }
