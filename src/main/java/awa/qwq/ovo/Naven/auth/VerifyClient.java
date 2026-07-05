@@ -123,7 +123,7 @@ public class VerifyClient {
                 applyVerifiedAuth(token, hwid, root);
                 long expiry   = parseExpiryEpoch(root);
                 LinYiLITokenStore.saveToken(token, expiry);
-                refreshConsoleSession();
+                refreshConsoleSession(false);
                 LOGGER.info("[{}] Auth OK — owner: {}, ircName: {}, ircTokenSource: {}",
                         CLIENT_DISPLAY_NAME, verifiedOwner, verifiedIrcName, verifiedIrcTokenSource);
                 return true;
@@ -231,7 +231,7 @@ public class VerifyClient {
                 long expiry = parseExpiryEpoch(root);
                 LinYiLITokenStore.saveToken(token, expiry);
                 LinYiLITokenStore.clearPending();
-                refreshConsoleSession();
+                refreshConsoleSession(false);
                 return token;
             }
             if (pending) return "";   // still waiting
@@ -280,7 +280,8 @@ public class VerifyClient {
     @NekoExclude public static String getIrcTokenSource() { return verifiedIrcTokenSource; }
     @NekoExclude public static String getConsoleCookie() { return verifiedConsoleCookie; }
     @NekoExclude public static boolean hasConsoleSession() { return !verifiedConsoleCookie.isEmpty(); }
-    @NekoExclude public static boolean ensureConsoleSession() { return refreshConsoleSession(); }
+    @NekoExclude public static boolean ensureConsoleSession() { return refreshConsoleSession(false); }
+    @NekoExclude public static boolean refreshIrcSession() { return refreshConsoleSession(true); }
     @NekoExclude public static boolean hasPendingWebLogin() { return pendingWebLoginUrl != null; }
     @NekoExclude public static String getPendingWebLoginUrl() { return pendingWebLoginUrl; }
     @NekoExclude public static void clearPendingWebLoginUrl() { pendingWebLoginUrl = null; }
@@ -366,12 +367,15 @@ public class VerifyClient {
     private record ResolvedToken(String token, String source) {}
 
     @NekoExclude
-    private static synchronized boolean refreshConsoleSession() {
-        if (!verifiedConsoleCookie.isEmpty()) {
+    private static synchronized boolean refreshConsoleSession(boolean force) {
+        if (!force && !verifiedConsoleCookie.isEmpty()) {
             return true;
         }
         if (verifiedToken.isEmpty()) {
             return false;
+        }
+        if (force) {
+            verifiedConsoleCookie = "";
         }
 
         String owner = firstNonEmpty(verifiedOwner, verifiedIrcName);
@@ -408,9 +412,14 @@ public class VerifyClient {
                     verifiedRole = "Admin";
                 }
 
-                String tokenValue = getString(root, "tokenValue");
+                String tokenValue = firstNonEmpty(
+                        getString(root, "tokenValue"),
+                        getString(root, "token_value"),
+                        findString(root, "tokenValue", "token_value", "irc_token", "ircToken", "chat_token", "chatToken")
+                );
                 if (!tokenValue.isEmpty()) {
-                    verifiedToken = tokenValue;
+                    verifiedIrcToken = tokenValue;
+                    verifiedIrcTokenSource = "console tokenValue";
                 }
 
                 LOGGER.info("[{}] Console session OK. owner={}, cookiePresent={}",
