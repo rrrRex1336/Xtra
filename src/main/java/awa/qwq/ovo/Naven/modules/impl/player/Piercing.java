@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.modules.impl.player;
 
 import awa.qwq.ovo.Naven.events.api.EventTarget;
-import awa.qwq.ovo.Naven.events.api.types.EventType;
+import awa.qwq.ovo.Naven.events.api.types.Priority;
 import awa.qwq.ovo.Naven.events.impl.*;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
@@ -14,8 +14,6 @@ import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundInteractPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.ArmorStand;
@@ -26,6 +24,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.awt.*;
@@ -63,39 +62,40 @@ public class Piercing extends Module {
             .build()
             .getBooleanValue();
 
-    private final BooleanValue namedEntities = ValueBuilder.create(this, "Named Entities")
-            .setDefaultBooleanValue(true)
-            .build()
-            .getBooleanValue();
-
     private final Minecraft mc = Minecraft.getInstance();
-    private final TickTimeHelper timer = new TickTimeHelper();
     private final List<RenderInfo> renderList = new CopyOnWriteArrayList<>();
     private boolean lastKeyUseState = false;
 
-    @EventTarget
-    public void onMotion(EventMotion event) {
-        if (event.getType() != EventType.PRE) {
-            return;
-        }
-
-        if (this.mc.player == null || this.mc.level == null) {
+    @EventTarget(Priority.LOWEST)
+    public void onClick(EventClick event) {
+        if (this.mc.options == null) {
             return;
         }
 
         boolean currentKeyUse = this.mc.options.keyUse.isDown();
 
+        if (this.mc.player == null || this.mc.level == null || this.mc.gameMode == null || this.mc.screen != null) {
+            this.lastKeyUseState = currentKeyUse;
+            return;
+        }
+
+        if (event.isCancelled()) {
+            this.lastKeyUseState = currentKeyUse;
+            return;
+        }
+
         if (currentKeyUse && !this.lastKeyUseState) {
-            double range = 0;
-            if (this.mc.gameMode != null) {
-                range = this.mc.gameMode.getPickRange();
-            }
+            double range = this.mc.gameMode.getPickRange();
             Vec3 eyePos = this.mc.player.getEyePosition(1.0f);
             Vec3 lookVec = this.mc.player.getLookAngle();
             Vec3 reachEnd = eyePos.add(lookVec.scale(range));
 
-            this.findAndInteractWithTarget(eyePos, reachEnd);
+            if (this.findAndInteractWithTarget(eyePos, reachEnd)) {
+                event.setCancelled(true);
+            }
         }
+
+        this.lastKeyUseState = currentKeyUse;
     }
 
     @EventTarget
@@ -174,8 +174,9 @@ public class Piercing extends Module {
         return new Vec3(x, y + (entity.getBbHeight() / 2.0f), z);
     }
 
-    private void findAndInteractWithTarget(Vec3 eyePos, Vec3 reachEnd) {
+    private boolean findAndInteractWithTarget(Vec3 eyePos, Vec3 reachEnd) {
         Entity closestEntity = null;
+        Vec3 closestEntityHit = null;
         BlockHitResult closestBlockHit = null;
         double closestDistSq = Double.MAX_VALUE;
         for (Entity entity : this.mc.level.getEntities(this.mc.player,
@@ -190,6 +191,7 @@ public class Piercing extends Module {
 
             closestDistSq = distSq;
             closestEntity = entity;
+            closestEntityHit = this.getStableEntityHit(entity);
             closestBlockHit = null;
         }
 
@@ -209,17 +211,20 @@ public class Piercing extends Module {
             if (!(distSq < closestDistSq)) continue;
 
             closestDistSq = distSq;
-            closestBlockHit = new BlockHitResult(hitOpt.get(), Direction.UP, be.getBlockPos(), false);
+            closestBlockHit = this.getStableBlockHit(be.getBlockPos(), box, hitOpt.get(), eyePos);
             closestEntity = null;
+            closestEntityHit = null;
         }
 
         if (closestEntity != null) {
-            this.interactWithEntity(closestEntity);
-            this.timer.reset();
+            this.interactWithEntity(closestEntity, closestEntityHit);
+            return true;
         } else if (closestBlockHit != null) {
             this.interactWithBlock(closestBlockHit);
-            this.timer.reset();
+            return true;
         }
+
+        return false;
     }
 
     private boolean isTargetContainer(BlockPos pos, BlockState state) {
@@ -275,6 +280,48 @@ public class Piercing extends Module {
         return new AABB(be.getBlockPos());
     }
 
+    private Vec3 getStableEntityHit(Entity entity) {
+        return new Vec3(entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ());
+    }
+
+    private BlockHitResult getStableBlockHit(BlockPos pos, AABB box, Vec3 hitPos, Vec3 eyePos) {
+        Direction face = this.getHitFace(box, hitPos, eyePos);
+        Vec3 stableHit = switch (face) {
+            case DOWN -> new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+            case UP -> new Vec3(pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5);
+            case NORTH -> new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ());
+            case SOUTH -> new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 1.0);
+            case WEST -> new Vec3(pos.getX(), pos.getY() + 0.5, pos.getZ() + 0.5);
+            case EAST -> new Vec3(pos.getX() + 1.0, pos.getY() + 0.5, pos.getZ() + 0.5);
+        };
+
+        return new BlockHitResult(stableHit, face, pos, false);
+    }
+
+    private Direction getHitFace(AABB box, Vec3 hitPos, Vec3 eyePos) {
+        double west = Math.abs(hitPos.x - box.minX);
+        double east = Math.abs(hitPos.x - box.maxX);
+        double down = Math.abs(hitPos.y - box.minY);
+        double up = Math.abs(hitPos.y - box.maxY);
+        double north = Math.abs(hitPos.z - box.minZ);
+        double south = Math.abs(hitPos.z - box.maxZ);
+
+        double min = Math.min(Math.min(Math.min(west, east), Math.min(down, up)), Math.min(north, south));
+        if (min == west) return Direction.WEST;
+        if (min == east) return Direction.EAST;
+        if (min == down) return Direction.DOWN;
+        if (min == up) return Direction.UP;
+        if (min == north) return Direction.NORTH;
+        if (min == south) return Direction.SOUTH;
+
+        if (eyePos.y < box.minY) return Direction.DOWN;
+        if (eyePos.y > box.maxY) return Direction.UP;
+        if (eyePos.x < box.minX) return Direction.WEST;
+        if (eyePos.x > box.maxX) return Direction.EAST;
+        if (eyePos.z < box.minZ) return Direction.NORTH;
+        return Direction.SOUTH;
+    }
+
     private boolean isTargetEntity(Entity entity) {
         List<String> selected = this.entitySelect.getSelectedValues();
 
@@ -284,7 +331,7 @@ public class Piercing extends Module {
         if (selected.contains("Armor Stand") && entity instanceof ArmorStand) {
             return true;
         }
-        if (selected.contains("Named Entity") && this.namedEntities.getCurrentValue() && entity.hasCustomName()) {
+        if (selected.contains("Named Entity") && entity.hasCustomName()) {
             String name = entity.getCustomName().getString().toUpperCase();
             return name.contains("SHOP") || name.contains("CLICK") ||
                     name.contains("UPGRADES") || name.contains("QUEST");
@@ -292,9 +339,15 @@ public class Piercing extends Module {
         return false;
     }
 
-    private void interactWithEntity(Entity entity) {
+    private void interactWithEntity(Entity entity, Vec3 hitPos) {
+        if (this.mc.gameMode == null || this.mc.player == null || hitPos == null) {
+            return;
+        }
+
+        EntityHitResult hitResult = new EntityHitResult(entity, hitPos);
+        this.mc.gameMode.interactAt(this.mc.player, entity, hitResult, InteractionHand.MAIN_HAND);
         this.mc.gameMode.interact(this.mc.player, entity, InteractionHand.MAIN_HAND);
-        ChatUtils.addChatMessage("Send Interact Packet");
+        ChatUtils.addChatMessage("Send InteractAt + Interact Packet");
         this.mc.player.swing(InteractionHand.MAIN_HAND);
     }
 
