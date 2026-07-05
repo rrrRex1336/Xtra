@@ -157,18 +157,25 @@ public final class IrcClient {
 
       Thread t = new Thread(() -> {
          try {
-            JsonObject body = new JsonObject();
-            body.addProperty("token", token);
-            body.addProperty("hwid", VerifyClient.getHwid());
-            body.addProperty("client", SERVER_CLIENT_ID);
-            body.addProperty("name", displayName);
-            body.addProperty("message", message);
-
-            HttpResponse response = post(BASE + "/send", body.toString());
+            HttpResponse response = sendPayload(token, displayName, message);
             if (response.code() != 201) {
                String reason = extractReason(response.body());
                if (isTokenMissingReason(reason)) {
                   chatPollAvailable = false;
+                  if (refreshIrcSessionForRetry(token)) {
+                     String refreshedToken = ircToken();
+                     response = sendPayload(refreshedToken, displayName, message);
+                     if (response.code() == 201) {
+                        chatPollAvailable = true;
+                        LOGGER.info("[IRC] Send succeeded after IRC token refresh. oldToken={}, newTokenSource={}, newToken={}",
+                                tokenFingerprint(token), VerifyClient.getIrcTokenSource(), tokenFingerprint(refreshedToken));
+                        return;
+                     }
+                     reason = extractReason(response.body());
+                     if (isTokenMissingReason(reason)) {
+                        chatPollAvailable = false;
+                     }
+                  }
                }
                addChat("\u00a7b[IRC] Send failed (HTTP " + response.code() + (reason.isEmpty() ? "" : ": " + reason) + ")");
                pendingEchos.remove(echoKey);
@@ -184,6 +191,29 @@ public final class IrcClient {
       }, DISPLAY_CLIENT_ID + "-IRC-Send");
       t.setDaemon(true);
       t.start();
+   }
+
+   private static HttpResponse sendPayload(String token, String displayName, String message) throws Exception {
+      JsonObject body = new JsonObject();
+      body.addProperty("token", token);
+      body.addProperty("hwid", VerifyClient.getHwid());
+      body.addProperty("client", SERVER_CLIENT_ID);
+      body.addProperty("name", displayName);
+      body.addProperty("message", message);
+      return post(BASE + "/send", body.toString());
+   }
+
+   private static boolean refreshIrcSessionForRetry(String oldToken) {
+      try {
+         if (!VerifyClient.refreshIrcSession()) {
+            return false;
+         }
+         String refreshedToken = ircToken();
+         return !refreshedToken.isEmpty() && !refreshedToken.equals(oldToken);
+      } catch (Exception e) {
+         LOGGER.warn("[IRC] Failed to refresh IRC session after token rejection: {}", e.getMessage());
+         return false;
+      }
    }
 
    public static boolean isAdmin() {
