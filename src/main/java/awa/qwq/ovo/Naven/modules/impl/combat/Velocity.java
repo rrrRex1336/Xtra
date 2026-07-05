@@ -59,6 +59,7 @@ public class Velocity extends Module {
     public static final int mainColor = new Color(150, 45, 45, 255).getRGB();
     private static final float PROGRESS_WIDTH = 100.0F;
     private static final float PROGRESS_HEIGHT = 5.0F;
+    private static final float PROGRESS_PLAYER_RANGE = 5.0F;
 
     public final ModeValue mode = ValueBuilder.create(this, "Mode")
             .setDefaultModeIndex(0)
@@ -163,6 +164,8 @@ public class Velocity extends Module {
     private final FloatValue progressXOffset = DragManager.createHiddenPositionValue(this, "Progress Drag X", 0.0F);
     private final FloatValue progressYOffset = DragManager.createHiddenPositionValue(this, "Progress Drag Y", 0.0F);
     private final DragManager progressDragManager = new DragManager(this.progressXOffset, this.progressYOffset);
+    private final SmoothAnimationTimer progressAnimation = new SmoothAnimationTimer(0.0F, 0.0F, 0.45F);
+    private final SmoothAnimationTimer progressAlpha = new SmoothAnimationTimer(1.0F, 0.0F, 0.35F);
 
     private final Queue<Packet<?>> packetQueue = new ConcurrentLinkedQueue<>();
     private final Queue<Packet<?>> movePacketQueue = new ConcurrentLinkedQueue<>();
@@ -1043,22 +1046,51 @@ public class Velocity extends Module {
     @EventTarget
     public void onRender2D(EventRender2D e) {
         if (!isBufferMode()) return;
-        boolean preview = !isSuspending && DragManager.isHudEditorActive();
-        if (!isSuspending && !preview) return;
+        boolean preview = DragManager.isHudEditorActive();
+        boolean shouldShow = preview || isSuspending || hasNearbyPlayerForProgress();
+
+        this.progressAlpha.update(shouldShow);
+        this.progressAnimation.target = isSuspending
+                ? Math.min(100.0F, suspendTicks / 20.0F * 100.0F)
+                : 0.0F;
+        this.progressAnimation.update(true);
+
+        float alpha = this.progressAlpha.value;
+        if (alpha <= 0.01F && this.progressAnimation.value <= 0.01F && !preview) return;
+
         CustomTextRenderer font = Fonts.misans;
         float baseX = mc.getWindow().getGuiScaledWidth() / 2.0F - PROGRESS_WIDTH / 2.0F;
         float baseY = mc.getWindow().getGuiScaledHeight() / 2.0F + 15.0F;
         int ticks = preview ? 20 : suspendTicks;
-        String text = preview ? "Velocity Progress" : "Delaying SPacket Ticks : " + ticks;
+        String text = isSuspending ? "Delaying SPacket Ticks : " + ticks : "Velocity Progress";
         double textWidth = font.getWidth(text, true, 0.65);
         float dragWidth = Math.max(PROGRESS_WIDTH, (float) textWidth);
         this.progressDragManager.update(baseX, baseY - 12.0F, dragWidth, 17.0F);
         float x = this.progressDragManager.getX(baseX);
         float y = this.progressDragManager.getY(baseY);
+        font.setAlpha(alpha);
         font.drawString(e.getStack(), text, x + PROGRESS_WIDTH / 2.0F - textWidth / 2.0F, y - 12.0F,
                 new Color(255, 255, 255, 255), true, 0.65);
-        RenderUtils.drawRoundedRect(e.getStack(), x, y, PROGRESS_WIDTH, PROGRESS_HEIGHT, 2f, Integer.MIN_VALUE);
-        RenderUtils.drawRoundedRect(e.getStack(), x, y, Math.min(PROGRESS_WIDTH, ticks / 40f * PROGRESS_WIDTH), PROGRESS_HEIGHT, 2f, mainColor);
+        font.setAlpha(1.0F);
+        RenderUtils.drawRoundedRect(e.getStack(), x, y, PROGRESS_WIDTH, PROGRESS_HEIGHT, 2f, alphaColor(0x80000000, alpha));
+        RenderUtils.drawRoundedRect(e.getStack(), x, y, Math.min(PROGRESS_WIDTH, this.progressAnimation.value / 100.0F * PROGRESS_WIDTH), PROGRESS_HEIGHT, 2f, alphaColor(mainColor, alpha));
+    }
+
+    private boolean hasNearbyPlayerForProgress() {
+        if (mc.player == null || mc.level == null) return false;
+        double rangeSq = PROGRESS_PLAYER_RANGE * PROGRESS_PLAYER_RANGE;
+        for (Entity entity : mc.level.entitiesForRendering()) {
+            if (!(entity instanceof Player player) || player == mc.player) continue;
+            if (!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+            if (mc.player.distanceToSqr(player) <= rangeSq) return true;
+        }
+        return false;
+    }
+
+    private int alphaColor(int color, float alpha) {
+        float clampedAlpha = Math.max(0.0F, Math.min(1.0F, alpha));
+        int baseAlpha = color >>> 24;
+        return (color & 0x00FFFFFF) | (Math.round(baseAlpha * clampedAlpha) << 24);
     }
 
     @EventTarget
@@ -1122,6 +1154,9 @@ public class Velocity extends Module {
         jump = false;
         suspendTicks = 0;
         rotateActive = false;
+        progressAnimation.value = 0.0F;
+        progressAnimation.target = 0.0F;
+        progressAlpha.value = 0.0F;
         resetInteractBlock();
     }
 
