@@ -412,14 +412,21 @@ public class VerifyClient {
                     verifiedRole = "Admin";
                 }
 
-                String tokenValue = firstNonEmpty(
-                        getString(root, "tokenValue"),
-                        getString(root, "token_value"),
-                        findString(root, "tokenValue", "token_value", "irc_token", "ircToken", "chat_token", "chatToken")
+                // Only update the IRC token from explicit IRC-named fields.
+                // "tokenValue" is a display-only license key for the web console UI
+                // and must NOT be used as an IRC token — it may be in a different
+                // format and will be rejected by /chat/poll and /chat/send.
+                String consoleIrcToken = firstNonEmpty(
+                        getString(root, "irc_token"),
+                        getString(root, "ircToken"),
+                        getString(root, "chat_token"),
+                        getString(root, "chatToken"),
+                        getString(root, "irc_session"),
+                        getString(root, "ircSession")
                 );
-                if (!tokenValue.isEmpty()) {
-                    verifiedIrcToken = tokenValue;
-                    verifiedIrcTokenSource = "console tokenValue";
+                if (!consoleIrcToken.isEmpty()) {
+                    verifiedIrcToken = consoleIrcToken;
+                    verifiedIrcTokenSource = "console ircToken";
                 }
 
                 LOGGER.info("[{}] Console session OK. owner={}, cookiePresent={}",
