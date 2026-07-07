@@ -30,6 +30,7 @@ public class Mesh {
    private double cameraX;
    private double cameraZ;
    private boolean beganRendering;
+   private boolean modelViewPushed;
 
    public Mesh(DrawMode drawMode, Mesh.Attrib... attributes) {
       int stride = 0;
@@ -181,15 +182,20 @@ public class Mesh {
       GL.enableBlend();
       GL.disableCull();
       GL.enableLineSmooth();
-      if (this.rendering3D) {
+      if (matrices != null || this.rendering3D) {
          PoseStack matrixStack = RenderSystem.getModelViewStack();
          matrixStack.pushPose();
          if (matrices != null) {
             matrixStack.mulPoseMatrix(matrices.last().pose());
          }
 
-         Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
-         matrixStack.translate(0.0, -cameraPos.y, 0.0);
+         if (this.rendering3D) {
+            Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
+            matrixStack.translate(0.0, -cameraPos.y, 0.0);
+         }
+
+         RenderSystem.applyModelViewMatrix();
+         this.modelViewPushed = true;
       }
 
       this.beganRendering = true;
@@ -218,8 +224,10 @@ public class Mesh {
    }
 
    public void endRender() {
-      if (this.rendering3D) {
+      if (this.modelViewPushed) {
          RenderSystem.getModelViewStack().popPose();
+         RenderSystem.applyModelViewMatrix();
+         this.modelViewPushed = false;
       }
 
       if (this.depthTest) {

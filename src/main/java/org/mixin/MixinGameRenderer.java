@@ -1,7 +1,7 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.chat.IrcClient;
+import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.events.impl.EventRender;
 import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventRenderAfterWorld;
@@ -47,7 +47,7 @@ public class MixinGameRenderer {
          return;
       }
 
-      if (this.minecraft.hitResult instanceof EntityHitResult entityHitResult && IrcClient.isIrcPlayer(entityHitResult.getEntity())) {
+      if (this.minecraft.hitResult instanceof EntityHitResult entityHitResult && ChatClient.isIrcPlayer(entityHitResult.getEntity())) {
          Vec3 eye = this.minecraft.player.getEyePosition(partialTicks);
          Vec3 view = this.minecraft.player.getViewVector(partialTicks);
          this.minecraft.crosshairPickEntity = null;

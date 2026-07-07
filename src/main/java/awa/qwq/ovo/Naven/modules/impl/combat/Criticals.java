@@ -14,12 +14,12 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import org.mixin.accessors.MultiPlayerGameModeAccessor;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SwordItem;
@@ -39,16 +39,21 @@ public class Criticals extends Module {
     public final BooleanValue packet = ValueBuilder.create(this, "Packet (Danger)").setVisibility(() -> modeValue.isCurrentMode("Switch")).setDefaultBooleanValue(false).build().getBooleanValue();
     public final BooleanValue silent = ValueBuilder.create(this, "Silent").setVisibility(() -> modeValue.isCurrentMode("Switch")).setDefaultBooleanValue(false).build().getBooleanValue();
     public FloatValue skipTicks = ValueBuilder.create(this, "Skip Ticks").setVisibility(() -> modeValue.isCurrentMode("Skip Ticks")).setDefaultFloatValue(1.0f).setMinFloatValue(1.0f).setMaxFloatValue(5.0f).setFloatStep(1f).build().getFloatValue();
-    public FloatValue rangeValue = ValueBuilder.create(this, "Range").setVisibility(() -> modeValue.isCurrentMode("Skip Ticks")).setDefaultFloatValue(3.0f).setMinFloatValue(0.1f).setMaxFloatValue(6.0f).setFloatStep(0.1f).build().getFloatValue();
+    public FloatValue rangeValue = ValueBuilder.create(this, "Range").setVisibility(() -> modeValue.isCurrentMode("Skip Ticks") || modeValue.isCurrentMode("Packet")).setDefaultFloatValue(3.0f).setMinFloatValue(0.1f).setMaxFloatValue(6.0f).setFloatStep(0.1f).build().getFloatValue();
     public final BooleanValue autoJump = ValueBuilder.create(this, "Auto Jump").setVisibility(() -> modeValue.isCurrentMode("Skip Ticks") || modeValue.isCurrentMode("Packet") || modeValue.isCurrentMode("Legit")).setDefaultBooleanValue(false).build().getBooleanValue();
     int lastSlot = -1;
     private int previousSlot = -1;
     public static TimeHelper timer = new TimeHelper();
-    private final double[] criticalOffsets = {0.0625, 0.0};
     private final TimeHelper packetDelay = new TimeHelper();
-    private boolean hasSentCriticalPackets = false;
     private boolean attacking = false;
     private int offGroundTicks = 0;
+    private int lastStackTick = -1;
+    private int lastStackTargetId = -1;
+    private Entity pendingAuraCriticalTarget = null;
+    private boolean auraCriticalPrepared = false;
+    private boolean restorePlayerSprintingAfterAuraCritical = false;
+    private boolean restoreSprintKeyAfterAuraCritical = false;
+    private boolean runningAuraCriticalAttack = false;
 
     public Criticals() {
         instance = this;
@@ -58,6 +63,9 @@ public class Criticals extends Module {
     public void onEnable() {
         this.previousSlot = -1;
         this.lastSlot = -1;
+        this.lastStackTick = -1;
+        this.lastStackTargetId = -1;
+        clearAuraCritical();
         super.onEnable();
     }
 
@@ -65,6 +73,9 @@ public class Criticals extends Module {
     public void onDisable() {
         this.previousSlot = -1;
         this.lastSlot = -1;
+        this.lastStackTick = -1;
+        this.lastStackTargetId = -1;
+        clearAuraCritical();
         if (SkipTicks.isActive()) {
             SkipTicks.dispatch();
         }
@@ -112,9 +123,11 @@ public class Criticals extends Module {
         }
     }
 
-    @EventTarget
+    @EventTarget(4)
     public void onMotion(EventMotion e) {
         if (e.getType() != EventType.PRE) return;
+
+        prepareAuraCriticalSprint();
 
         if (modeValue.isCurrentMode("Legit")) {
             if (KillAura.target != null && attacking) {
@@ -147,27 +160,8 @@ public class Criticals extends Module {
         }
 
         if (modeValue.isCurrentMode("Packet")) {
-            if (mc.player.onGround() && !hasSentCriticalPackets && packetDelay.delay(500)) {
-                HitResult hit = mc.hitResult;
-                if (hit != null && hit.getType() == HitResult.Type.ENTITY) {
-                    Entity entity = ((EntityHitResult) hit).getEntity();
-                    if (entity instanceof LivingEntity && mc.player.distanceTo(entity) <= rangeValue.getCurrentValue()) {
-                        if (mc.player == null) return;
-
-                        double x = mc.player.getX();
-                        double y = mc.player.getY();
-                        double z = mc.player.getZ();
-
-                        for (double offset : criticalOffsets) {
-                            mc.player.connection.send(new ServerboundMovePlayerPacket.Pos(x, y + offset, z, false));
-                        }
-                        hasSentCriticalPackets = true;
-                        packetDelay.reset();
-                    }
-                }
-            }
-            if (mc.player.onGround() && hasSentCriticalPackets) {
-                hasSentCriticalPackets = false;
+            if (!event.isPost() && !runningAuraCriticalAttack && canAttemptHighVersionCritical(event.getTarget())) {
+                mc.player.resetAttackStrengthTicker();
             }
             return;
         }
@@ -264,6 +258,143 @@ public class Criticals extends Module {
                 }
             }
         }
+    }
+
+    public static boolean shouldHoldAuraAttack(Entity target) {
+        return instance != null && instance.shouldHoldAuraAttack0(target);
+    }
+
+    public static boolean tryPerformAuraCriticalAttack(Entity target) {
+        return instance != null && instance.tryPerformAuraCriticalAttack0(target);
+    }
+
+    public static void afterAuraAttack(Entity target) {
+        if (instance != null) {
+            instance.queueAuraCritical(target);
+        }
+    }
+
+    private boolean shouldHandlePacketMode() {
+        return isEnabled() && modeValue.isCurrentMode("Packet") && mc.player != null && mc.level != null;
+    }
+
+    private boolean shouldHoldAuraAttack0(Entity target) {
+        if (!shouldHandlePacketMode() || runningAuraCriticalAttack || pendingAuraCriticalTarget == null) {
+            return false;
+        }
+        if (!isPendingAuraTarget(target)) {
+            return false;
+        }
+        if (!canAttemptHighVersionCritical(target)) {
+            clearAuraCritical();
+            return false;
+        }
+        return !auraCriticalPrepared;
+    }
+
+    private boolean tryPerformAuraCriticalAttack0(Entity target) {
+        if (!shouldHandlePacketMode()
+                || runningAuraCriticalAttack
+                || !auraCriticalPrepared
+                || !isPendingAuraTarget(target)
+                || !canAttemptHighVersionCritical(target)
+                || mc.gameMode == null) {
+            return false;
+        }
+
+        boolean restorePlayerSprinting = restorePlayerSprintingAfterAuraCritical;
+        boolean restoreSprintKey = restoreSprintKeyAfterAuraCritical;
+        runningAuraCriticalAttack = true;
+        try {
+            mc.options.keySprint.setDown(false);
+            if (mc.player.isSprinting()) {
+                mc.player.setSprinting(false);
+            }
+            mc.gameMode.attack(mc.player, target);
+            mc.player.swing(InteractionHand.MAIN_HAND);
+            mc.player.resetAttackStrengthTicker();
+            lastStackTick = mc.player.tickCount;
+            lastStackTargetId = target.getId();
+            packetDelay.reset();
+        } finally {
+            runningAuraCriticalAttack = false;
+            clearAuraCritical();
+            if (restorePlayerSprinting) {
+                mc.player.setSprinting(true);
+            }
+            if (restoreSprintKey) {
+                mc.options.keySprint.setDown(true);
+            }
+        }
+        return true;
+    }
+
+    private void queueAuraCritical(Entity target) {
+        if (!shouldHandlePacketMode()
+                || runningAuraCriticalAttack
+                || !packetDelay.delay(45.0)
+                || !canAttemptHighVersionCritical(target)) {
+            return;
+        }
+        if (mc.player.tickCount == lastStackTick && target.getId() == lastStackTargetId) {
+            return;
+        }
+
+        pendingAuraCriticalTarget = target;
+        auraCriticalPrepared = false;
+        restorePlayerSprintingAfterAuraCritical = false;
+        restoreSprintKeyAfterAuraCritical = false;
+        lastStackTick = mc.player.tickCount;
+        lastStackTargetId = target.getId();
+        packetDelay.reset();
+    }
+
+    private void prepareAuraCriticalSprint() {
+        if (!shouldHandlePacketMode() || pendingAuraCriticalTarget == null) {
+            return;
+        }
+        if (!canAttemptHighVersionCritical(pendingAuraCriticalTarget)) {
+            clearAuraCritical();
+            return;
+        }
+
+        if (!auraCriticalPrepared) {
+            restorePlayerSprintingAfterAuraCritical = mc.player.isSprinting();
+            restoreSprintKeyAfterAuraCritical = mc.options.keySprint.isDown();
+        }
+        mc.options.keySprint.setDown(false);
+        if (mc.player.isSprinting()) {
+            mc.player.setSprinting(false);
+        }
+        auraCriticalPrepared = true;
+    }
+
+    private boolean canAttemptHighVersionCritical(Entity target) {
+        if (!(target instanceof LivingEntity living) || mc.player == null) {
+            return false;
+        }
+        return !living.isDeadOrDying()
+                && living.getHealth() > 0.0F
+                && mc.player.distanceTo(target) <= rangeValue.getCurrentValue()
+                && mc.player.fallDistance > 0.0F
+                && !mc.player.onGround()
+                && !mc.player.onClimbable()
+                && !mc.player.isInWater()
+                && !mc.player.hasEffect(MobEffects.BLINDNESS)
+                && !mc.player.isPassenger();
+    }
+
+    private boolean isPendingAuraTarget(Entity target) {
+        return target != null
+                && pendingAuraCriticalTarget != null
+                && target.getId() == pendingAuraCriticalTarget.getId();
+    }
+
+    private void clearAuraCritical() {
+        pendingAuraCriticalTarget = null;
+        auraCriticalPrepared = false;
+        restorePlayerSprintingAfterAuraCritical = false;
+        restoreSprintKeyAfterAuraCritical = false;
     }
 
     @EventTarget

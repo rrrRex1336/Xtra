@@ -12,6 +12,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 public class HWIDUtil {
+    private static final String OPEN_PLATFORM_SALT = "ForeverHack-6c6f8bac-f215-46ed-88cd-fe33ed4b42f3-";
     private static final SystemInfo systemInfo = new SystemInfo();
     private static final HardwareAbstractionLayer hardware = systemInfo.getHardware();
 
@@ -22,6 +23,27 @@ public class HWIDUtil {
 
         String combined = motherboardId + "|" + cpuId + "|" + diskId;
         return sha256Hash(combined);
+    }
+
+    public static String generateOpenPlatformHWID(String token) {
+        if (token == null || token.isBlank()) {
+            return generateHWID();
+        }
+
+        try {
+            CentralProcessor processor = hardware.getProcessor();
+            String processorName = processor.getProcessorIdentifier().getName();
+            String processorIdentifier = processor.getProcessorIdentifier().getIdentifier();
+            String osFamily = systemInfo.getOperatingSystem().getFamily();
+            String input = OPEN_PLATFORM_SALT
+                    + token
+                    + "-" + safe(processorName)
+                    + "-" + safe(processorIdentifier)
+                    + "-" + safe(osFamily);
+            return token + ":" + sha256Hash(input);
+        } catch (Exception e) {
+            return token + ":" + sha256Hash(OPEN_PLATFORM_SALT + token + "-" + generateHWID());
+        }
     }
 
     private static String getBaseboardSerial() {
@@ -65,6 +87,10 @@ public class HWIDUtil {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 algorithm not available", e);
         }
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
     }
 
     private static String bytesToHex(byte[] hash) {

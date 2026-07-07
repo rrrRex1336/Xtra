@@ -20,6 +20,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin({Player.class})
 public abstract class MixinPlayer extends LivingEntity {
+   private static final double ATTACK_SLOWDOWN_XZ = 0.6D;
+
    protected MixinPlayer(EntityType<? extends LivingEntity> pEntityType, Level pLevel) {
       super(pEntityType, pLevel);
    }
@@ -52,10 +54,16 @@ public abstract class MixinPlayer extends LivingEntity {
            )
    )
    private void hookSetDeltaMovement(Player instance, Vec3 vec3) {
-      EventAttackSlowdown event = new EventAttackSlowdown(EventAttackSlowdown.Type.Delta_Movement);
+      EventAttackSlowdown event = new EventAttackSlowdown(EventAttackSlowdown.Type.Delta_Movement, ATTACK_SLOWDOWN_XZ);
       Naven.getInstance().getEventManager().call(event);
       if (!event.isCancelled()) {
-         instance.setDeltaMovement(vec3);
+         double motionXZ = event.getMotionXZ();
+         if (motionXZ != ATTACK_SLOWDOWN_XZ) {
+            double scale = motionXZ / ATTACK_SLOWDOWN_XZ;
+            instance.setDeltaMovement(new Vec3(vec3.x * scale, vec3.y, vec3.z * scale));
+         } else {
+            instance.setDeltaMovement(vec3);
+         }
       }
    }
 

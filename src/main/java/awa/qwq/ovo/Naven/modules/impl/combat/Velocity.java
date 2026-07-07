@@ -40,6 +40,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
+import org.mixin.accessors.ClientboundMoveEntityPacketAccessor;
 import org.mixin.accessors.LocalPlayerAccessor;
 
 import java.awt.*;
@@ -94,7 +95,7 @@ public class Velocity extends Module {
             .build()
             .getBooleanValue();
 
-    private final BooleanValue smart = ValueBuilder.create(this, "Calculate attack amount")
+    private final BooleanValue smart = ValueBuilder.create(this, "Redefine Motion")
             .setVisibility(() -> isBufferMode() && !mode19Plus.getCurrentValue())
             .setDefaultBooleanValue(false)
             .build()
@@ -169,6 +170,8 @@ public class Velocity extends Module {
 
     private final Queue<Packet<?>> packetQueue = new ConcurrentLinkedQueue<>();
     private final Queue<Packet<?>> movePacketQueue = new ConcurrentLinkedQueue<>();
+    private final Queue<PendingEntityMove> pendingEntityMoves = new ConcurrentLinkedQueue<>();
+    private final Queue<PendingEntityTeleport> pendingEntityTeleports = new ConcurrentLinkedQueue<>();
     private final Map<Entity, Vector3d> targets = new HashMap<>();
     private final LinkedBlockingDeque<Packet<ClientGamePacketListener>> interactInbound = new LinkedBlockingDeque<>();
 
@@ -177,6 +180,7 @@ public class Velocity extends Module {
     private ClientboundSetEntityMotionPacket clientboundSetEntityMotionPacket = null;
     private boolean isFlushing = false;
     private boolean shouldFlushMotion = false;
+    private volatile boolean pendingScheduledReset = false;
     private Entity attackTarget = null;
     private Entity velocityTarget = null;
     private int attacksRemaining = 0;
@@ -311,6 +315,78 @@ public class Velocity extends Module {
             return true;
         }
         return mc.level.getBlockState(mc.player.blockPosition()).is(Blocks.COBWEB);
+    }
+
+    private boolean shouldIgnorePacketThread() {
+        return mc.player == null
+                || mc.getConnection() == null
+                || mc.gameMode == null
+                || mc.player.isUsingItem()
+                || mc.player.tickCount < 20
+                || mc.player.isDeadOrDying()
+                || !mc.player.isAlive()
+                || mc.player.getHealth() <= 0.0F
+                || mc.player.isSpectator()
+                || mc.player.getAbilities().flying
+                || (ignoreState.isSelected("No Sprinting") && !mc.player.isSprinting())
+                || mc.screen instanceof ProgressScreen
+                || mc.screen instanceof DeathScreen
+                || Naven.getInstance().getModuleManager().getModule(LongJump.class).isEnabled();
+    }
+
+    private void scheduleBufferReset(boolean flushQueued, String reason) {
+        if (pendingScheduledReset || mc == null) return;
+        pendingScheduledReset = true;
+        mc.execute(() -> {
+            pendingScheduledReset = false;
+            if (flushQueued) {
+                flushPackets();
+            }
+            endSuspending();
+            disableRotate();
+            clientboundSetEntityMotionPacket = null;
+            packetQueue.clear();
+            movePacketQueue.clear();
+            pendingEntityMoves.clear();
+            pendingEntityTeleports.clear();
+            targets.clear();
+            isFlushing = false;
+            shouldFlushMotion = false;
+            attackCooldown = 0;
+            attackTarget = null;
+            velocityTarget = null;
+            attacksRemaining = 0;
+            totalAttacks = 0;
+            releaseRotateTicks = 0;
+            jump = false;
+            if (reason != null) {
+                log(reason);
+            }
+        });
+    }
+
+    private void processPendingEntityUpdates() {
+        if (mc.level == null) {
+            pendingEntityMoves.clear();
+            pendingEntityTeleports.clear();
+            return;
+        }
+
+        PendingEntityMove move;
+        while ((move = pendingEntityMoves.poll()) != null) {
+            Entity entity = mc.level.getEntity(move.entityId);
+            if (entity == null) continue;
+            Vector3d currentPos = targets.getOrDefault(entity, new Vector3d(entity.getX(), entity.getY(), entity.getZ()));
+            targets.put(entity, new Vector3d(currentPos.getX() + move.dx, currentPos.getY() + move.dy, currentPos.getZ() + move.dz));
+        }
+
+        PendingEntityTeleport teleport;
+        while ((teleport = pendingEntityTeleports.poll()) != null) {
+            Entity entity = mc.level.getEntity(teleport.entityId);
+            if (entity != null) {
+                targets.put(entity, new Vector3d(teleport.x, teleport.y, teleport.z));
+            }
+        }
     }
 
     private Entity getCurrentTarget() {
@@ -474,19 +550,15 @@ public class Velocity extends Module {
         Packet<?> packet;
         if (!isBufferMode()) return;
         if (e.getType() != EventType.RECEIVE) return;
-        if (shouldIgnore()) {
-            if (isSuspending) {
-                flushPackets();
-                endSuspending();
-                disableRotate();
-                log("§4Reset, reason:player invalid");
-
-            }
-            attackTarget = null;
-            velocityTarget = null;
-            attacksRemaining = 0;
-            totalAttacks = 0;
-            attackCooldown = 0;
+        if (shouldIgnorePacketThread()) {
+            boolean hasBufferedState = isSuspending
+                    || clientboundSetEntityMotionPacket != null
+                    || !packetQueue.isEmpty()
+                    || !movePacketQueue.isEmpty()
+                    || attacksRemaining > 0
+                    || attackTarget != null;
+            scheduleBufferReset(isSuspending || clientboundSetEntityMotionPacket != null || !packetQueue.isEmpty() || !movePacketQueue.isEmpty(),
+                    hasBufferedState ? "§4Reset, reason:player invalid" : null);
             return;
         }
         if (isFlushing) return;
@@ -511,9 +583,8 @@ public class Velocity extends Module {
             }
 
             if (isSuspending) {
-                flushPackets();
-                endSuspending();
-                disableRotate();
+                scheduleBufferReset(true, null);
+                return;
             }
             clientboundSetEntityMotionPacket = null;
             packetQueue.clear();
@@ -531,26 +602,25 @@ public class Velocity extends Module {
 
         if (isSuspending && packet instanceof ClientboundMoveEntityPacket movePacket) {
             e.setCancelled(true);
-            Entity entity = movePacket.getEntity(mc.level);
-            if (entity != null) {
-                Vector3d currentPos = targets.getOrDefault(entity, new Vector3d(entity.getX(), entity.getY(), entity.getZ()));
-
-                if (movePacket.hasPosition()) {
-                    double dx = movePacket.getXa() / 4096.0D;
-                    double dy = movePacket.getYa() / 4096.0D;
-                    double dz = movePacket.getZa() / 4096.0D;
-
-                    targets.put(entity, new Vector3d(currentPos.getX() + dx, currentPos.getY() + dy, currentPos.getZ() + dz));
-                }
+            ClientboundMoveEntityPacketAccessor accessor = (ClientboundMoveEntityPacketAccessor) movePacket;
+            if (accessor.getHasPos()) {
+                pendingEntityMoves.offer(new PendingEntityMove(
+                        accessor.getEntityId(),
+                        accessor.getXa() / 4096.0D,
+                        accessor.getYa() / 4096.0D,
+                        accessor.getZa() / 4096.0D
+                ));
             }
         }
 
         if (isSuspending && packet instanceof ClientboundTeleportEntityPacket teleportPacket) {
             e.setCancelled(true);
-            Entity entity = mc.level.getEntity(teleportPacket.getId());
-            if (entity != null) {
-                targets.put(entity, new Vector3d(teleportPacket.getX(), teleportPacket.getY(), teleportPacket.getZ()));
-            }
+            pendingEntityTeleports.offer(new PendingEntityTeleport(
+                    teleportPacket.getId(),
+                    teleportPacket.getX(),
+                    teleportPacket.getY(),
+                    teleportPacket.getZ()
+            ));
         }
 
         if (packet instanceof ClientboundSetEntityMotionPacket motion && motion.getId() == mc.player.getId()) {
@@ -773,6 +843,7 @@ public class Velocity extends Module {
         if (s08Cooldown > 0) {
             s08Cooldown--;
         }
+        processPendingEntityUpdates();
         targets.entrySet().removeIf(entry -> entry.getKey() == null || !entry.getKey().isAlive() || entry.getKey().isRemoved());
         Stuck stuck = (Stuck) Naven.getInstance().getModuleManager().getModule(Stuck.class);
         //不是这玩意没用吗
@@ -1141,9 +1212,12 @@ public class Velocity extends Module {
         clientboundSetEntityMotionPacket = null;
         packetQueue.clear();
         movePacketQueue.clear();
+        pendingEntityMoves.clear();
+        pendingEntityTeleports.clear();
         targets.clear();
         isFlushing = false;
         shouldFlushMotion = false;
+        pendingScheduledReset = false;
         attackCooldown = 0;
         s08Cooldown = 0;
         attackTarget = null;
@@ -1158,6 +1232,12 @@ public class Velocity extends Module {
         progressAnimation.target = 0.0F;
         progressAlpha.value = 0.0F;
         resetInteractBlock();
+    }
+
+    private record PendingEntityMove(int entityId, double dx, double dy, double dz) {
+    }
+
+    private record PendingEntityTeleport(int entityId, double x, double y, double z) {
     }
 
     private enum InteractStage {

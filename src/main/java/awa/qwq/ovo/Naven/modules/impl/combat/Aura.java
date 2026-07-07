@@ -11,7 +11,7 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.modules.impl.misc.Teams;
 import awa.qwq.ovo.Naven.modules.impl.visual.ModuleList;
-import awa.qwq.ovo.Naven.modules.impl.visual.TargetHUD;
+import awa.qwq.ovo.Naven.modules.impl.visual.TargetInfo;
 import awa.qwq.ovo.Naven.utils.*;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
 import awa.qwq.ovo.Naven.managers.rotation.utils.RotationUtils;
@@ -400,11 +400,17 @@ public class Aura extends Module {
             return;
         }
 
-        TargetHUD.trackTarget(target);
+        TargetInfo.trackTarget(target);
+        if (Criticals.shouldHoldAuraAttack(target) || Criticals.tryPerformAuraCriticalAttack(target)) {
+            return;
+        }
+
+        boolean attacked = false;
         if (method.equals("Direct")) {
             if (mc.gameMode != null) {
                 mc.gameMode.attack(mc.player, target);
                 mc.player.swing(InteractionHand.MAIN_HAND);
+                attacked = true;
             }
         } else if (method.equals("Packet")) {
             if (mc.getConnection() != null && mc.player != null) {
@@ -413,9 +419,15 @@ public class Aura extends Module {
                 mc.player.attack(target);
                 mc.player.swing(InteractionHand.MAIN_HAND);
                 mc.player.resetAttackStrengthTicker();
+                attacked = true;
             }
         } else {
             KeyMapping.click(mc.options.keyAttack.getDefaultKey());
+            attacked = true;
+        }
+
+        if (attacked) {
+            Criticals.afterAuraAttack(target);
         }
     }
 

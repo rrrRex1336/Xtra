@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.modules.impl.visual;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.chat.IrcClient;
+import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventMotion;
@@ -255,7 +255,7 @@ public class NameTags extends Module {
 
             // 添加杀手检测
             String playerName = living.getName().getString();
-            if (!IrcClient.isIrcUser(playerName) && KillerDetection.getDetectedKillers().contains(playerName)) {
+            if (!ChatClient.isIrcUser(playerName) && KillerDetection.getDetectedKillers().contains(playerName)) {
                text = text + "§c" + playerName + " (Killer)§f";
             } else {
                text = text + this.formatPlayerName(living);
@@ -343,7 +343,7 @@ public class NameTags extends Module {
 
    private String formatPlayerName(Player player) {
       String playerName = player.getName().getString();
-      if (IrcClient.isIrcUser(playerName)) {
+      if (ChatClient.isIrcUser(playerName)) {
          return awa.qwq.ovo.Naven.modules.impl.misc.IRC.ircStatusPrefix(playerName) + playerName + "\u00a7f";
       }
       return playerName;

@@ -1,7 +1,7 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.chat.IrcClient;
+import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.events.impl.*;
 import awa.qwq.ovo.Naven.modules.impl.player.NoPush;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -195,7 +195,7 @@ public abstract class MixinEntity{
          return false;
       }
 
-      return self == mc.player && IrcClient.isIrcPlayer(other)
-         || other == mc.player && IrcClient.isIrcPlayer(self);
+      return self == mc.player && ChatClient.isIrcPlayer(other)
+         || other == mc.player && ChatClient.isIrcPlayer(self);
    }
 }

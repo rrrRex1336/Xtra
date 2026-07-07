@@ -15,6 +15,7 @@ public class Fonts {
    public static CustomTextRenderer misansScoreboard;
    public static CustomTextRenderer comfortaa;
    public static CustomTextRenderer axiforma_regular;
+   public static CustomTextRenderer productSansMedium;
 
    public static void loadFonts() throws IOException, FontFormatException {
       opensans = new CustomTextRenderer("opensans", 32, 0, 255, 512);
@@ -26,6 +27,7 @@ public class Fonts {
       misans = new CustomTextRenderer("misans", 18, 0, 10003, 4096);
       misansScoreboard = new CustomTextRenderer("misans", 17, 0, 65535, 8192);
       axiforma_regular = new CustomTextRenderer("axiforma_regular", 25, 0, 255, 1024);
+      productSansMedium = new CustomTextRenderer("product_sans_medium", 22, 0, 255, 1024);
 
    }
 }

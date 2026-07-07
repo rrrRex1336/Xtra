@@ -358,6 +358,6 @@ public abstract class MixinGui {
       return new VanillaScoreboardLine(name, score, this.getFont().width(score));
    }
 
-   private record VanillaScoreboardLine(Component name, Component score, int scoreWidth) {
+   private static record VanillaScoreboardLine(Component name, Component score, int scoreWidth) {
    }
 }

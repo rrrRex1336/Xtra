@@ -9,7 +9,6 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
 import awa.qwq.ovo.Naven.utils.GetC03StatusUtil;
-import awa.qwq.ovo.Naven.utils.MovementUtils;
 import awa.qwq.ovo.Naven.utils.NetworkUtils;
 import awa.qwq.ovo.Naven.utils.SkipTicks;
 import awa.qwq.ovo.Naven.managers.rotation.utils.Rotation;
@@ -71,7 +70,6 @@ public class Stuck extends Module {
       if (mode.isCurrentMode("Skip Ticks")) {
          SkipTicks.skipTicks(skipTicks.getCurrentValue());
       } else if (mode.isCurrentMode("Cancel Move")) {
-         MovementUtils.cancelMove();
       }
    }
 
@@ -97,7 +95,6 @@ public class Stuck extends Module {
    public void onDisable() {
       SkipTicks.dispatch();
       if (this.mode.isCurrentMode("Cancel Move")) {
-         MovementUtils.resetMove();
          if (mc.player != null) {
             ((LocalPlayerAccessor) mc.player).setPositionReminder(GetC03StatusUtil.noMovePackets);
          }

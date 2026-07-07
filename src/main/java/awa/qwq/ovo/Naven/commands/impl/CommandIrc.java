@@ -1,6 +1,6 @@
 package awa.qwq.ovo.Naven.commands.impl;
 
-import awa.qwq.ovo.Naven.chat.IrcClient;
+import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.commands.Command;
 import awa.qwq.ovo.Naven.commands.CommandInfo;
 import awa.qwq.ovo.Naven.utils.ChatUtils;
@@ -36,10 +36,10 @@ public class CommandIrc extends Command {
                     sendUsage();
                     return;
                 }
-                IrcClient.send(join(args, 1));
+                ChatClient.send(join(args, 1));
                 break;
             default:
-                IrcClient.send(join(args, 0));
+                ChatClient.send(join(args, 0));
                 break;
         }
     }
@@ -56,7 +56,7 @@ public class CommandIrc extends Command {
     }
 
     private void sendOnlineUsers() {
-        Map<String, IrcClient.OnlineUser> users = IrcClient.getOnlineUserInfo();
+        Map<String, ChatClient.OnlineUser> users = ChatClient.getOnlineUserInfo();
         if (users.isEmpty()) {
             ChatUtils.addChatMessage("IRC online list is empty.");
             return;
@@ -70,7 +70,7 @@ public class CommandIrc extends Command {
     }
 
     private void sendName() {
-        String name = IrcClient.displayName();
+        String name = ChatClient.displayName();
         ChatUtils.addChatMessage("IRC name: " + (name == null || name.isEmpty() ? "not assigned yet" : name));
     }
 

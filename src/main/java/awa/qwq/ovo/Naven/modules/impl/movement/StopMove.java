@@ -18,6 +18,6 @@ public class StopMove extends Module {
 
     @Override
     public void onDisable() {
-SkipTicks.dispatch();
+        SkipTicks.dispatch();
     }
 }

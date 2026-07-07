@@ -3,7 +3,6 @@ package org.mixin;
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.*;
-import awa.qwq.ovo.Naven.utils.MovementUtils;
 import awa.qwq.ovo.Naven.utils.SkipTicks;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
@@ -121,7 +120,7 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
                this.connection.send(new Pos(eventPre.getX(), eventPre.getY(), eventPre.getZ(), eventPre.isOnGround()));
             } else if (flag2) {
                this.connection.send(new Rot(eventPre.getYaw(), eventPre.getPitch(), eventPre.isOnGround()));
-            } else if (MovementUtils.cancelMove || this.lastOnGround != eventPre.isOnGround() || MovementUtils.lastOnGround != eventPre.isOnGround()) {
+            } else if (this.lastOnGround != eventPre.isOnGround()) {
                this.connection.send(new StatusOnly(eventPre.isOnGround()));
             }
 
@@ -138,7 +137,6 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
             }
 
             this.lastOnGround = eventPre.isOnGround();
-            MovementUtils.lastOnGround = eventPre.isOnGround();
             this.autoJumpEnabled = (Boolean) this.minecraft.options.autoJump().get();
          }
 
