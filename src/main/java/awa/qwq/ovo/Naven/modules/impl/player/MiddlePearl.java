@@ -1,7 +1,10 @@
 package awa.qwq.ovo.Naven.modules.impl.player;
 
 import awa.qwq.ovo.Naven.events.api.EventTarget;
+import awa.qwq.ovo.Naven.events.api.types.EventType;
+import awa.qwq.ovo.Naven.events.impl.EventKey;
 import awa.qwq.ovo.Naven.events.impl.EventMouseClick;
+import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
@@ -12,6 +15,7 @@ import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import org.lwjgl.glfw.GLFW;
 
 @ModuleInfo(
         name = "MiddlePearl",
@@ -50,62 +54,134 @@ public class MiddlePearl extends Module {
             .getFloatValue();
 
     private int originalSlot = -1;
+    private int pearlSlot = -1;
+    private boolean preparingPearl;
+    private long switchAt = -1L;
+    private long restoreAt = -1L;
+
+    @Override
+    public void onDisable() {
+        this.cancelPreparedPearl();
+        super.onDisable();
+    }
 
     @EventTarget
     public void onMouseClick(EventMouseClick event) {
-        int triggerKey = 2;
+        int triggerKey = this.getTriggerKey();
+        if (event.getKey() != triggerKey || mc.player == null || mc.gameMode == null) {
+            return;
+        }
 
+        if (!event.isState()) {
+            this.preparePearl();
+        } else {
+            this.throwPreparedPearl();
+        }
+    }
+
+    @EventTarget
+    public void onKey(EventKey event) {
+        if (event.getKey() == GLFW.GLFW_KEY_TAB && event.isState() && this.preparingPearl) {
+            this.cancelPreparedPearl();
+        }
+    }
+
+    @EventTarget
+    public void onRunTicks(EventRunTicks event) {
+        if (event.getType() != EventType.PRE) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (this.preparingPearl && this.switchAt > 0L && now >= this.switchAt) {
+            this.switchToPearl();
+            this.switchAt = -1L;
+        }
+
+        if (!this.preparingPearl && this.restoreAt > 0L && now >= this.restoreAt) {
+            this.restoreOriginalSlot();
+            this.restoreAt = -1L;
+        }
+    }
+
+    private void preparePearl() {
+        if (this.preparingPearl) {
+            return;
+        }
+
+        this.pearlSlot = this.findPearlSlot();
+        if (this.pearlSlot == -1) {
+            ChatUtils.addChatMessage("Pearl Not Found in hotbar!");
+            return;
+        }
+
+        this.originalSlot = mc.player.getInventory().selected;
+        this.preparingPearl = true;
+        this.restoreAt = -1L;
+        if (this.mode.isCurrentMode("Fast Switch")) {
+            this.switchAt = System.currentTimeMillis() + (long) this.switchToDelay.getCurrentValue();
+        } else {
+            this.switchAt = -1L;
+            this.switchToPearl();
+        }
+    }
+
+    private void throwPreparedPearl() {
+        if (!this.preparingPearl || mc.player == null || mc.gameMode == null) {
+            return;
+        }
+
+        this.switchToPearl();
+        mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
+        this.preparingPearl = false;
+        this.switchAt = -1L;
+
+        if (this.mode.isCurrentMode("Fast Switch")) {
+            this.restoreAt = System.currentTimeMillis() + (long) this.switchBackDelay.getCurrentValue();
+        } else {
+            this.restoreOriginalSlot();
+        }
+    }
+
+    private void cancelPreparedPearl() {
+        if (this.preparingPearl || this.restoreAt > 0L) {
+            this.restoreOriginalSlot();
+        }
+        this.preparingPearl = false;
+        this.switchAt = -1L;
+        this.restoreAt = -1L;
+        this.pearlSlot = -1;
+    }
+
+    private void switchToPearl() {
+        if (mc.player != null && this.pearlSlot >= 0 && this.pearlSlot < 9) {
+            mc.player.getInventory().selected = this.pearlSlot;
+        }
+    }
+
+    private void restoreOriginalSlot() {
+        if (mc.player != null && this.originalSlot >= 0 && this.originalSlot < 9) {
+            mc.player.getInventory().selected = this.originalSlot;
+        }
+        this.originalSlot = -1;
+    }
+
+    private int getTriggerKey() {
         if (this.keyMode.isCurrentMode("Mouse4")) {
-            triggerKey = 3;
-        } else if (this.keyMode.isCurrentMode("Mouse5")) {
-            triggerKey = 4;
+            return 3;
         }
-
-        if (event.getKey() == triggerKey && !event.isState()
-                && MiddlePearl.mc.player != null && MiddlePearl.mc.gameMode != null) {
-
-            int pearlSlot = this.findPearlSlot();
-            if (pearlSlot == -1) {
-                ChatUtils.addChatMessage("§cPearl Not Found in hotbar!");
-                return;
-            }
-
-            if (this.mode.isCurrentMode("Fast Switch")) {
-                int finalOriginalSlot = this.originalSlot = MiddlePearl.mc.player.getInventory().selected;
-
-                new Thread(() -> {
-                    try {
-                        Thread.sleep((long) this.switchToDelay.getCurrentValue());
-                        if (MiddlePearl.mc.player != null && MiddlePearl.mc.gameMode != null) {
-                            MiddlePearl.mc.player.getInventory().selected = pearlSlot;
-                            MiddlePearl.mc.gameMode.useItem(MiddlePearl.mc.player, InteractionHand.MAIN_HAND);
-                        }
-
-                        Thread.sleep((long) this.switchBackDelay.getCurrentValue());
-                        if (MiddlePearl.mc.player != null) {
-                            MiddlePearl.mc.player.getInventory().selected = finalOriginalSlot;
-                        }
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }).start();
-
-            } else if (this.mode.isCurrentMode("Spoof")) {
-                this.originalSlot = MiddlePearl.mc.player.getInventory().selected;
-                MiddlePearl.mc.player.getInventory().selected = pearlSlot;
-                MiddlePearl.mc.gameMode.useItem(MiddlePearl.mc.player, InteractionHand.MAIN_HAND);
-                MiddlePearl.mc.player.getInventory().selected = this.originalSlot;
-            }
+        if (this.keyMode.isCurrentMode("Mouse5")) {
+            return 4;
         }
+        return 2;
     }
 
     private int findPearlSlot() {
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = MiddlePearl.mc.player.getInventory().getItem(i);
-            if (stack.getItem() != Items.ENDER_PEARL || stack.getCount() <= 0) {
-                continue;
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            if (stack.getItem() == Items.ENDER_PEARL && stack.getCount() > 0) {
+                return i;
             }
-            return i;
         }
         return -1;
     }
