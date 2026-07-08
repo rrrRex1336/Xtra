@@ -330,8 +330,10 @@ public class Scaffold extends Module {
             this.rots.setX(RotationUtils.rotateToYaw(yawSpeed, this.rots.getX(), this.correctRotation.getX()));
             this.rots.setY(RotationUtils.rotateToPitch(pitchSpeed, this.rots.getY(), this.correctRotation.getY()));
          } else {
-            this.rots.setX(RotationUtils.rotateToYaw(75.0F, this.rots.getX(), this.correctRotation.getX()));
-            this.rots.setY(this.correctRotation.getY());
+            float yawSpeed = this.legitUP.getCurrentValue() ? 55.0F : 75.0F;
+            float pitchSpeed = this.legitUP.getCurrentValue() ? 45.0F : 75.0F;
+            this.rots.setX(RotationUtils.rotateToYaw(yawSpeed, this.rots.getX(), this.correctRotation.getX()));
+            this.rots.setY(RotationUtils.rotateToPitch(pitchSpeed, this.rots.getY(), this.correctRotation.getY()));
          }
       }
 
