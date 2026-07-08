@@ -13,6 +13,7 @@ import awa.qwq.ovo.Naven.ui.ClickGUI;
 import awa.qwq.ovo.Naven.ui.notification.Notification;
 import awa.qwq.ovo.Naven.ui.notification.NotificationLevel;
 import awa.qwq.ovo.Naven.utils.InventoryUtils;
+import awa.qwq.ovo.Naven.utils.MathUtils;
 import awa.qwq.ovo.Naven.utils.MoveUtils;
 import awa.qwq.ovo.Naven.utils.TickTimeHelper;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
@@ -57,7 +58,14 @@ import org.apache.commons.lang3.tuple.Pair;
 )
 public class InventoryManager extends Module {
    private static final TickTimeHelper timer = new TickTimeHelper();
-   private final FloatValue delay = ValueBuilder.create(this, "Delay (Ticks)")
+   private final FloatValue minDelay = ValueBuilder.create(this, "Min Delay")
+      .setDefaultFloatValue(3.0F)
+      .setFloatStep(1.0F)
+      .setMinFloatValue(0.0F)
+      .setMaxFloatValue(10.0F)
+      .build()
+      .getFloatValue();
+   private final FloatValue maxDelay = ValueBuilder.create(this, "Max Delay")
       .setDefaultFloatValue(3.0F)
       .setFloatStep(1.0F)
       .setMinFloatValue(0.0F)
@@ -255,6 +263,12 @@ public class InventoryManager extends Module {
    private boolean inventoryOpen = false;
    private boolean silentNoSprintWasSprinting = false;
    private boolean silentNoSprintWasKeySprintDown = false;
+   private float currentDelay = -1.0F;
+
+   {
+      minDelay.linkAsMin(maxDelay);
+      maxDelay.linkAsMax(minDelay);
+   }
 
    public static int getMaxBlockSize() {
       return (int)((InventoryManager)Naven.getInstance().getModuleManager().getModule(InventoryManager.class)).maxBlockSize.getCurrentValue();
@@ -454,12 +468,12 @@ public class InventoryManager extends Module {
                if (stack.getItem() instanceof ArmorItem) {
                   ArmorItem item = (ArmorItem)stack.getItem();
                   if (!stack.isEmpty()
-                     && timer.delay(this.delay.getCurrentValue())
+                     && this.canClickInventory()
                      && InventoryUtils.getBestArmorScore(item.getEquipmentSlot()) > InventoryUtils.getProtection(stack)) {
                      this.prepareSilentNoSprintClick();
                      mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, 4 + (4 - i), 1, ClickType.THROW, mc.player);
                      this.inventoryOpen = true;
-                     timer.reset();
+                     this.resetClickTimer();
                   }
                }
             }
@@ -471,7 +485,7 @@ public class InventoryManager extends Module {
                   float currentItemScore = InventoryUtils.getProtection(stack);
                   boolean isBestItem = InventoryUtils.getBestArmorScore(item.getEquipmentSlot()) == currentItemScore;
                   boolean isBetterItem = InventoryUtils.getCurrentArmorScore(item.getEquipmentSlot()) < currentItemScore;
-                  if (isBestItem && isBetterItem && timer.delay(this.delay.getCurrentValue())) {
+                  if (isBestItem && isBetterItem && this.canClickInventory()) {
                      this.prepareSilentNoSprintClick();
                      if (ix < 9) {
                         mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, ix + 36, 0, ClickType.QUICK_MOVE, mc.player);
@@ -480,24 +494,24 @@ public class InventoryManager extends Module {
                      }
 
                      this.inventoryOpen = true;
-                     timer.reset();
+                     this.resetClickTimer();
                   }
                }
             }
          }
 
-         if (this.clickOffHand && timer.delay(this.delay.getCurrentValue())) {
+         if (this.clickOffHand && this.canClickInventory()) {
             this.prepareSilentNoSprintClick();
             mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, 45, 0, ClickType.PICKUP, mc.player);
             this.inventoryOpen = true;
             this.clickOffHand = false;
-            timer.reset();
+            this.resetClickTimer();
          }
 
          if (this.offhandItems.isCurrentMode("Golden Apple")) {
             ItemStack offHand = (ItemStack)mc.player.getInventory().offhand.get(0);
             int slot = InventoryUtils.getItemSlot(Items.GOLDEN_APPLE);
-            if (slot != -1 && timer.delay(this.delay.getCurrentValue())) {
+            if (slot != -1 && this.canClickInventory()) {
                if (offHand.getItem() == Items.GOLDEN_APPLE) {
                   ItemStack goldenAppleStack = (ItemStack)mc.player.getInventory().items.get(slot);
                   if (offHand.getCount() + goldenAppleStack.getCount() <= 64) {
@@ -510,7 +524,7 @@ public class InventoryManager extends Module {
 
                      this.inventoryOpen = true;
                      this.clickOffHand = true;
-                     timer.reset();
+                     this.resetClickTimer();
                   }
                } else {
                   this.swapOffHand(slot);
@@ -528,14 +542,14 @@ public class InventoryManager extends Module {
                   shouldSwap = true;
                }
 
-               if (shouldSwap && slot != -1 && timer.delay(this.delay.getCurrentValue())) {
+               if (shouldSwap && slot != -1 && this.canClickInventory()) {
                   this.swapOffHand(slot);
                }
             }
          } else if (this.offhandItems.isCurrentMode("Fishing Rod")) {
             ItemStack offHand = (ItemStack)mc.player.getInventory().offhand.get(0);
             int slotx = InventoryUtils.getItemSlot(Items.FISHING_ROD);
-            if (slotx != -1 && timer.delay(this.delay.getCurrentValue()) && offHand.getItem() != Items.FISHING_ROD) {
+            if (slotx != -1 && this.canClickInventory() && offHand.getItem() != Items.FISHING_ROD) {
                this.swapOffHand(slotx);
             }
          } else if (this.offhandItems.isCurrentMode("Block")) {
@@ -552,7 +566,7 @@ public class InventoryManager extends Module {
                   shouldSwapx = true;
                }
 
-               if (shouldSwapx && slotx != -1 && timer.delay(this.delay.getCurrentValue())) {
+               if (shouldSwapx && slotx != -1 && this.canClickInventory()) {
                   this.swapOffHand(slotx);
                }
             }
@@ -769,11 +783,36 @@ public class InventoryManager extends Module {
          return false;
       }
 
-      if (this.delay.getCurrentValue() >= 4.0F) {
-         return timer.delay(this.delay.getCurrentValue());
+      float delay = this.getCurrentDelay();
+      if (delay >= 4.0F) {
+         return timer.delay(delay);
       }
 
       return true;
+   }
+
+   private boolean canClickInventory() {
+      return timer.delay(this.getCurrentDelay());
+   }
+
+   private void resetClickTimer() {
+      timer.reset();
+      this.currentDelay = this.nextDelay();
+   }
+
+   private float getCurrentDelay() {
+      float min = Math.min(this.minDelay.getCurrentValue(), this.maxDelay.getCurrentValue());
+      float max = Math.max(this.minDelay.getCurrentValue(), this.maxDelay.getCurrentValue());
+      if (this.currentDelay < min || this.currentDelay > max) {
+         this.currentDelay = this.nextDelay();
+      }
+      return this.currentDelay;
+   }
+
+   private float nextDelay() {
+      int min = Math.round(Math.min(this.minDelay.getCurrentValue(), this.maxDelay.getCurrentValue()));
+      int max = Math.round(Math.max(this.minDelay.getCurrentValue(), this.maxDelay.getCurrentValue()));
+      return MathUtils.getRandomIntInRange(min, max + 1);
    }
 
    public static boolean shouldStopSprintForSprintModule() {
@@ -1115,11 +1154,11 @@ public class InventoryManager extends Module {
       }
 
       this.inventoryOpen = true;
-      timer.reset();
+      this.resetClickTimer();
    }
 
    private void throwItem(ItemStack item) {
-      if (InventoryUtils.isItemValid(item) && timer.delay(this.delay.getCurrentValue())) {
+      if (InventoryUtils.isItemValid(item) && this.canClickInventory()) {
          int itemSlot = InventoryUtils.getItemStackSlot(item);
          if (itemSlot != -1) {
             this.prepareSilentNoSprintClick();
@@ -1130,14 +1169,14 @@ public class InventoryManager extends Module {
             }
 
             this.inventoryOpen = true;
-            timer.reset();
+            this.resetClickTimer();
          }
       }
    }
 
    private void swapItem(int targetSlot, ItemStack bestItem) {
       ItemStack currentSlot = (ItemStack)mc.player.getInventory().items.get(targetSlot);
-      if (InventoryUtils.isItemValid(currentSlot) && bestItem != currentSlot && timer.delay(this.delay.getCurrentValue())) {
+      if (InventoryUtils.isItemValid(currentSlot) && bestItem != currentSlot && this.canClickInventory()) {
          int bestItemSlot = InventoryUtils.getItemStackSlot(bestItem);
          if (bestItemSlot != -1) {
             this.prepareSilentNoSprintClick();
@@ -1148,14 +1187,14 @@ public class InventoryManager extends Module {
             }
 
             this.inventoryOpen = true;
-            timer.reset();
+            this.resetClickTimer();
          }
       }
    }
 
    private void swapItem(int targetSlot, Item item) {
       ItemStack currentSlot = (ItemStack)mc.player.getInventory().items.get(targetSlot);
-      if (InventoryUtils.isItemValid(currentSlot) && timer.delay(this.delay.getCurrentValue())) {
+      if (InventoryUtils.isItemValid(currentSlot) && this.canClickInventory()) {
          int bestItemSlot = InventoryUtils.getItemSlot(item);
          if (bestItemSlot != -1) {
             ItemStack bestItemStack = (ItemStack)mc.player.getInventory().items.get(bestItemSlot);
@@ -1168,7 +1207,7 @@ public class InventoryManager extends Module {
                }
 
                this.inventoryOpen = true;
-               timer.reset();
+               this.resetClickTimer();
             }
          }
       }
