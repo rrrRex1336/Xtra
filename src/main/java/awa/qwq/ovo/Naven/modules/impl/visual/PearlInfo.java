@@ -34,11 +34,11 @@ import java.util.List;
 import java.util.*;
 
 @ModuleInfo(
-        name = "PearlPrediction",
+        name = "PearlInfo",
         description = "Renders prediction and can automatically counter thrown ender pearls.",
         category = Category.VISUAL
 )
-public class  PearlPrediction extends Module {
+public class PearlInfo extends Module {
 
     public static Vector2f rotations;
     public static boolean isThrowing;
@@ -150,8 +150,8 @@ public class  PearlPrediction extends Module {
     private void handleCounterLogic() {
         if (isAiming) {
             aimingTicks++;
-            PearlPrediction.isThrowing = true;
-            PearlPrediction.rotations = this.targetRotations;
+            PearlInfo.isThrowing = true;
+            PearlInfo.rotations = this.targetRotations;
             float yawDiff = RotationUtils.getAngleDifference(RotationManager.lastRotations.x, this.targetRotations.x);
             float pitchDiff = Math.abs(RotationManager.lastRotations.y - this.targetRotations.y);
             if (yawDiff < 1.0f && pitchDiff < 1.0f && aimingTicks >= rotationTicks.getCurrentValue()) {
@@ -160,7 +160,7 @@ public class  PearlPrediction extends Module {
             }
             return;
         }
-        PearlPrediction.isThrowing = false;
+        PearlInfo.isThrowing = false;
         updateLastKnownSafePosition();
 
         if (lastSafePosition != null && System.currentTimeMillis() > lockedPositionExpireTime) {
@@ -231,7 +231,7 @@ public class  PearlPrediction extends Module {
         this.lastSafePosition = null; this.triggerAction = false; this.isAiming = false;
         this.aimingTicks = 0; this.targetRotations = null;
         this.lockedPositionExpireTime = 0;
-        PearlPrediction.rotations = null; PearlPrediction.isThrowing = false;
+        PearlInfo.rotations = null; PearlInfo.isThrowing = false;
         if (processedPearls.size() > 50) processedPearls.clear();
     }
 
