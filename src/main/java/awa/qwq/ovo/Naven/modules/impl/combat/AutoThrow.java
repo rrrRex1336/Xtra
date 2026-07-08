@@ -4,6 +4,10 @@ import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventMotion;
+import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
+import awa.qwq.ovo.Naven.managers.friends.FriendManager;
+import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
+import awa.qwq.ovo.Naven.managers.rotation.utils.Rotation;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
@@ -11,27 +15,31 @@ import awa.qwq.ovo.Naven.modules.impl.misc.Teams;
 import awa.qwq.ovo.Naven.modules.impl.movement.Stuck;
 import awa.qwq.ovo.Naven.modules.impl.player.Blink;
 import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
-import awa.qwq.ovo.Naven.managers.friends.FriendManager;
+import awa.qwq.ovo.Naven.utils.InventoryUtils;
 import awa.qwq.ovo.Naven.utils.TimeHelper;
 import awa.qwq.ovo.Naven.utils.Vector2f;
-import awa.qwq.ovo.Naven.managers.rotation.utils.Rotation;
-import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
-import awa.qwq.ovo.Naven.utils.InventoryUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.AddonsValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
+import java.util.Comparator;
+import java.util.Optional;
 import lombok.Getter;
-import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.monster.Monster;
-import net.minecraft.world.item.*;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.EnderpearlItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.LingeringPotionItem;
+import net.minecraft.world.item.PotionItem;
+import net.minecraft.world.item.SplashPotionItem;
 import net.minecraft.world.phys.Vec3;
-
-import java.util.Comparator;
-import java.util.Optional;
 
 @ModuleInfo(
         name = "AutoThrow",
@@ -39,7 +47,6 @@ import java.util.Optional;
         category = Category.COMBAT
 )
 public class AutoThrow extends Module {
-
     private final FloatValue minDistance = ValueBuilder.create(this, "Min Distance")
             .setDefaultFloatValue(5)
             .setFloatStep(1)
@@ -74,188 +81,200 @@ public class AutoThrow extends Module {
     @Getter
     private Rotation rotation;
     public int rotationSet;
-    private int swapBack = -1;
-    private ThrowPlan pendingPlan;
     public Vector2f targetRotations = null;
 
+    private ThrowPlan pendingPlan;
+    private int restoreSlot = -1;
+
+    {
+        minDistance.linkAsMin(maxDistance);
+        maxDistance.linkAsMax(minDistance);
+    }
+
+    @Override
+    public void onEnable() {
+        this.clearState();
+        this.timer.reset();
+        super.onEnable();
+    }
+
+    @Override
+    public void onDisable() {
+        this.restoreSlot();
+        this.clearState();
+        super.onDisable();
+    }
+
     @EventTarget
-    public void onMotion(EventMotion e) {
-        if (e.getType() != EventType.PRE) {
-            if (swapBack != -1) {
-                mc.player.getInventory().selected = swapBack;
-                swapBack = -1;
-            }
-            return;
-        }
-
-        if (mc.player == null || mc.level == null) {
-            return;
-        }
-
-        if (Naven.getInstance().getModuleManager().getModule(Scaffold.class).isEnabled() || Naven.getInstance().getModuleManager().getModule(Stuck.class).isEnabled() || Naven.getInstance().getModuleManager().getModule(Blink.class).isEnabled()) {
-            rotationSet = 0;
-            pendingPlan = null;
-            targetRotations = null;
-            return;
-        }
-
-        rotation = null;
-
-        ThrowPlan plan = findThrowPlan();
-        if (plan == null) {
-            return;
-        }
-
-        if (rotationSet > 0) {
-            rotationSet--;
-            if (targetRotations != null) {
-                RotationManager.setRotations(targetRotations);
-            }
-
-            if (rotationSet == 0 && pendingPlan != null) {
-                throwFromPlan(pendingPlan);
-                pendingPlan = null;
-            }
-            return;
-        }
-
-        Optional<? extends LivingEntity> target = getTarget();
-        if (target.isPresent() && timer.delay(delay.getCurrentValue()) && canRotate(plan.hand)) {
-            Rotation newRotation = getRotationToEntity(target.get());
-            targetRotations = new Vector2f(newRotation.getYaw(), newRotation.getPitch());
-            RotationManager.setRotations(targetRotations);
-
-            rotationSet = 2;
-            pendingPlan = plan;
-            timer.reset();
+    public void onMotion(EventMotion event) {
+        if (event.getType() == EventType.POST) {
+            this.restoreSlot();
         }
     }
 
-    private void throwFromPlan(ThrowPlan plan) {
-        if (plan.hand == InteractionHand.MAIN_HAND) {
-            int originalHotbar = mc.player.getInventory().selected;
-            boolean shouldSwap = originalHotbar != plan.hotbarSlot;
-            if (shouldSwap) {
-                mc.player.getInventory().selected = plan.hotbarSlot;
-                swapBack = originalHotbar;
-            }
+    @EventTarget
+    public void onRunTicks(EventRunTicks event) {
+        if (event.getType() != EventType.PRE) {
+            return;
         }
-        mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        if (mc.player == null || mc.level == null || mc.gameMode == null) {
+            this.clearState();
+            return;
+        }
+        if (this.shouldPause()) {
+            this.clearState();
+            return;
+        }
+
+        this.setSuffix(this.minDistance.getCurrentValue() + " - " + this.maxDistance.getCurrentValue());
+        if (this.rotationSet > 0 && this.pendingPlan != null) {
+            RotationManager.setRotations(this.targetRotations);
+            if (--this.rotationSet <= 0) {
+                this.throwPending();
+            }
+            return;
+        }
+
+        if (!this.timer.delay(this.delay.getCurrentValue())) {
+            return;
+        }
+
+        Optional<ThrowPlan> plan = this.findThrowPlan();
+        Optional<LivingEntity> target = this.findTarget();
+        if (plan.isEmpty() || target.isEmpty() || !this.canThrow(plan.get())) {
+            return;
+        }
+
+        this.rotation = this.getRotationToEntity(target.get());
+        this.targetRotations = new Vector2f(this.rotation.getYaw(), this.rotation.getPitch());
+        this.pendingPlan = plan.get();
+        this.rotationSet = 2;
+        RotationManager.setRotations(this.targetRotations);
+        this.timer.reset();
     }
 
-    private ThrowPlan findThrowPlan() {
-        ItemStack offhand = mc.player.getOffhandItem();
-        if (isThrowable(offhand)) {
-            return new ThrowPlan(InteractionHand.OFF_HAND, -1);
+    private void throwPending() {
+        if (this.pendingPlan == null || mc.player == null || mc.gameMode == null) {
+            this.clearState();
+            return;
+        }
+
+        ThrowPlan plan = this.pendingPlan;
+        if (plan.hand == InteractionHand.MAIN_HAND && plan.hotbarSlot != mc.player.getInventory().selected) {
+            this.restoreSlot = mc.player.getInventory().selected;
+            mc.player.getInventory().selected = plan.hotbarSlot;
+        }
+
+        mc.gameMode.useItem(mc.player, plan.hand);
+        mc.player.swing(plan.hand);
+        this.pendingPlan = null;
+        this.rotationSet = 0;
+    }
+
+    private Optional<ThrowPlan> findThrowPlan() {
+        if (this.isThrowable(mc.player.getOffhandItem())) {
+            return Optional.of(new ThrowPlan(InteractionHand.OFF_HAND, -1));
         }
 
         int selected = mc.player.getInventory().selected;
-        ItemStack mainhand = mc.player.getInventory().items.get(selected);
-        if (isThrowable(mainhand)) {
-            return new ThrowPlan(InteractionHand.MAIN_HAND, selected);
+        if (this.isThrowable(mc.player.getInventory().items.get(selected))) {
+            return Optional.of(new ThrowPlan(InteractionHand.MAIN_HAND, selected));
         }
 
-        for (int hotbar = 0; hotbar < 9; hotbar++) {
-            ItemStack stack = mc.player.getInventory().items.get(hotbar);
-            if (isThrowable(stack)) {
-                return new ThrowPlan(InteractionHand.MAIN_HAND, hotbar);
+        for (int slot = 0; slot < 9; slot++) {
+            if (this.isThrowable(mc.player.getInventory().items.get(slot))) {
+                return Optional.of(new ThrowPlan(InteractionHand.MAIN_HAND, slot));
             }
         }
-
-        return null;
+        return Optional.empty();
     }
 
-    private boolean canRotate(InteractionHand hand) {
+    private Optional<LivingEntity> findTarget() {
+        double max = this.maxDistance.getCurrentValue();
+        double min = this.minDistance.getCurrentValue();
+        return mc.level.getEntitiesOfClass(LivingEntity.class, mc.player.getBoundingBox().inflate(max))
+                .stream()
+                .filter(entity -> entity != mc.player)
+                .filter(LivingEntity::isAlive)
+                .filter(entity -> !entity.isSpectator())
+                .filter(entity -> !AntiBots.isBot(entity))
+                .filter(entity -> !AntiBots.isBedWarsBot(entity))
+                .filter(entity -> !Teams.isSameTeam(entity))
+                .filter(entity -> !FriendManager.isFriend(entity))
+                .filter(entity -> !entity.isInvisibleTo(mc.player) || this.targetMode.isSelected("Invisible"))
+                .filter(entity -> this.isSelectedTargetType(entity))
+                .filter(mc.player::hasLineOfSight)
+                .filter(entity -> {
+                    double distance = this.getHorizontalDistance(entity);
+                    return distance >= min && distance <= max;
+                })
+                .min(Comparator.comparingDouble(entity -> mc.player.distanceToSqr(entity)));
+    }
+
+    private boolean isSelectedTargetType(LivingEntity entity) {
+        if (entity instanceof Player) {
+            return this.targetMode.isSelected("Player");
+        }
+        if (entity instanceof Animal) {
+            return this.targetMode.isSelected("Animals");
+        }
+        if (entity instanceof Monster || entity instanceof Mob) {
+            return this.targetMode.isSelected("Mobs");
+        }
+        return false;
+    }
+
+    private boolean canThrow(ThrowPlan plan) {
         if (mc.player.isUsingItem()) {
             return false;
         }
-        ItemStack stack = hand == InteractionHand.MAIN_HAND ? mc.player.getMainHandItem() : mc.player.getOffhandItem();
-        if (stack.isEmpty()) {
-            return true;
-        }
-        Item item = stack.getItem();
-        if (item instanceof EnderpearlItem) {
-            return false;
-        }
-        if (item instanceof BowItem) {
-            return false;
-        }
-        if (item instanceof PotionItem || item instanceof SplashPotionItem || item instanceof LingeringPotionItem) {
-            return false;
-        }
-        return !item.isEdible();
+        ItemStack activeStack = plan.hand == InteractionHand.MAIN_HAND
+                ? mc.player.getInventory().items.get(plan.hotbarSlot)
+                : mc.player.getOffhandItem();
+        Item item = activeStack.getItem();
+        return !(item instanceof EnderpearlItem)
+                && !(item instanceof BowItem)
+                && !(item instanceof PotionItem)
+                && !(item instanceof SplashPotionItem)
+                && !(item instanceof LingeringPotionItem)
+                && !item.isEdible();
     }
 
     private Rotation getRotationToEntity(LivingEntity target) {
         Vec3 velocity = target.getDeltaMovement();
         double targetX = target.getX();
-        double targetY = target.getY() + target.getBbHeight() * 0.6;
+        double targetY = target.getY() + target.getBbHeight() * 0.55D;
         double targetZ = target.getZ();
 
-        double time = 0.0;
+        double time = 0.0D;
         for (int i = 0; i < 3; i++) {
-            double predictX = targetX + velocity.x * time;
-            double predictZ = targetZ + velocity.z * time;
-            double dx = predictX - mc.player.getX();
-            double dz = predictZ - mc.player.getZ();
-            double horizontal = Math.sqrt(dx * dx + dz * dz);
-            time = horizontal / 0.6;
+            double predictedX = targetX + velocity.x * time;
+            double predictedZ = targetZ + velocity.z * time;
+            double dx = predictedX - mc.player.getX();
+            double dz = predictedZ - mc.player.getZ();
+            time = Math.sqrt(dx * dx + dz * dz) / 0.6D;
         }
 
-        double predictX = targetX + velocity.x * time;
-        double predictY = targetY + velocity.y * time;
-        double predictZ = targetZ + velocity.z * time;
-
-        double x = predictX - mc.player.getX();
-        double z = predictZ - mc.player.getZ();
-        double h = predictY - (mc.player.getY() + mc.player.getEyeHeight());
+        double predictedX = targetX + velocity.x * time;
+        double predictedY = targetY + velocity.y * time;
+        double predictedZ = targetZ + velocity.z * time;
+        double x = predictedX - mc.player.getX();
+        double z = predictedZ - mc.player.getZ();
+        double y = predictedY - (mc.player.getY() + mc.player.getEyeHeight());
         double horizontal = Math.sqrt(x * x + z * z);
 
-        float yaw = (float) (Math.toDegrees(Math.atan2(z, x)) - 90.0F);
-        float pitch = -getTrajAngleSolutionLow((float) horizontal, (float) h, (float) 0.6, (float) 0.006);
+        float yaw = (float) Math.toDegrees(Math.atan2(z, x)) - 90.0F;
+        float pitch = -this.getLowArcPitch((float) horizontal, (float) y, 0.6F, 0.006F);
         return new Rotation(yaw, Mth.clamp(pitch, -90.0F, 90.0F));
     }
 
-    private float getTrajAngleSolutionLow(float distance, float height, float velocity, float gravity) {
-        float v2 = velocity * velocity;
-        float under = v2 * v2 - gravity * (gravity * distance * distance + 2.0f * height * v2);
-        if (under <= 0.0f) {
+    private float getLowArcPitch(float distance, float height, float velocity, float gravity) {
+        float velocitySq = velocity * velocity;
+        float root = velocitySq * velocitySq - gravity * (gravity * distance * distance + 2.0F * height * velocitySq);
+        if (root <= 0.0F) {
             return (float) Math.toDegrees(Math.atan2(height, distance));
         }
-        return (float) Math.toDegrees(Math.atan((v2 - Math.sqrt(under)) / (gravity * distance)));
-    }
-
-    private Optional<? extends LivingEntity> getTarget() {
-        return mc.level.getEntitiesOfClass(LivingEntity.class, mc.player.getBoundingBox().inflate(maxDistance.getCurrentValue()))
-                .stream()
-                .filter(e -> e != mc.player)
-                .filter(LivingEntity::isAlive)
-                .filter(e -> !e.isSpectator())
-                .filter(e -> !AntiBots.isBot(e))
-                .filter(e -> !Teams.isSameTeam(e))
-                .filter(e -> !FriendManager.isFriend(e))
-                .filter(mc.player::hasLineOfSight)
-                .filter(e -> {
-                    double dist = getHorizontalDistance(e);
-                    return dist <= maxDistance.getCurrentValue() && dist >= minDistance.getCurrentValue();
-                })
-                .filter(e -> {
-                    if (e instanceof AbstractClientPlayer) {
-                        return targetMode.isSelected("Player");
-                    }
-                    if (e.isInvisible() || e.isInvisibleTo(mc.player)) {
-                        return targetMode.isSelected("Invisible");
-                    }
-                    if (e instanceof Animal) {
-                        return targetMode.isSelected("Animals");
-                    }
-                    if (e instanceof Monster) {
-                        return targetMode.isSelected("Mobs");
-                    }
-                    return false;
-                })
-                .min(Comparator.comparingDouble(e -> mc.player.distanceTo(e)));
+        return (float) Math.toDegrees(Math.atan((velocitySq - Math.sqrt(root)) / (gravity * distance)));
     }
 
     private double getHorizontalDistance(LivingEntity entity) {
@@ -265,7 +284,29 @@ public class AutoThrow extends Module {
     }
 
     private boolean isThrowable(ItemStack stack) {
-        return !stack.isEmpty() && (stack.getItem() == Items.EGG || stack.getItem() == Items.SNOWBALL) && !InventoryUtils.isWindCharge(stack);
+        return !stack.isEmpty()
+                && (stack.is(Items.EGG) || stack.is(Items.SNOWBALL))
+                && !InventoryUtils.isWindCharge(stack);
+    }
+
+    private boolean shouldPause() {
+        return Naven.getInstance().getModuleManager().getModule(Scaffold.class).isEnabled()
+                || Naven.getInstance().getModuleManager().getModule(Stuck.class).isEnabled()
+                || Naven.getInstance().getModuleManager().getModule(Blink.class).isEnabled();
+    }
+
+    private void restoreSlot() {
+        if (mc.player != null && this.restoreSlot >= 0 && this.restoreSlot < 9) {
+            mc.player.getInventory().selected = this.restoreSlot;
+        }
+        this.restoreSlot = -1;
+    }
+
+    private void clearState() {
+        this.rotation = null;
+        this.targetRotations = null;
+        this.rotationSet = 0;
+        this.pendingPlan = null;
     }
 
     private static class ThrowPlan {
