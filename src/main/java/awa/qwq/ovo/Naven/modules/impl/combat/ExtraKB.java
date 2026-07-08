@@ -34,91 +34,91 @@ public class ExtraKB extends Module {
             .getFloatValue();
 
     public int tick;
-    private boolean wasWKeyPressed = false;
+    private int sprintTicks;
+    private boolean restoreForward;
+    private int lastApplyTick = -1;
+
+    @Override
+    public void onEnable() {
+        this.reset();
+        super.onEnable();
+    }
+
+    @Override
+    public void onDisable() {
+        this.reset();
+        super.onDisable();
+    }
 
     @EventTarget
     private void onAttack(EventAttack event) {
-        if (mc.player == null || mc.level == null) return;
+        if (mc.player == null || mc.level == null || !(event.getTarget() instanceof LivingEntity target)) {
+            return;
+        }
+        if (target.hurtTime < this.hurtTime.getCurrentValue() || this.lastApplyTick == mc.player.tickCount) {
+            return;
+        }
 
-        LivingEntity entity = (LivingEntity) event.getTarget();
-
-        if (entity != null && entity.hurtTime >= hurtTime.getCurrentValue()) {
-            String mode = modeValue.getCurrentMode();
-
-            switch (mode) {
-                case "LegitFast", "Cancel W" -> tick = 2;
-
-                case "Packet" -> {
-                    if (mc.player.isSprinting()) {
-                        mc.player.connection.send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
-                    }
-                    mc.player.connection.send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
-                    mc.player.connection.send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
-                    mc.player.connection.send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
-
-                    mc.player.setSprinting(true);
-                    try {
-                        mc.player.getClass().getMethod("setWasSprinting", boolean.class).invoke(mc.player, true);
-                    } catch (Exception e) {
-                    }
-                }
+        this.lastApplyTick = mc.player.tickCount;
+        switch (this.modeValue.getCurrentMode()) {
+            case "Cancel W" -> {
+                this.tick = 2;
+                this.restoreForward = mc.options.keyUp.isDown();
             }
+            case "LegitFast" -> this.sprintTicks = 2;
+            case "Packet" -> this.sendSprintReset();
         }
     }
 
     @EventTarget
     public void onMoveInput(EventMoveInput event) {
-        if (mc.player == null) return;
+        if (!this.modeValue.isCurrentMode("Cancel W") || this.tick <= 0) {
+            return;
+        }
 
-        if (modeValue.getCurrentMode().equals("Cancel W")) {
-            if (tick == 2) {
-                wasWKeyPressed = mc.options.keyUp.isDown();
-                event.setForward(0.0f);
-                tick = 1;
-            } else if (tick == 1) {
-                if (!wasWKeyPressed) {
-                    event.setForward(1.0f);
-                } else {
-                    event.setForward(1.0f);
-                }
-                tick = 0;
-                wasWKeyPressed = false;
-            }
+        if (this.tick == 2) {
+            event.setForward(0.0F);
+        } else if (this.restoreForward) {
+            event.setForward(1.0F);
+        }
+        --this.tick;
+        if (this.tick <= 0) {
+            this.restoreForward = false;
         }
     }
 
     @EventTarget
-    public void onUpdate(EventUpdate eventUpdate) {
-        setSuffix(modeValue.getCurrentMode());
-        if (mc.player == null) return;
-
-        if (modeValue.getCurrentMode().equals("LegitFast")) {
-            if (tick == 2) {
-                mc.player.setSprinting(false);
-                tick = 1;
-            } else if (tick == 1) {
-                mc.player.setSprinting(true);
-                tick = 0;
-            }
+    public void onUpdate(EventUpdate event) {
+        this.setSuffix(this.modeValue.getCurrentMode());
+        if (mc.player == null || !this.modeValue.isCurrentMode("LegitFast") || this.sprintTicks <= 0) {
+            return;
         }
+
+        if (this.sprintTicks == 2) {
+            mc.player.setSprinting(false);
+        } else {
+            mc.player.setSprinting(true);
+        }
+        --this.sprintTicks;
     }
 
-    @Override
-    public void onEnable() {
-        tick = 0;
-        wasWKeyPressed = false;
+    private void sendSprintReset() {
+        if (mc.player == null || mc.getConnection() == null) {
+            return;
+        }
+        if (mc.player.isSprinting()) {
+            mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
+        }
+        mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
+        mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
+        mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
+        mc.player.setSprinting(true);
     }
 
-    @Override
-    public void onDisable() {
-        tick = 0;
-        if (mc.options != null && mc.options.keyUp != null) {
-            if (!wasWKeyPressed) {
-                mc.options.keyUp.setDown(true);
-            } else {
-                mc.options.keyUp.setDown(true);
-            }
-        }
-        wasWKeyPressed = false;
+    private void reset() {
+        this.tick = 0;
+        this.sprintTicks = 0;
+        this.restoreForward = false;
+        this.lastApplyTick = -1;
     }
 }
