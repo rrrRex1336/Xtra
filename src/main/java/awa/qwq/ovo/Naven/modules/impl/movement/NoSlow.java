@@ -2,7 +2,6 @@ package awa.qwq.ovo.Naven.modules.impl.movement;
 
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
-import awa.qwq.ovo.Naven.events.impl.EventMotion;
 import awa.qwq.ovo.Naven.events.impl.EventPacket;
 import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.events.impl.EventSlowdown;
@@ -15,17 +14,12 @@ import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.*;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.*;
 
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.StreamSupport;
 
@@ -37,39 +31,39 @@ import java.util.stream.StreamSupport;
 public class NoSlow extends Module {
    public final ModeValue modeValue = ValueBuilder.create(this, "Mode")
            .setDefaultModeIndex(0)
-           .setModes("Grim", "Heypixel", "Grim Offhand Swap")
+           .setModes("Grim", "Heypixel")
            .build()
            .getModeValue();
 
    private final ModeValue grimForm = ValueBuilder.create(this, "Grim Mode")
            .setDefaultModeIndex(0)
-           .setModes("Item Switch", "Tick Slow", "Food Drop", "Blink")
+           .setModes("Item Switch", "Tick Slow", "Blink")
            .setVisibility(() -> this.modeValue.isCurrentMode("Grim"))
            .build()
            .getModeValue();
 
    private final ModeValue tickSlow = ValueBuilder.create(this, "Tick Pattern")
            .setDefaultModeIndex(0)
-           .setModes("1:1 Pattern", "1:3 Pattern", "Legacy Drop")
+           .setModes("1:1 Pattern", "1:3 Pattern")
            .setVisibility(() -> modeValue.isCurrentMode("Grim") && grimForm.isCurrentMode("Tick Slow"))
            .build()
            .getModeValue();
 
-   private final FloatValue legacyHeypixelTicks = ValueBuilder.create(this, "Legacy Drop Ticks")
+   private final ModeValue heypixelTick = ValueBuilder.create(this, "Heypixel Pattern")
+           .setDefaultModeIndex(0)
+           .setModes("1:3 Pattern", "3:2 Pattern", "Old Heypixel")
+           .setVisibility(() -> modeValue.isCurrentMode("Heypixel"))
+           .build()
+           .getModeValue();
+
+   private final FloatValue legacyHeypixelTicks = ValueBuilder.create(this, "Old Heypixel Ticks")
            .setDefaultFloatValue(9.0F)
            .setMinFloatValue(1.0F)
            .setMaxFloatValue(32.0F)
            .setFloatStep(1.0F)
-           .setVisibility(() -> modeValue.isCurrentMode("Grim") && grimForm.isCurrentMode("Tick Slow") && tickSlow.isCurrentMode("Legacy Drop"))
+           .setVisibility(() -> modeValue.isCurrentMode("Heypixel") && heypixelTick.isCurrentMode("Old Heypixel"))
            .build()
            .getFloatValue();
-
-   private final ModeValue heypixelTick = ValueBuilder.create(this, "Heypixel Pattern")
-           .setDefaultModeIndex(0)
-           .setModes("1:3 Pattern", "3:2 Pattern", "Swap Pattern")
-           .setVisibility(() -> modeValue.isCurrentMode("Heypixel"))
-           .build()
-           .getModeValue();
 
    public FloatValue slowdownTicks = ValueBuilder.create(this, "Delay Ticks")
            .setDefaultFloatValue(12.0F)
@@ -90,21 +84,12 @@ public class NoSlow extends Module {
    private int postDelayTicks = 0;
    private int maxUseDuration = 0;
    private int useTimer = 0;
-   private Step step = Step.NONE;
-   private int grimOffhandUseTicks = 0;
-   private final Queue<Packet<ClientGamePacketListener>> delayedOffhandPackets = new ConcurrentLinkedQueue<>();
-   private boolean foodDroppedThisUse = false;
    private boolean legacyEating = false;
    private boolean legacyDropSent = false;
    private int legacyReleaseCancelTicks = 0;
 
-   private enum Step {
-      NONE, DELAYING
-   }
-
    @Override
    public void onDisable() {
-      finishGrimOffhandSwap(true);
       legacyEating = false;
       legacyDropSent = false;
       legacyReleaseCancelTicks = 0;
@@ -124,15 +109,6 @@ public class NoSlow extends Module {
          case "Grim":
             switch (grimForm.getCurrentMode()) {
                case "Item Switch":
-                  if (mc.player.isUsingItem() && mc.player.tickCount % 33 == 0) {
-                     mc.player.connection.send(new ServerboundSetCarriedItemPacket((mc.player.getInventory().selected + 1) % 8));
-                     mc.player.connection.send(new ServerboundSetCarriedItemPacket(mc.player.getInventory().selected));
-                  }
-
-                  if (mc.player.isUsingItem() && mc.player.getUseItemRemainingTicks() <= 26) {
-                     eventSlowdown.setSlowdown(false);
-                     if (mc.player.isUsingItem() && !mc.player.isSprinting()) mc.player.setSprinting(true);
-                  }
                   break;
                case "Tick Slow":
                   switch (tickSlow.getCurrentMode()) {
@@ -149,40 +125,6 @@ public class NoSlow extends Module {
                            if (mc.player.isUsingItem() && !mc.player.isSprinting()) mc.player.setSprinting(true);
                         }
                         break;
-
-                     case "Legacy Drop":
-                        if (mc.player.isUsingItem() && mc.player.getUseItemRemainingTicks() <= 30) {
-                           eventSlowdown.setSlowdown(false);
-                        }
-                        if (mc.player.isUsingItem() && !mc.player.isSprinting()) {
-                           mc.player.setSprinting(true);
-                        }
-                        break;
-                  }
-                  break;
-               case "Food Drop":
-                  if (mc.player.isUsingItem() && mc.player.getUseItemRemainingTicks() <= 30) {
-                     ItemStack usingItem = mc.player.getUseItem();
-
-                     if (usingItem != null && usingItem.getItem().isEdible() && !foodDroppedThisUse) {
-                        eventSlowdown.setSlowdown(false);
-                        if (mc.player.isUsingItem() && !mc.player.isSprinting()) mc.player.setSprinting(true);
-
-                        mc.gameMode.handleInventoryMouseClick(
-                                mc.player.inventoryMenu.containerId,
-                                mc.player.getInventory().selected + 36,
-                                0,
-                                ClickType.THROW,
-                                mc.player
-                        );
-                        eventSlowdown.setSlowdown(false);
-
-                        foodDroppedThisUse = true;
-                     }
-                  }
-
-                  if (!mc.player.isUsingItem()) {
-                     foodDroppedThisUse = false;
                   }
                   break;
                case "Blink":
@@ -236,46 +178,16 @@ public class NoSlow extends Module {
                      if (mc.player.isUsingItem() && !mc.player.isSprinting()) mc.player.setSprinting(true);
                   }
                   break;
-
-               case "Swap Pattern":
-                  if (checkSword()) {
+               case "Old Heypixel":
+                  if (mc.player.isUsingItem() && mc.player.getUseItemRemainingTicks() <= 30) {
                      eventSlowdown.setSlowdown(false);
-                     if (mc.player.isUsingItem() && !mc.player.isSprinting()) mc.player.setSprinting(true);
+                  }
+                  if (mc.player.isUsingItem() && !mc.player.isSprinting()) {
+                     mc.player.setSprinting(true);
                   }
                   break;
             }
             break;
-         case "Grim Offhand Swap":
-            break;
-      }
-   }
-
-   @EventTarget
-   public void onSlowDown(EventSlowdown e) {
-      if (!modeValue.isCurrentMode("Grim Offhand Swap")) return;
-
-      if (mc.player == null || mc.getConnection() == null || mc.player.getUseItem() == null) return;
-
-      UseAnim activeUseAnim = mc.player.getUseItem().getUseAnimation();
-      if (!isUsable(activeUseAnim) || mc.player.getUseItemRemainingTicks() <= 0) {
-         return;
-      }
-
-      InteractionHand oppositeHand = mc.player.getUsedItemHand() == InteractionHand.MAIN_HAND
-              ? InteractionHand.OFF_HAND
-              : InteractionHand.MAIN_HAND;
-
-      if (isUsable(mc.player.getItemInHand(oppositeHand).getUseAnimation())) {
-         return;
-      }
-
-      if (step == Step.NONE) {
-         startGrimOffhandSwap();
-      }
-
-      if (step == Step.DELAYING) {
-         mc.player.setSprinting(true);
-         e.setSlowdown(false);
       }
    }
 
@@ -289,7 +201,7 @@ public class NoSlow extends Module {
       }
 
       if (event.getType() == EventType.POST) {
-         if (!modeValue.isCurrentMode("Grim") || !grimForm.isCurrentMode("Tick Slow") || !tickSlow.isCurrentMode("Legacy Drop")) {
+         if (!modeValue.isCurrentMode("Heypixel") || !heypixelTick.isCurrentMode("Old Heypixel")) {
             legacyEating = false;
             legacyDropSent = false;
             legacyReleaseCancelTicks = 0;
@@ -336,10 +248,6 @@ public class NoSlow extends Module {
 
       if (event.getType() != EventType.PRE) return;
 
-      if (modeValue.isCurrentMode("Grim Offhand Swap")) {
-         updateGrimOffhandSwap();
-      }
-
       if (usingActive) {
          useTimer++;
       }
@@ -371,58 +279,18 @@ public class NoSlow extends Module {
    }
 
    @EventTarget
-   public void onMotion(EventMotion event) {
-      if (event.getType() == EventType.PRE
-              && modeValue.isCurrentMode("Heypixel")
-              && heypixelTick.isCurrentMode("Swap Pattern")) {
-         if (mc.player == null || mc.getConnection() == null || !mc.player.isUsingItem() || !checkSword()) {
-            return;
-         }
-
-         if (mc.player.getUsedItemHand() == InteractionHand.MAIN_HAND) {
-            mc.getConnection().send(new ServerboundUseItemPacket(InteractionHand.OFF_HAND, 0));
-         } else {
-            int slot = mc.player.getInventory().selected;
-            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot % 8 + 1));
-            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot % 7 + 2));
-            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
-         }
-      }
-   }
-
-   @EventTarget
    public void onPacket(EventPacket event) {
       if (!isEnabled()) return;
 
       if (event.getType() == EventType.SEND
-              && modeValue.isCurrentMode("Grim")
-              && grimForm.isCurrentMode("Tick Slow")
-              && tickSlow.isCurrentMode("Legacy Drop")
+              && modeValue.isCurrentMode("Heypixel")
+              && heypixelTick.isCurrentMode("Old Heypixel")
               && event.getPacket() instanceof ServerboundPlayerActionPacket actionPacket
               && actionPacket.getAction() == ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM
               && legacyReleaseCancelTicks > 0) {
          event.setCancelled(true);
          legacyReleaseCancelTicks = 0;
          return;
-      }
-
-      if (modeValue.isCurrentMode("Grim Offhand Swap")) {
-         Packet<?> packet = event.getPacket();
-
-         if (event.getType() == EventType.RECEIVE
-                 && step == Step.DELAYING
-                 && shouldDelayGrimOffhandPacket(packet)) {
-            event.setCancelled(true);
-            queueDelayedOffhandPacket(packet);
-            return;
-         }
-
-         if (event.getType() == EventType.SEND && packet instanceof ServerboundPlayerActionPacket) {
-            ServerboundPlayerActionPacket actionPacket = (ServerboundPlayerActionPacket) packet;
-            if (actionPacket.getAction() == ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM && step == Step.DELAYING) {
-               finishGrimOffhandSwap(true);
-            }
-         }
       }
 
       // Per Phase Blink
@@ -471,79 +339,7 @@ public class NoSlow extends Module {
          suffix = "Heypixel(" + heypixelTick.getCurrentMode() + ")";
       }
 
-      if (modeValue.isCurrentMode("Grim Offhand Swap")) {
-         suffix = "Grim Offhand Swap";
-      }
-
       this.setSuffix(suffix);
-   }
-
-   private void releaseQueuedPackets() {
-      while (!delayedOffhandPackets.isEmpty()) {
-         Packet<ClientGamePacketListener> p = delayedOffhandPackets.poll();
-         if (p != null && mc.getConnection() != null) {
-            p.handle(mc.getConnection());
-         }
-      }
-   }
-
-   @SuppressWarnings("unchecked")
-   private void queueDelayedOffhandPacket(Packet<?> packet) {
-      delayedOffhandPackets.offer((Packet<ClientGamePacketListener>) packet);
-   }
-
-   private void startGrimOffhandSwap() {
-      step = Step.DELAYING;
-      grimOffhandUseTicks = 0;
-      delayedOffhandPackets.clear();
-
-      boolean isInventoryOpenServerSide = mc.player.containerMenu != mc.player.inventoryMenu;
-      if (isInventoryOpenServerSide) {
-         mc.getConnection().send(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
-      }
-
-      swap();
-   }
-
-   private void updateGrimOffhandSwap() {
-      if (step != Step.DELAYING) {
-         return;
-      }
-
-      if (mc.player == null || mc.options == null || !mc.player.isUsingItem() || !mc.options.keyUse.isDown()) {
-         finishGrimOffhandSwap(true);
-         return;
-      }
-
-      grimOffhandUseTicks++;
-      if (grimOffhandUseTicks >= 32) {
-         finishGrimOffhandSwap(true);
-      }
-   }
-
-   private void finishGrimOffhandSwap(boolean swapBack) {
-      boolean wasDelaying = step == Step.DELAYING;
-      step = Step.NONE;
-      grimOffhandUseTicks = 0;
-
-      releaseQueuedPackets();
-
-      if (swapBack && wasDelaying) {
-         swap();
-      }
-   }
-
-   private boolean shouldDelayGrimOffhandPacket(Packet<?> packet) {
-      if (packet instanceof ClientboundContainerSetSlotPacket slotPacket) {
-         return slotPacket.getContainerId() == ClientboundContainerSetSlotPacket.PLAYER_INVENTORY
-                 || mc.player != null && slotPacket.getContainerId() == mc.player.inventoryMenu.containerId;
-      }
-
-      if (packet instanceof ClientboundContainerSetContentPacket contentPacket) {
-         return mc.player != null && contentPacket.getContainerId() == mc.player.inventoryMenu.containerId;
-      }
-
-      return false;
    }
 
    private void releaseMovementPackets() {
@@ -581,20 +377,6 @@ public class NoSlow extends Module {
       }
    }
 
-   private void swap() {
-      if (mc.getConnection() != null) {
-         mc.getConnection().send(new ServerboundPlayerActionPacket(
-                 ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND,
-                 BlockPos.ZERO,
-                 Direction.DOWN
-         ));
-      }
-   }
-
-   private boolean isUsable(UseAnim useAnim) {
-      return useAnim == UseAnim.EAT || useAnim == UseAnim.DRINK;
-   }
-
    private boolean checkFood() {
       ItemStack mainHandItem = mc.player.getMainHandItem();
       ItemStack offhandItem = mc.player.getOffhandItem();
@@ -610,12 +392,6 @@ public class NoSlow extends Module {
       ItemStack mainHandItem = mc.player.getMainHandItem();
       ItemStack offhandItem = mc.player.getOffhandItem();
       return mainHandItem.is(item) || offhandItem.is(item);
-   }
-
-   private boolean checkSword() {
-      ItemStack mainHandItem = mc.player.getMainHandItem();
-      ItemStack offhandItem = mc.player.getOffhandItem();
-      return mainHandItem.getItem() instanceof SwordItem || offhandItem.getItem() instanceof SwordItem;
    }
 
    private boolean isLegacyHeypixelFood(ItemStack stack) {
