@@ -2,27 +2,28 @@ package awa.qwq.ovo.Naven.modules.impl.misc;
 
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
-import awa.qwq.ovo.Naven.events.impl.EventHandlePacket;
-import awa.qwq.ovo.Naven.events.impl.EventMotion;
-import awa.qwq.ovo.Naven.events.impl.EventRespawn;
+import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
+import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
+import awa.qwq.ovo.Naven.managers.rotation.utils.RotationUtils;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
-import awa.qwq.ovo.Naven.utils.ChatUtils;
-import awa.qwq.ovo.Naven.utils.TimeHelper;
+import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
 import awa.qwq.ovo.Naven.utils.Vector2f;
-import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.FireBlock;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -32,40 +33,27 @@ import net.minecraft.world.phys.Vec3;
         category = Category.MISC
 )
 public class Helper extends Module {
-   TimeHelper diamond = new TimeHelper();
-   TimeHelper emerald = new TimeHelper();
-   private int dia;
-   private int eme = 1;
-   private boolean startgame = false;
-   //收水
+   private static final int RANGE = 4;
+
+   public boolean rotation;
+   public Vector2f helperRotation = null;
+   public boolean needRotate = false;
+   public BlockPos above;
+
    public int collectWaterSlot = -1;
    public int collectWaterTick = 0;
    public boolean collectingWater = false;
    public BlockPos currentFireTarget = null;
-   //灭火
    public int extinguishTick = 0;
-   //堵岩浆
    public int blockLavaSlot = -1;
    public int blockLavaTick = 0;
    public boolean blockingLava = false;
-   //堵水
    public int blockWaterSlot = -1;
    public int blockWaterTick = 0;
    public boolean blockingWater = false;
-   //堵B(?
-
-   //堵箱子
    public int wreckChestSlot = -1;
    public int wreckChestTick = 0;
    public boolean wreckingChest = false;
-
-   //转头
-   private int originalSlot = -1;
-   public boolean rotation;
-   public Vector2f helperRotation = null;
-   public boolean needRotate = false;
-   private int waitTick = 0;
-   public BlockPos above;
 
    public BooleanValue collectWater = ValueBuilder.create(this, "Auto Collect Water")
            .setDefaultBooleanValue(false)
@@ -92,353 +80,232 @@ public class Helper extends Module {
            .build()
            .getBooleanValue();
 
+   private Task currentTask;
+   private int originalSlot = -1;
+   private int rotateTicks;
+   private int cooldownTicks;
+
    @Override
    public void onDisable() {
+      this.restoreSlot();
+      this.clearTask();
+      this.resetLegacyState();
       super.onDisable();
-      if (originalSlot != -1) {
-         mc.player.getInventory().selected = originalSlot;
-         originalSlot = -1;
-      }
-      needRotate = false;
-      helperRotation = null;
-      collectingWater = false;
-      blockingLava = false;
-      blockingWater = false;
-      RotationManager.active = false;
-   }
-
-   private void interactWithBlock(BlockPos pos, InteractionHand hand) {
-      if (pos == null || mc.level == null) return;
-      if (!(mc.hitResult instanceof BlockHitResult hit) || !hit.getBlockPos().equals(pos)) {
-         lookAtBlock(pos);
-         needRotate = true;
-         return;
-      }
-      mc.gameMode.useItem(mc.player, hand);
-      mc.player.swing(hand);
    }
 
    @EventTarget
-   public void onMotion(EventMotion e) {
-      if (!collectingWater && !blockingLava && !blockingWater && !wreckingChest) {
-         if (originalSlot != -1) {
-            mc.player.getInventory().selected = originalSlot;
-            originalSlot = -1;
+   public void onRunTicks(EventRunTicks event) {
+      if (event.getType() != EventType.PRE || mc.player == null || mc.level == null || mc.gameMode == null) {
+         return;
+      }
+
+      this.needRotate = false;
+      this.helperRotation = null;
+      if (this.cooldownTicks > 0) {
+         --this.cooldownTicks;
+         this.restoreSlotIfIdle();
+         return;
+      }
+
+      if (this.currentTask == null) {
+         this.currentTask = this.findTask();
+         this.rotateTicks = 0;
+      }
+
+      if (this.currentTask == null) {
+         this.restoreSlotIfIdle();
+         return;
+      }
+
+      this.applyTaskRotation(this.currentTask);
+      if (++this.rotateTicks < 2) {
+         return;
+      }
+
+      this.executeTask(this.currentTask);
+      this.clearTask();
+      this.cooldownTicks = 2;
+      this.restoreSlot();
+   }
+
+   private Task findTask() {
+      if (this.collectWater.getCurrentValue()) {
+         Task task = this.createCollectWaterTask();
+         if (task != null) {
+            return task;
          }
       }
-      if (e.getType() != EventType.PRE || mc.player == null || mc.level == null) return;
-      if (this.diamond.delay(30000.0) && this.startgame) {
-         this.dia++;
-         ChatUtils.addChatMessage("第" + this.dia + "波钻石刷新");
-         this.diamond.reset();
+      if (this.extinguisher.getCurrentValue()) {
+         Task task = this.createExtinguishTask();
+         if (task != null) {
+            return task;
+         }
       }
-      if (this.emerald.delay(60000.0) && this.startgame) {
-         this.eme++;
-         ChatUtils.addChatMessage("第" + this.eme + "波绿宝石刷新");
-         this.emerald.reset();
+      if (this.blockLava.getCurrentValue()) {
+         Task task = this.createBlockFluidTask(Fluids.LAVA);
+         if (task != null) {
+            return task;
+         }
       }
-      needRotate = false;
-      helperRotation = null;
+      if (this.blockWater.getCurrentValue()) {
+         Task task = this.createBlockFluidTask(Fluids.WATER);
+         if (task != null) {
+            return task;
+         }
+      }
+      if (this.chestWreck.getCurrentValue()) {
+         return this.createChestWreckTask();
+      }
+      return null;
+   }
 
-      if (collectWater.getCurrentValue()) {
-         processCollectWater();
-         if (needRotate) return;
-      }
-
-      if (extinguisher.getCurrentValue() && !needRotate) {
-         processExtinguisher();
-         if (needRotate) return;
-      }
-
-      if (blockLava.getCurrentValue() && !needRotate) {
-         processBlockLava();
-         if (needRotate) return;
-      }
-
-      if (blockWater.getCurrentValue() && !needRotate && !collectingWater) {
-         processBlockWater();
-         if (needRotate) return;
+   private Task createCollectWaterTask() {
+      BlockPos water = this.findNearestBlock(state -> state.getFluidState().is(Fluids.WATER) && state.getFluidState().isSource());
+      int bucketSlot = this.findSlot(stack -> stack.is(Items.BUCKET));
+      if (water == null || bucketSlot == -1) {
+         return null;
       }
 
-      if (needRotate && helperRotation != null) {
-         RotationManager.setRotations(helperRotation);
+      BlockHitResult hit = new BlockHitResult(center(water), Direction.UP, water, false);
+      return new Task(TaskType.COLLECT_WATER, hit, bucketSlot);
+   }
+
+   private Task createExtinguishTask() {
+      BlockPos fire = this.findNearestBlock(state -> state.getBlock() instanceof FireBlock
+              || state.is(Blocks.FIRE)
+              || state.is(Blocks.SOUL_FIRE));
+      if (fire == null) {
+         this.currentFireTarget = null;
+         return null;
+      }
+
+      this.currentFireTarget = fire;
+      BlockHitResult hit = new BlockHitResult(center(fire), Direction.UP, fire, false);
+      return new Task(TaskType.EXTINGUISH, hit, -1);
+   }
+
+   private Task createBlockFluidTask(net.minecraft.world.level.material.Fluid fluid) {
+      BlockPos fluidPos = this.findNearestBlock(state -> state.getFluidState().is(fluid) && state.getFluidState().isSource());
+      int blockSlot = this.findSlot(stack -> stack.getItem() instanceof BlockItem && Scaffold.isValidStack(stack));
+      if (fluidPos == null || blockSlot == -1) {
+         return null;
+      }
+
+      BlockHitResult hit = this.findPlacementHit(fluidPos);
+      if (hit == null) {
+         return null;
+      }
+
+      return new Task(fluid == Fluids.LAVA ? TaskType.BLOCK_LAVA : TaskType.BLOCK_WATER, hit, blockSlot);
+   }
+
+   private Task createChestWreckTask() {
+      BlockPos chest = this.findNearestBlock(state -> state.getBlock() instanceof ChestBlock || state.is(Blocks.CHEST) || state.is(Blocks.ENDER_CHEST));
+      if (chest == null) {
+         return null;
+      }
+
+      Direction face = this.getFacingFace(chest);
+      BlockHitResult hit = new BlockHitResult(center(chest), face, chest, false);
+      return new Task(TaskType.WRECK_CHEST, hit, -1);
+   }
+
+   private void executeTask(Task task) {
+      switch (task.type) {
+         case COLLECT_WATER -> {
+            this.selectSlot(task.slot);
+            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
+            mc.player.swing(InteractionHand.MAIN_HAND);
+            this.collectWaterSlot = task.slot;
+            this.collectWaterTick = 1;
+            this.collectingWater = true;
+         }
+         case BLOCK_LAVA, BLOCK_WATER -> {
+            this.selectSlot(task.slot);
+            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, task.hitResult);
+            mc.player.swing(InteractionHand.MAIN_HAND);
+            if (task.type == TaskType.BLOCK_LAVA) {
+               this.blockLavaSlot = task.slot;
+               this.blockLavaTick = 1;
+               this.blockingLava = true;
+            } else {
+               this.blockWaterSlot = task.slot;
+               this.blockWaterTick = 1;
+               this.blockingWater = true;
+            }
+         }
+         case EXTINGUISH -> {
+            mc.gameMode.startDestroyBlock(task.hitResult.getBlockPos(), task.hitResult.getDirection());
+            mc.player.swing(InteractionHand.MAIN_HAND);
+            this.extinguishTick = 10;
+         }
+         case WRECK_CHEST -> {
+            mc.gameMode.startDestroyBlock(task.hitResult.getBlockPos(), task.hitResult.getDirection());
+            mc.player.swing(InteractionHand.MAIN_HAND);
+            this.wreckChestTick = 1;
+            this.wreckingChest = true;
+         }
+      }
+   }
+
+   private void applyTaskRotation(Task task) {
+      this.helperRotation = RotationUtils.getRotations(task.hitResult.getLocation());
+      this.needRotate = this.helperRotation != null;
+      if (this.needRotate) {
+         RotationManager.setRotations(new Vector2f(this.helperRotation.x, this.helperRotation.y));
          RotationManager.active = true;
       }
    }
 
-   private void processCollectWater() {
-      if (collectingWater) {
-         collectWaterTick--;
-         if (collectWaterTick > 0) return;
-
-         if (collectWaterSlot != -1 && mc.player.getInventory().selected == collectWaterSlot) {
-            ItemStack mainHand = mc.player.getMainHandItem();
-            if (mainHand.getItem() == Items.WATER_BUCKET) {
-               if (originalSlot != -1) {
-                  mc.player.getInventory().selected = originalSlot;
-                  originalSlot = -1;
-               }
-               collectingWater = false;
-               collectWaterSlot = -1;
-               return;
-            }
-         }
-         collectingWater = false;
-         collectWaterSlot = -1;
-      }
-
-      BlockPos waterPos = findNearestWater();
-      if (waterPos == null) return;
-
-      int bucketSlot = findEmptyBucket();
-      if (bucketSlot == -1) return;
-
-      if (originalSlot == -1) {
-         originalSlot = mc.player.getInventory().selected;
-      }
-      if (!(mc.hitResult instanceof BlockHitResult hit) || !hit.getBlockPos().equals(waterPos)) {
-
-         lookAtBlock(waterPos);
-         needRotate = true;
-         return;
-      }
-
-      collectWaterSlot = bucketSlot;
-      mc.player.getInventory().selected = bucketSlot;
-      mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-      mc.player.swing(InteractionHand.MAIN_HAND);
-
-      collectingWater = true;
-      collectWaterTick = 1;
-   }
-
-   private void processBlockLava() {
-      if (blockingLava) {
-         blockLavaTick--;
-         if (blockLavaTick > 0) return;
-
-         BlockPos lavaPos = findNearestLava();
-         if (lavaPos == null) {
-            if (originalSlot != -1) {
-               mc.player.getInventory().selected = originalSlot;
-               originalSlot = -1;
-            }
-            blockingLava = false;
-            blockLavaSlot = -1;
-            return;
-         }
-         blockingLava = false;
-         blockLavaSlot = -1;
-      }
-
-      BlockPos lavaPos = findNearestLava();
-      if (lavaPos == null) return;
-
-      PlaceOnResult placeOn = findPlaceOnBlock(lavaPos);
-      if (placeOn == null) return;
-
-      int blockSlot = findBlockInHotbar();
-      if (blockSlot == -1) return;
-      if (!(mc.hitResult instanceof BlockHitResult hit) || !hit.getBlockPos().equals(placeOn.facePos)) {
-         lookAtBlock(placeOn.facePos);
-         needRotate = true;
-         return;
-      }
-
-      if (originalSlot == -1) {
-         originalSlot = mc.player.getInventory().selected;
-      }
-
-      blockLavaSlot = blockSlot;
-      mc.player.getInventory().selected = blockSlot;
-
-      mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-      mc.player.swing(InteractionHand.MAIN_HAND);
-
-      blockingLava = true;
-      blockLavaTick = 1;
-   }
-
-   private void processBlockWater() {
-      if (blockingWater) {
-         blockWaterTick--;
-         if (blockWaterTick > 0) return;
-
-         BlockPos waterPos = findNearestWaterForBlock();
-         if (waterPos == null) {
-            if (originalSlot != -1) {
-               mc.player.getInventory().selected = originalSlot;
-               originalSlot = -1;
-            }
-            blockingWater = false;
-            blockWaterSlot = -1;
-            return;
-         }
-         blockingWater = false;
-         blockWaterSlot = -1;
-      }
-
-      BlockPos waterPos = findNearestWaterForBlock();
-      if (waterPos == null) return;
-
-      PlaceOnResult placeOn = findPlaceOnBlock(waterPos);
-      if (placeOn == null) return;
-
-      int blockSlot = findBlockInHotbar();
-      if (blockSlot == -1) return;
-
-      if (originalSlot == -1) {
-         originalSlot = mc.player.getInventory().selected;
-      }
-
-      lookAtBlock(placeOn.facePos);
-      blockWaterSlot = blockSlot;
-      mc.player.getInventory().selected = blockSlot;
-      interactWithBlock(placeOn.facePos, InteractionHand.MAIN_HAND);
-
-      blockingWater = true;
-      blockWaterTick = 1;
-   }
-
-   private void processWreckChest() {
-      if (wreckingChest) {
-         wreckChestTick--;
-         if (wreckChestTick > 0) return;
-
-         BlockPos chestPos = findNearestChest();
-         if (chestPos == null) {
-            mc.player.getInventory().selected = getOriginalSlot();
-            wreckingChest = false;
-            wreckChestSlot = -1;
-            return;
-         }
-         wreckingChest = false;
-         wreckChestSlot = -1;
-      }
-
-      BlockPos chestPos = findNearestChest();
-      if (chestPos == null) return;
-
-      PlaceOnResult placeOn = findPlaceOnBlock(chestPos);
-      if (placeOn == null) return;
-
-      int blockSlot = findBlockInHotbar();
-      if (blockSlot == -1) return;
-
-      lookAtBlock(placeOn.facePos);
-
-      wreckChestSlot = blockSlot;
-      mc.player.getInventory().selected = blockSlot;
-
-      interactWithBlock(placeOn.facePos, InteractionHand.MAIN_HAND);
-
-      wreckingChest = true;
-      wreckChestTick = 1;
-   }
-
-   private void processExtinguisher() {
-      if (extinguishTick > 0) {
-         extinguishTick--;
-         return;
-      }
-
-      BlockPos firePos = findNearestFire();
-      if (firePos == null) {
-         currentFireTarget = null;
-         return;
-      }
-
-      currentFireTarget = firePos;
-      if (!(mc.hitResult instanceof BlockHitResult hit) || !hit.getBlockPos().equals(firePos)) {
-         lookAtBlock(firePos);
-         needRotate = true;
-         return;
-      }
-      mc.gameMode.attack(mc.player, null);
-      mc.player.swing(InteractionHand.MAIN_HAND);
-
-      extinguishTick = 10;
-   }
-
-   private BlockPos findNearestWater() {
-      return findNearestBlockInRange((int)3.8F, state -> state.getBlock() == Blocks.WATER && state.getValue(LiquidBlock.LEVEL) == 0);
-   }
-
-   private BlockPos findNearestWaterForBlock() {
-      return findNearestBlockInRange((int)3.8F, state -> state.getBlock() == Blocks.WATER && state.getValue(LiquidBlock.LEVEL) == 0);
-   }
-
-   private BlockPos findNearestLava() {
-      return findNearestBlockInRange( (int)3.8F, state -> state.getBlock() == Blocks.LAVA && state.getValue(LiquidBlock.LEVEL) == 0);
-   }
-
-   public BlockPos findNearestFire() {
-      return findNearestBlockInRange( (int)3.8F, state -> state.getBlock() instanceof FireBlock || state.getBlock() == Blocks.FIRE || state.getBlock() == Blocks.SOUL_FIRE);
-   }
-
-   public BlockPos findNearestChest() {
-      return findNearestBlockInRange((int)3.8F, state -> state.getBlock() instanceof ChestBlock || state.getBlock() == Blocks.CHEST || state.getBlock() == Blocks.ENDER_CHEST);
-   }
-
-   private PlaceOnResult findPlaceOnBlock(BlockPos fluidPos) {
-      if (mc.level == null || mc.player == null) return null;
-      Vec3 playerPos = mc.player.getEyePosition(1.0F);
-      Vec3 fluidCenter = new Vec3(fluidPos.getX() + 0.5, fluidPos.getY() + 0.5, fluidPos.getZ() + 0.5);
-      Direction[] directions = {Direction.UP, Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
-      PlaceOnResult bestResult = null;
+   private BlockHitResult findPlacementHit(BlockPos targetPos) {
+      Vec3 eye = mc.player.getEyePosition();
+      BlockHitResult best = null;
       double bestDistance = Double.MAX_VALUE;
-
-      for (Direction dir : directions) {
-         BlockPos neighborPos = fluidPos.relative(dir);
-         BlockState state = mc.level.getBlockState(neighborPos);
-         if (state.isAir() || state.getBlock() instanceof LiquidBlock || !state.isSolid()) {
+      for (Direction direction : Direction.values()) {
+         BlockPos support = targetPos.relative(direction);
+         BlockState supportState = mc.level.getBlockState(support);
+         if (!this.isValidSupport(supportState)) {
             continue;
          }
-         Direction clickDir = dir;
-         Vec3 blockCenter = new Vec3(neighborPos.getX() + 0.5, neighborPos.getY() + 0.5, neighborPos.getZ() + 0.5);
-         Vec3 faceCenter = blockCenter.add(clickDir.getStepX() * 0.5, clickDir.getStepY() * 0.5, clickDir.getStepZ() * 0.5);
-         Vec3 playerToFace = faceCenter.subtract(playerPos).normalize();
-         Vec3 clickDirVec = new Vec3(clickDir.getStepX(), clickDir.getStepY(), clickDir.getStepZ());
 
-         double dot = playerToFace.dot(clickDirVec);
-         if (dot > 0) {
-            double dist = mc.player.distanceToSqr(neighborPos.getX() + 0.5, neighborPos.getY() + 0.5, neighborPos.getZ() + 0.5);
-            if (dist < bestDistance) {
-               bestDistance = dist;
-               bestResult = new PlaceOnResult(neighborPos, dir.getOpposite());
-            }
+         Direction face = direction.getOpposite();
+         Vec3 hitVec = new Vec3(
+                 support.getX() + 0.5D + face.getStepX() * 0.5D,
+                 support.getY() + 0.5D + face.getStepY() * 0.5D,
+                 support.getZ() + 0.5D + face.getStepZ() * 0.5D
+         );
+         double distance = eye.distanceToSqr(hitVec);
+         if (distance < bestDistance) {
+            bestDistance = distance;
+            best = new BlockHitResult(hitVec, face, support, false);
          }
       }
-      if (bestResult == null) {
-         BlockPos belowPos = fluidPos.below();
-         BlockState belowState = mc.level.getBlockState(belowPos);
-         if (!belowState.isAir() && !(belowState.getBlock() instanceof LiquidBlock) && belowState.isSolid()) {
-            if (playerPos.y > belowPos.getY() + 1) {
-               bestResult = new PlaceOnResult(belowPos, Direction.UP);
-            }
-         }
-      }
-      return bestResult;
+      return best;
    }
 
-   public BlockPos findNearestBlockInRange(int range, java.util.function.Predicate<BlockState> predicate) {
-      if (mc.player == null || mc.level == null) return null;
+   private boolean isValidSupport(BlockState state) {
+      return !state.isAir()
+              && !(state.getBlock() instanceof LiquidBlock)
+              && !state.getShape(mc.level, BlockPos.ZERO).isEmpty()
+              && state.isSolid();
+   }
 
+   private BlockPos findNearestBlock(java.util.function.Predicate<BlockState> predicate) {
       BlockPos playerPos = mc.player.blockPosition();
       BlockPos nearest = null;
-      double nearestDist = Double.MAX_VALUE;
-
-      for (int x = -range; x <= range; x++) {
-         for (int y = -range; y <= range; y++) {
-            for (int z = -range; z <= range; z++) {
+      double bestDistance = Double.MAX_VALUE;
+      for (int x = -RANGE; x <= RANGE; x++) {
+         for (int y = -RANGE; y <= RANGE; y++) {
+            for (int z = -RANGE; z <= RANGE; z++) {
                BlockPos pos = playerPos.offset(x, y, z);
                BlockState state = mc.level.getBlockState(pos);
-               if (predicate.test(state)) {
-                  double dist = mc.player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-                  if (dist < nearestDist) {
-                     nearestDist = dist;
-                     nearest = pos;
-                  }
+               if (!predicate.test(state)) {
+                  continue;
+               }
+               double distance = mc.player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+               if (distance < bestDistance) {
+                  bestDistance = distance;
+                  nearest = pos;
                }
             }
          }
@@ -446,81 +313,90 @@ public class Helper extends Module {
       return nearest;
    }
 
-   public int findEmptyBucket() {
-      for (int i = 0; i < 9; i++) {
-         ItemStack stack = mc.player.getInventory().getItem(i);
-         if (stack.getItem() == Items.BUCKET) {
-            return i;
+   private int findSlot(java.util.function.Predicate<ItemStack> predicate) {
+      for (int slot = 0; slot < 9; slot++) {
+         ItemStack stack = mc.player.getInventory().getItem(slot);
+         if (predicate.test(stack)) {
+            return slot;
          }
       }
       return -1;
    }
 
-   public int findBlockInHotbar() {
-      for (int i = 0; i < 9; i++) {
-         ItemStack stack = mc.player.getInventory().getItem(i);
-         if (stack.getItem() instanceof BlockItem) {
-            return i;
-         }
+   private void selectSlot(int slot) {
+      if (slot < 0 || slot > 8) {
+         return;
       }
-      return -1;
+      if (this.originalSlot == -1) {
+         this.originalSlot = mc.player.getInventory().selected;
+      }
+      mc.player.getInventory().selected = slot;
    }
 
-   public int getOriginalSlot() {
-      return 0;
-   }
-
-   private void lookAtBlock(BlockPos pos) {
-      if (pos == null) return;
-
-      Vec3 eyePos = mc.player.getEyePosition(1.0F);
-      Vec3 target = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-
-      double dx = target.x - eyePos.x;
-      double dy = target.y - eyePos.y;
-      double dz = target.z - eyePos.z;
-      double horizontalDist = Math.sqrt(dx * dx + dz * dz);
-
-      float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0f;
-      float pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
-
-      helperRotation = new Vector2f(yaw, pitch);
-      needRotate = true;
-   }
-
-   private static class PlaceOnResult {
-      final BlockPos facePos;
-      final Direction direction;
-
-      PlaceOnResult(BlockPos facePos, Direction direction) {
-         this.facePos = facePos;
-         this.direction = direction;
+   private void restoreSlotIfIdle() {
+      if (this.currentTask == null) {
+         this.restoreSlot();
       }
    }
 
-   @EventTarget
-   public void onRespawn(EventRespawn e) {
-      this.dia = 0;
-      this.eme = 0;
+   private void restoreSlot() {
+      if (mc.player != null && this.originalSlot >= 0 && this.originalSlot < 9) {
+         mc.player.getInventory().selected = this.originalSlot;
+      }
+      this.originalSlot = -1;
    }
 
-   @EventTarget(0)
-   public void onPacket(EventHandlePacket e) {
-      try {
-         if (mc.player != null && !e.isCancelled() && e.getPacket() instanceof ClientboundSystemChatPacket) {
-            ClientboundSystemChatPacket s02 = (ClientboundSystemChatPacket)e.getPacket();
-            String words = s02.content().getString();
-            if (words.contains("游戏准备开始")) {
-               this.diamond.reset();
-               this.emerald.reset();
-               this.startgame = true;
-            }
-            if (words.contains("游戏结束")) {
-               this.startgame = false;
-            }
-         }
-      } catch (Exception var4) {
-         var4.printStackTrace();
+   private void clearTask() {
+      this.currentTask = null;
+      this.rotateTicks = 0;
+      this.needRotate = false;
+      this.helperRotation = null;
+   }
+
+   private void resetLegacyState() {
+      this.collectWaterSlot = -1;
+      this.collectWaterTick = 0;
+      this.collectingWater = false;
+      this.currentFireTarget = null;
+      this.extinguishTick = 0;
+      this.blockLavaSlot = -1;
+      this.blockLavaTick = 0;
+      this.blockingLava = false;
+      this.blockWaterSlot = -1;
+      this.blockWaterTick = 0;
+      this.blockingWater = false;
+      this.wreckChestSlot = -1;
+      this.wreckChestTick = 0;
+      this.wreckingChest = false;
+   }
+
+   private Direction getFacingFace(BlockPos pos) {
+      Vec3 eye = mc.player.getEyePosition();
+      Vec3 center = center(pos);
+      return Direction.getNearest(eye.x - center.x, eye.y - center.y, eye.z - center.z);
+   }
+
+   private static Vec3 center(BlockPos pos) {
+      return new Vec3(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+   }
+
+   private enum TaskType {
+      COLLECT_WATER,
+      EXTINGUISH,
+      BLOCK_LAVA,
+      BLOCK_WATER,
+      WRECK_CHEST
+   }
+
+   private static class Task {
+      private final TaskType type;
+      private final BlockHitResult hitResult;
+      private final int slot;
+
+      private Task(TaskType type, BlockHitResult hitResult, int slot) {
+         this.type = type;
+         this.hitResult = hitResult;
+         this.slot = slot;
       }
    }
 }
