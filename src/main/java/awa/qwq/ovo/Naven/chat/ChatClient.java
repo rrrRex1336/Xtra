@@ -2,14 +2,18 @@ package awa.qwq.ovo.Naven.chat;
 
 import awa.qwq.ovo.Naven.auth.VerifyClient;
 import awa.qwq.ovo.Naven.managers.friends.FriendManager;
+import awa.qwq.ovo.Naven.modules.impl.visual.IrcChatHUD;
 import awa.qwq.ovo.Naven.utils.HWIDUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import hoprc.obf.neko.NekoExclude;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.apache.logging.log4j.LogManager;
@@ -29,6 +33,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -57,7 +62,9 @@ public final class ChatClient {
    private static volatile long nextRejectLogAt;
    private static volatile String assignedName = "";
    private static volatile String lastRejectSignature = "";
+   private static volatile boolean chatHide;
    private static volatile Profile activeProfile;
+   private static final String HIDDEN_PREFIX = "\uE001";
 
    private ChatClient() {
    }
@@ -174,7 +181,9 @@ public final class ChatClient {
 
       Thread thread = new Thread(() -> {
          try {
-            HttpResponse response = post(buildSendUrl(profile), buildSendBody(profile, token, name, message));
+            String wireName = shouldHideChat() ? encodeHidden(name) : name;
+            String wireMessage = shouldHideChat() ? encodeHidden(message) : message;
+            HttpResponse response = post(buildSendUrl(profile), buildSendBody(profile, token, wireName, wireMessage));
             if (response.code() == 201 || response.code() == 200) {
                return;
             }
@@ -196,6 +205,14 @@ public final class ChatClient {
 
    public static boolean isAdmin() {
       return admin;
+   }
+
+   public static void setChatHide(boolean enabled) {
+      chatHide = enabled;
+   }
+
+   public static boolean isChatHide() {
+      return chatHide;
    }
 
    public static boolean isRunning() {
@@ -230,7 +247,7 @@ public final class ChatClient {
       }
 
       String self = currentMinecraftName();
-      if (!self.isEmpty() && self.equalsIgnoreCase(username)) {
+      if (isLocalMinecraftName(username)) {
          return assignedName;
       }
 
@@ -251,8 +268,7 @@ public final class ChatClient {
          return "";
       }
 
-      String self = currentMinecraftName();
-      if (!self.isEmpty() && self.equalsIgnoreCase(username)) {
+      if (isLocalMinecraftName(username)) {
          return DISPLAY_CLIENT;
       }
 
@@ -268,9 +284,180 @@ public final class ChatClient {
       return admin ? "\u00a7c" : "\u00a7b";
    }
 
+   public static int getIrcDisplayColor(String username) {
+      OnlineUser user = findOnlineUser(username);
+      if (user != null) {
+         return user.admin() ? 0xFFFF5555 : 0xFF55FFFF;
+      }
+      return admin ? 0xFFFF5555 : 0xFF55FFFF;
+   }
+
+   public static boolean isIrcAdmin(String username) {
+      OnlineUser user = findOnlineUser(username);
+      if (user != null) {
+         return user.admin();
+      }
+      String self = currentMinecraftName();
+      return !self.isEmpty() && self.equalsIgnoreCase(username) && admin;
+   }
+
    public static boolean isIrcFriendEnabled(String username) {
       OnlineUser user = findOnlineUser(username);
       return user == null || user.ircFriend();
+   }
+
+   public static List<String> getOnlineIrcNames() {
+      synchronized (ircUsers) {
+         List<String> names = new ArrayList<>();
+         for (OnlineUser user : ircUsers.values()) {
+            if (user.ircName() != null && !user.ircName().isEmpty()) {
+               names.add(user.ircName());
+            }
+         }
+         names.sort(String::compareToIgnoreCase);
+         return names;
+      }
+   }
+
+   public static Component decorateChatComponent(Component component) {
+      if (component == null || !hasJoinedIrc()) {
+         return component;
+      }
+
+      String text = component.getString();
+      if (text == null || text.isEmpty()) {
+         return component;
+      }
+      if (stripFormatting(text).contains("[IRC]")) {
+         return component;
+      }
+
+      List<NameDecoration> decorations = new ArrayList<>();
+      addNameDecoration(decorations, currentMinecraftName(), assignedName);
+      addNameDecoration(decorations, currentSessionName(), assignedName);
+      synchronized (ircUsers) {
+         for (OnlineUser user : ircUsers.values()) {
+            addNameDecoration(decorations, user.username(), user.ircName());
+         }
+      }
+
+      if (decorations.isEmpty()) {
+         return component;
+      }
+
+      if (hasAnyDecoratedName(stripFormatting(text), decorations)) {
+         return component;
+      }
+
+      decorations.sort((left, right) -> Integer.compare(right.username().length(), left.username().length()));
+
+      MutableComponent result = Component.empty();
+      boolean[] changed = new boolean[]{false};
+      boolean[] visited = new boolean[]{false};
+      component.visit((style, segment) -> {
+         visited[0] = true;
+         changed[0] |= appendDecoratedSegment(result, style, segment, decorations);
+         return Optional.empty();
+      }, Style.EMPTY);
+
+      if (!visited[0]) {
+         changed[0] = appendDecoratedSegment(result, component.getStyle(), text, decorations);
+      }
+
+      return changed[0] ? result : component;
+   }
+
+   private record NameDecoration(String username, String ircName) {
+   }
+
+   private static void addNameDecoration(List<NameDecoration> decorations, String username, String ircName) {
+      if (username == null || username.isEmpty() || ircName == null || ircName.isEmpty()) {
+         return;
+      }
+      for (NameDecoration decoration : decorations) {
+         if (decoration.username().equalsIgnoreCase(username)) {
+            return;
+         }
+      }
+      decorations.add(new NameDecoration(username, ircName));
+   }
+
+   private static boolean appendDecoratedSegment(MutableComponent result, Style style, String segment, List<NameDecoration> decorations) {
+      if (segment == null || segment.isEmpty()) {
+         return false;
+      }
+
+      boolean changed = false;
+      int index = 0;
+      while (index < segment.length()) {
+         Match match = findNextDecoration(segment, index, decorations);
+         if (match == null) {
+            appendStyled(result, segment.substring(index), style);
+            break;
+         }
+
+         if (match.start() > index) {
+            appendStyled(result, segment.substring(index, match.start()), style);
+         }
+         appendStyled(result, match.decoration().username(), style);
+         appendStyled(result, " (" + match.decoration().ircName() + ")", style.withColor(ChatFormatting.AQUA));
+         index = match.end();
+         changed = true;
+      }
+      return changed;
+   }
+
+   private record Match(int start, int end, NameDecoration decoration) {
+   }
+
+   private static Match findNextDecoration(String segment, int fromIndex, List<NameDecoration> decorations) {
+      Match best = null;
+      for (NameDecoration decoration : decorations) {
+         int start = segment.indexOf(decoration.username(), fromIndex);
+         if (start < 0 || hasDecoratedSuffix(segment, start + decoration.username().length(), decoration.ircName())) {
+            continue;
+         }
+         int end = start + decoration.username().length();
+         if (best == null || start < best.start() || (start == best.start() && end > best.end())) {
+            best = new Match(start, end, decoration);
+         }
+      }
+      return best;
+   }
+
+   private static boolean hasDecoratedSuffix(String segment, int suffixStart, String ircName) {
+      String suffix = " (" + ircName + ")";
+      return suffixStart >= 0
+              && suffixStart + suffix.length() <= segment.length()
+              && segment.regionMatches(true, suffixStart, suffix, 0, suffix.length());
+   }
+
+   private static boolean hasAnyDecoratedName(String text, List<NameDecoration> decorations) {
+      for (NameDecoration decoration : decorations) {
+         if (text.contains(decoration.username() + " (" + decoration.ircName() + ")")) {
+            return true;
+         }
+      }
+      return false;
+   }
+
+   private static void appendStyled(MutableComponent result, String text, Style style) {
+      if (!text.isEmpty()) {
+         result.append(Component.literal(text).withStyle(style));
+      }
+   }
+
+   private static String stripFormatting(String text) {
+      StringBuilder builder = new StringBuilder(text.length());
+      for (int i = 0; i < text.length(); i++) {
+         char c = text.charAt(i);
+         if (c == '\u00a7' && i + 1 < text.length()) {
+            i++;
+            continue;
+         }
+         builder.append(c);
+      }
+      return builder.toString();
    }
 
    private static void pollLoop() {
@@ -357,6 +544,10 @@ public final class ChatClient {
          y = (int) mc.player.getY();
          z = (int) mc.player.getZ();
       }
+      String sessionName = currentSessionName();
+      if (!sessionName.isEmpty()) {
+         mcName = sessionName;
+      }
       if (mc.level != null) {
          dim = mc.level.dimension().location().getPath();
       }
@@ -424,8 +615,8 @@ public final class ChatClient {
 
          JsonObject object = element.getAsJsonObject();
          String id = firstNonEmpty(getString(object, "id"), getString(object, "msg_id"));
-         String name = getString(object, "name");
-         String message = getString(object, "message");
+         String name = decodeHidden(getString(object, "name"));
+         String message = decodeHidden(getString(object, "message"));
          String client = getString(object, "client");
          long timestamp = getLong(object, "timestamp");
          boolean fromAdmin = getBoolean(object, "admin") || getBoolean(object, "is_admin");
@@ -570,6 +761,10 @@ public final class ChatClient {
          return;
       }
       users.put(mcName, new OnlineUser(mcName, assignedName, DISPLAY_CLIENT, INSTANCE_ID, admin, true));
+      String sessionName = currentSessionName();
+      if (!sessionName.isEmpty() && !sessionName.equalsIgnoreCase(mcName)) {
+         users.put(sessionName, new OnlineUser(sessionName, assignedName, DISPLAY_CLIENT, INSTANCE_ID, admin, true));
+      }
    }
 
    private static void announceOnlineChanges(Map<String, OnlineUser> fresh) {
@@ -598,8 +793,7 @@ public final class ChatClient {
       if (INSTANCE_ID.equals(user.instance())) {
          return true;
       }
-      String mcName = currentMinecraftName();
-      return !mcName.isEmpty() && mcName.equalsIgnoreCase(user.username());
+      return isLocalMinecraftName(user.username());
    }
 
    private static OnlineUser findOnlineUser(String username) {
@@ -699,7 +893,7 @@ public final class ChatClient {
    }
 
    private static boolean handleAdminCommand(String sender, String message) {
-      if (message == null || !message.startsWith(".")) {
+      if (message == null || (!message.startsWith(".") && !message.startsWith(";"))) {
          return false;
       }
 
@@ -808,6 +1002,25 @@ public final class ChatClient {
       return mc.player.getGameProfile().getName();
    }
 
+   private static String currentSessionName() {
+      Minecraft mc = Minecraft.getInstance();
+      if (mc == null || mc.getUser() == null) {
+         return "";
+      }
+      String name = mc.getUser().getName();
+      return name == null ? "" : name;
+   }
+
+   private static boolean isLocalMinecraftName(String username) {
+      if (username == null || username.isEmpty()) {
+         return false;
+      }
+      String playerName = currentMinecraftName();
+      String sessionName = currentSessionName();
+      return (!playerName.isEmpty() && playerName.equalsIgnoreCase(username))
+              || (!sessionName.isEmpty() && sessionName.equalsIgnoreCase(username));
+   }
+
    private static String ircToken() {
       return VerifyClient.getIrcToken();
    }
@@ -818,10 +1031,46 @@ public final class ChatClient {
          return;
       }
       mc.execute(() -> {
+         if (IrcChatHUD.routeMessage(text)) {
+            return;
+         }
          if (mc.gui != null) {
             mc.gui.getChat().addMessage(Component.literal(text));
          }
       });
+   }
+
+   private static boolean shouldHideChat() {
+      return chatHide && admin;
+   }
+
+   private static String encodeHidden(String text) {
+      if (text == null || text.isEmpty()) {
+         return "";
+      }
+      byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+      StringBuilder builder = new StringBuilder(HIDDEN_PREFIX.length() + bytes.length);
+      builder.append(HIDDEN_PREFIX);
+      for (byte b : bytes) {
+         builder.append((char) (0x2800 + (b & 0xFF)));
+      }
+      return builder.toString();
+   }
+
+   private static String decodeHidden(String text) {
+      if (text == null || !text.startsWith(HIDDEN_PREFIX)) {
+         return text == null ? "" : text;
+      }
+      try {
+         String payload = text.substring(HIDDEN_PREFIX.length());
+         byte[] bytes = new byte[payload.length()];
+         for (int i = 0; i < payload.length(); i++) {
+            bytes[i] = (byte) ((payload.charAt(i) - 0x2800) & 0xFF);
+         }
+         return new String(bytes, StandardCharsets.UTF_8);
+      } catch (Exception ignored) {
+         return text;
+      }
    }
 
    private static String formatChatLine(String client, String name, String message) {

@@ -1,18 +1,21 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
+import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.modules.impl.visual.Interface;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.utils.StencilUtils;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.ChatComponent;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -29,6 +32,26 @@ public abstract class MixinChatComponent {
 
     @Unique
     private static int lastMessageCount = 0;
+
+    @ModifyVariable(
+            method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;ILnet/minecraft/client/GuiMessageTag;Z)V",
+            at = @At("HEAD"),
+            argsOnly = true,
+            ordinal = 0
+    )
+    private Component onAddInternalMessage(Component component) {
+        return ChatClient.decorateChatComponent(component);
+    }
+
+    @ModifyVariable(
+            method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
+            at = @At("HEAD"),
+            argsOnly = true,
+            ordinal = 0
+    )
+    private Component onAddPublicMessage(Component component) {
+        return ChatClient.decorateChatComponent(component);
+    }
 
     @Inject(
             method = "render",

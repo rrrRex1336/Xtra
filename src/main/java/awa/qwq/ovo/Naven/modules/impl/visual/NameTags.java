@@ -240,12 +240,13 @@ public class NameTags extends Module {
             }
 
             Vector2f position = entry.getValue();
+            String playerName = living.getName().getString();
             String text = "";
             if (Teams.isSameTeam(living)) {
                text = text + "§aTeam§f | ";
             }
 
-            if (FriendManager.isFriend(living)) {
+            if (!ChatClient.isIrcUser(playerName) && FriendManager.isFriend(living)) {
                text = text + "§aFriend§f | ";
             }
 
@@ -254,7 +255,6 @@ public class NameTags extends Module {
             }
 
             // 添加杀手检测
-            String playerName = living.getName().getString();
             if (!ChatClient.isIrcUser(playerName) && KillerDetection.getDetectedKillers().contains(playerName)) {
                text = text + "§c" + playerName + " (Killer)§f";
             } else {
