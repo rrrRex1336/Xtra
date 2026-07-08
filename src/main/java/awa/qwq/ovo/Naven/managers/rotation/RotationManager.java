@@ -94,11 +94,11 @@ public class RotationManager {
          } else if (antiFireball != null && antiFireball.shouldApplyRotation()) {
             setRotations(antiFireball.getFireballRotation());
             active = true;
-         } else if (chestAura.isEnabled() && chestAura.rotations != null) {
+         } else if (chestAura != null && chestAura.isEnabled() && chestAura.rotations != null && chestAura.chestRotations != null) {
             Vector2f rot = chestAura.chestRotations;
             setRotations(rot);
             active = true;
-         } else if (helper.isEnabled() && helper.needRotate && helper.helperRotation != null) {
+         } else if (helper != null && helper.isEnabled() && helper.needRotate && helper.helperRotation != null) {
             setRotations(helper.helperRotation);
             active = true;
          } else if (crystalAura.isEnabled() && CrystalAura.rotations != null) {
@@ -215,9 +215,19 @@ public class RotationManager {
    }
 
    private static boolean controlMovementCorrection() {
+      AutoThrow autoThrow = (AutoThrow) Naven.getInstance().getModuleManager().getModule(AutoThrow.class);
+      if (autoThrow != null && autoThrow.isEnabled() && autoThrow.rotationSet > 0 && autoThrow.targetRotations != null) {
+         return true;
+      }
+
+      ChestAura chestAura = (ChestAura) Naven.getInstance().getModuleManager().getModule(ChestAura.class);
+      if (chestAura != null && chestAura.isEnabled() && chestAura.rotations != null && chestAura.chestRotations != null) {
+         return true;
+      }
+
       Helper helper = (Helper) Naven.getInstance().getModuleManager().getModule(Helper.class);
-      if (helper != null && helper.isEnabled() && helper.needRotate) {
-         return false;
+      if (helper != null && helper.isEnabled() && helper.needRotate && helper.helperRotation != null) {
+         return true;
       }
 
       Scaffold scaffold = (Scaffold) Naven.getInstance().getModuleManager().getModule(Scaffold.class);
