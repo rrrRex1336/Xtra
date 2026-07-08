@@ -1,5 +1,7 @@
 /.gradle/
 /build/
+/logs/
+/.idea/inspectionProfiles/
 /run/*
 !/run/mods/
 /run/mods/*
