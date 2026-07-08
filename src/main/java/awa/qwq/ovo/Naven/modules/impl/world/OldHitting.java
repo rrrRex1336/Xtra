@@ -8,6 +8,7 @@ import awa.qwq.ovo.Naven.events.impl.EventRender;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
+import awa.qwq.ovo.Naven.modules.impl.combat.Aura;
 import awa.qwq.ovo.Naven.modules.impl.combat.KillAura;
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
@@ -523,13 +524,22 @@ public class OldHitting extends Module {
     public LivingEntity getAuraTarget() {
         KillAura killAura = (KillAura) Naven.getInstance().getModuleManager().getModule(KillAura.class);
         if (killAura != null && killAura.isEnabled()) {
-            try {
-                java.lang.reflect.Field targetField = KillAura.class.getDeclaredField("target");
-                targetField.setAccessible(true);
-                return (LivingEntity) targetField.get(null);
-            } catch (Exception e) {
-                return null;
+            LivingEntity target = asLivingTarget(KillAura.target);
+            if (target != null) {
+                return target;
             }
+        }
+
+        Aura aura = (Aura) Naven.getInstance().getModuleManager().getModule(Aura.class);
+        if (aura != null && aura.isEnabled()) {
+            return asLivingTarget(Aura.target);
+        }
+        return null;
+    }
+
+    private LivingEntity asLivingTarget(Object target) {
+        if (target instanceof LivingEntity living && living.isAlive() && living.getHealth() > 0.0F) {
+            return living;
         }
         return null;
     }
