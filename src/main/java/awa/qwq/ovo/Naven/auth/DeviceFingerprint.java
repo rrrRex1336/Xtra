@@ -7,8 +7,8 @@ import java.security.MessageDigest;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
-public class HWIDCheck {
-    private static final Logger logger = LogManager.getLogger("HWID-Check");
+public class DeviceFingerprint {
+    private static final Logger logger = LogManager.getLogger("DeviceFingerprint");
 
     public static String getHWID() {
         try {
@@ -23,18 +23,7 @@ public class HWIDCheck {
     }
 
     public static String getEnhancedHWID() {
-        try {
-            String hardwareInfo = collectStableHardwareInfo();
-            String qqSalt = QQUtils.getQQForHWID();
-            String combinedInfo = hardwareInfo + "|" + qqSalt + "|ENHANCED_SALT_2024";
-
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(combinedInfo.getBytes());
-            return formatHWID(hash);
-        } catch (Exception e) {
-            logger.error("Error generating enhanced HWID", e);
-            return getHWID();
-        }
+        return getHWID();
     }
 
     public static String getBoundQQ() {
@@ -260,7 +249,7 @@ public class HWIDCheck {
     private static String formatHWID(byte[] hash) {
         StringBuilder hwid = new StringBuilder();
         String hexString = bytesToHex(hash);
-        int neededLength = 15 * 3;
+        int neededLength = 20 * 4;
         if (hexString.length() < neededLength) {
             StringBuilder extended = new StringBuilder(hexString);
             while (extended.length() < neededLength) {
@@ -268,11 +257,11 @@ public class HWIDCheck {
             }
             hexString = extended.toString();
         }
-        for (int i = 0; i < 45; i += 3) {
+        for (int i = 0; i < neededLength; i += 4) {
             if (i > 0) {
                 hwid.append("-");
             }
-            hwid.append(hexString.substring(i, i + 3).toUpperCase());
+            hwid.append(hexString.substring(i, i + 4).toUpperCase());
         }
 
         return hwid.toString();

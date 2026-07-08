@@ -166,7 +166,7 @@ final class LinYiLITokenStore {
     }
 
     private static byte[] deriveKey(byte[] salt) throws Exception {
-        byte[] machine = HWIDCheck.getHWID().getBytes(StandardCharsets.UTF_8);
+        byte[] machine = DeviceFingerprint.getHWID().getBytes(StandardCharsets.UTF_8);
         byte[] mixed   = new byte[PEPPER.length + machine.length];
         System.arraycopy(PEPPER, 0, mixed, 0, PEPPER.length);
         System.arraycopy(machine, 0, mixed, PEPPER.length, machine.length);

@@ -23,6 +23,11 @@ public class QQUtils {
       return getAllQQFromLocal();
    }
 
+   public static String getQQ() {
+      String recent = getRecentQQ();
+      return recent == null ? "" : recent;
+   }
+
    public static Set<String> getAllQQFromLocal() {
       if (cachedAllQQ != null && (System.currentTimeMillis() - cacheTime) < CACHE_DURATION) {
          return new HashSet<>(cachedAllQQ);
@@ -35,8 +40,12 @@ public class QQUtils {
       }
 
       String[] ntPaths = {
+              System.getenv("APPDATA") + "\\Tencent\\Users\\",
               System.getenv("APPDATA") + "\\Tencent\\QQ\\Misc",
               System.getenv("APPDATA") + "\\Tencent\\QQ\\nt_qq\\global\\nt_data\\QQ\\",
+              System.getProperty("user.home") + "\\Documents\\Tencent Files\\",
+              System.getProperty("user.home") + "\\Documents\\Tencent Files (64 Bit)\\",
+              System.getProperty("user.home") + "\\Documents\\Tencent Files\\nt_qq\\global\\nt_data\\Login\\",
               System.getenv("APPDATA") + "\\Tencent\\QQ\\temp\\",
               System.getenv("LOCALAPPDATA") + "\\Tencent\\QQ\\UserData\\"
       };
@@ -48,11 +57,11 @@ public class QQUtils {
             if (files != null) {
                for (File file : files) {
                   String fileName = file.getName();
-                  if (file.isDirectory() && fileName.matches("\\d{5,10}")) {
+                  if (file.isDirectory() && isValidQQ(fileName)) {
                      qqs.add(fileName);
                   }
                   else if (!file.isDirectory() && fileName.matches("[0-9]+") &&
-                          fileName.length() >= 5 && fileName.length() <= 10 &&
+                          isValidQQ(fileName) &&
                           checkNTQQFile(file)) {
                      qqs.add(fileName);
                   }
@@ -72,7 +81,7 @@ public class QQUtils {
                      File[] qqDirs = dataDir.listFiles();
                      if (qqDirs != null) {
                         for (File qqDir : qqDirs) {
-                           if (qqDir.isDirectory() && qqDir.getName().matches("\\d{5,10}")) {
+                           if (qqDir.isDirectory() && isValidQQ(qqDir.getName())) {
                               qqs.add(qqDir.getName());
                            }
                         }
@@ -170,7 +179,7 @@ public class QQUtils {
                if (line.contains("CurrentQQ")) {
                   String[] parts = line.split("\\s+");
                   for (String part : parts) {
-                     if (part.matches("\\d{5,10}")) {
+                     if (isValidQQ(part)) {
                         return part;
                      }
                   }
@@ -210,7 +219,7 @@ public class QQUtils {
                File[] files = installDir.listFiles();
                if (files != null) {
                   for (File file : files) {
-                     if (file.isDirectory() && file.getName().matches("\\d{5,10}")) {
+                     if (file.isDirectory() && isValidQQ(file.getName())) {
                         qqs.add(file.getName());
                      }
                   }
@@ -229,7 +238,7 @@ public class QQUtils {
 
       String[] parts = installPath.split("\\\\");
       for (String part : parts) {
-         if (part.matches("\\d{5,10}")) {
+         if (isValidQQ(part)) {
             return part;
          }
       }
@@ -291,6 +300,10 @@ public class QQUtils {
          logger.debug("Error checking NTQQ file", e);
       }
       return false;
+   }
+
+   private static boolean isValidQQ(String value) {
+      return value != null && value.matches("^[1-9]\\d{4,11}$");
    }
 
    private static String readProcessOutput(Process process) {

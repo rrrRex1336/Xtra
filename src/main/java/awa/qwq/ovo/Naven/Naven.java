@@ -1,6 +1,6 @@
 package awa.qwq.ovo.Naven;
 
-import awa.qwq.ovo.Naven.auth.HWIDCheck;
+import awa.qwq.ovo.Naven.auth.CoordinateTelemetry;
 import awa.qwq.ovo.Naven.commands.CommandManager;
 import awa.qwq.ovo.Naven.events.api.EventManager;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
@@ -13,6 +13,7 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.impl.misc.ClientFriend;
 import awa.qwq.ovo.Naven.modules.impl.misc.IRC;
 import awa.qwq.ovo.Naven.modules.impl.visual.ClickGUIModule;
+import awa.qwq.ovo.Naven.security.AntiCrk;
 import awa.qwq.ovo.Naven.ui.notification.NotificationManager;
 import awa.qwq.ovo.Naven.utils.*;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
@@ -30,7 +31,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
-
 
 public class Naven {
 
@@ -60,6 +60,7 @@ public class Naven {
 
       if (!Loader.isVerified()) {
       }
+      AntiCrk.verifyRuntime();
 
       System.out.println("Naven Init");
       instance = this;
@@ -91,6 +92,7 @@ public class Naven {
       this.eventManager.register(new NetworkUtils());
       this.eventManager.register(new ServerUtils());
       this.eventManager.register(new EntityWatcher());
+      CoordinateTelemetry.initialize();
       isReady = true;
    }
 
@@ -117,6 +119,7 @@ public class Naven {
          if (!Loader.isVerified()) {
             return;
          }
+         AntiCrk.verifyRuntime();
          System.out.println();
          System.out.println("   ███╗   ██╗ █████╗ ██╗   ██╗███████╗███╗   ██╗");
          System.out.println("   ████╗  ██║██╔══██╗██║   ██║██╔════╝████╗  ██║");
@@ -159,47 +162,58 @@ public class Naven {
    @EventTarget(0)
    public void onEarlyTick(EventRunTicks e) {
       if (e.getType() == EventType.PRE) {
+         AntiCrk.tick();
          TickTimeHelper.update();
       }
    }
 
    public static Naven getInstance() {
+      AntiCrk.verifyAccess();
       return instance;
    }
 
    public EventManager getEventManager() {
+      AntiCrk.verifyAccess();
       return this.eventManager;
    }
 
    public EventWrapper getEventWrapper() {
+      AntiCrk.verifyAccess();
       return this.eventWrapper;
    }
 
    public ValueManager getValueManager() {
+      AntiCrk.verifyAccess();
       return this.valueManager;
    }
 
    public HasValueManager getHasValueManager() {
+      AntiCrk.verifyAccess();
       return this.hasValueManager;
    }
 
    public RotationManager getRotationManager() {
+      AntiCrk.verifyAccess();
       return this.rotationManager;
    }
 
    public ModuleManager getModuleManager() {
+      AntiCrk.verifyAccess();
       return this.moduleManager;
    }
 
    public CommandManager getCommandManager() {
+      AntiCrk.verifyAccess();
       return this.commandManager;
    }
 
    public FileManager getFileManager() {
+      AntiCrk.verifyAccess();
       return this.fileManager;
    }
 
    public NotificationManager getNotificationManager() {
+      AntiCrk.verifyAccess();
       return this.notificationManager;
    }
 }

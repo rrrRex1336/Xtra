@@ -53,7 +53,7 @@ public class VerifyClient {
     @ZKMIndy
     @NekoInclude
     public static boolean verify() {
-        String hwid = HWIDCheck.getHWID();
+        String hwid = DeviceFingerprint.getHWID();
 
         // 1. Try the local encrypted, HWID-bound .auth-session.
         String token = LinYiLITokenStore.loadToken();
