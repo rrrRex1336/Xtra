@@ -2,7 +2,7 @@
 
 一个基于 Minecraft 1.20.4 Fabric 的现代化模组客户端，提供丰富的游戏增强功能。
 
-> 本项目由原 Naven-Modern Forge 1.20.1 版本移植至 Fabric 1.20.4 生态。
+> 本项目最初基于 Naven-Modern Forge 1.20.1 官方映射版本，后移植至 Fabric 1.20.4 官方映射生态，目前已迁移为 Fabric 1.20.4 Yarn 映射版本。
 
 ---
 
