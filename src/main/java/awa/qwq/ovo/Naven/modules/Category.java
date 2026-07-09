@@ -7,6 +7,7 @@ public enum Category {
    MOVEMENT("Movement", FontIcons.RUNNING),
    WORLD("World", FontIcons.CRAFT),
    VISUAL("Visual", FontIcons.EYE),
+   THEME("Theme", FontIcons.CLIENT),
    PLAYER("Player", FontIcons.PLER),
    MISC("Misc", FontIcons.OTHER);
 

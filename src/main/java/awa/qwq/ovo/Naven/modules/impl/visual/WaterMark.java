@@ -2,7 +2,6 @@ package awa.qwq.ovo.Naven.modules.impl.visual;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.Version;
-import awa.qwq.ovo.Naven.auth.VerifyClient;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRender2D;
@@ -74,15 +73,7 @@ public class WaterMark extends Module {
         if (mode.isCurrentMode("Naven")) {
             CustomTextRenderer font = Fonts.opensans;
 
-            String userName = "Shiroko";
-            String userRole = "User";
-            try {
-                userName = VerifyClient.getUserName();
-                userRole = VerifyClient.getUserRole();
-            } catch (Exception ex) {
-            }
-
-            String userDisplay = userName + "[" + userRole + "]";
+            String userDisplay = mc.getSession() == null ? "Player" : mc.getSession().getUsername();
 
             String text = "Naven | " + Version.getVersion() + " | " + userDisplay + "§r | " +
                     StringUtils.split(mc.fpsDebugString, " ")[0] + " FPS | " + format.format(new Date());

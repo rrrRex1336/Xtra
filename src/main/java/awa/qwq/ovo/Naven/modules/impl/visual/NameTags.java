@@ -1,7 +1,6 @@
 package awa.qwq.ovo.Naven.modules.impl.visual;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventMotion;
@@ -246,7 +245,7 @@ public class NameTags extends Module {
                text = text + "§aTeam§f | ";
             }
 
-            if (!ChatClient.isIrcUser(playerName) && FriendManager.isFriend(living)) {
+            if (FriendManager.isFriend(living)) {
                text = text + "§aFriend§f | ";
             }
 
@@ -255,7 +254,7 @@ public class NameTags extends Module {
             }
 
             // 添加杀手检测
-            if (!ChatClient.isIrcUser(playerName) && KillerDetection.getDetectedKillers().contains(playerName)) {
+            if (KillerDetection.getDetectedKillers().contains(playerName)) {
                text = text + "§c" + playerName + " (Killer)§f";
             } else {
                text = text + this.formatPlayerName(living);
@@ -342,11 +341,7 @@ public class NameTags extends Module {
    }
 
    private String formatPlayerName(PlayerEntity player) {
-      String playerName = player.getName().getString();
-      if (ChatClient.isIrcUser(playerName)) {
-         return awa.qwq.ovo.Naven.modules.impl.misc.IRC.ircStatusPrefix(playerName) + playerName + "\u00a7f";
-      }
-      return playerName;
+      return player.getName().getString();
    }
 
    private void updatePositions(float renderPartialTicks) {

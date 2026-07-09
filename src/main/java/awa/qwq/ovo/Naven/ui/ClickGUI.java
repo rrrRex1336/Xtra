@@ -3,6 +3,7 @@ package awa.qwq.ovo.Naven.ui;
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.impl.EventShader;
+import awa.qwq.ovo.Naven.managers.theme.ThemeStyle;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.utils.Colors;
@@ -47,6 +48,7 @@ public class ClickGUI extends Screen {
    SmoothAnimationTimer titleAnimation = new SmoothAnimationTimer(100.0F);
    SmoothAnimationTimer titleHoverAnimation = new SmoothAnimationTimer(0.0F);
    SmoothAnimationTimer categoryMotionY = new SmoothAnimationTimer(0.0F);
+   SmoothAnimationTimer themeMotionY = new SmoothAnimationTimer(0.0F);
    SmoothAnimationTimer moduleValuesMotionY = new SmoothAnimationTimer(0.0F);
    HashMap<Category, SmoothAnimationTimer> categoryXAnimation = new HashMap<Category, SmoothAnimationTimer>() {
       {
@@ -90,6 +92,13 @@ public class ClickGUI extends Screen {
          }
       }
    };
+   HashMap<ThemeStyle, SmoothAnimationTimer> themeAnimations = new HashMap<ThemeStyle, SmoothAnimationTimer>() {
+      {
+         for (ThemeStyle style : ThemeStyle.VALUES) {
+            this.put(style, new SmoothAnimationTimer(0.0F));
+         }
+      }
+   };
    String titleDisplayName = "";
    float finalModuleHeight;
    float finalValueHeight;
@@ -113,6 +122,7 @@ public class ClickGUI extends Screen {
    String editingStringText = "";
    ModeValue hoveringModeValue;
    AddonsValue hoveringAddonsValue;
+   ThemeStyle hoveringTheme;
    int targetAddonIndex = -1;
    int targetModeValueIndex;
    String bindingModuleName;
@@ -155,6 +165,11 @@ public class ClickGUI extends Screen {
             }
 
             if (mouseButton == 0) {
+               if (this.selectedCategory == Category.THEME && this.hoveringTheme != null) {
+                  Naven.getInstance().getThemeManager().setStyle(this.hoveringTheme);
+                  Naven.getInstance().getFileManager().save();
+               }
+
                if (this.hoveringBack && !this.clickResizeWindow && !this.clickDragWindow) {
                   this.selectedCategory = null;
                   this.selectedModule = null;
@@ -163,7 +178,10 @@ public class ClickGUI extends Screen {
 
                if (this.clickOpenCategoryModules && this.hoveringCategory != null) {
                   this.selectedCategory = this.hoveringCategory;
+                  this.selectedModule = null;
+                  this.renderValues = null;
                   this.categoryMotionY.value = this.categoryMotionY.target = 0.0F;
+                  this.themeMotionY.value = this.themeMotionY.target = 0.0F;
                   this.moduleSwapAnimation.value = 5.0F;
                   this.moduleSwapAnimation.target = 255.0F;
                   this.clickOpenCategoryModules = false;
@@ -299,6 +317,13 @@ public class ClickGUI extends Screen {
 
    @Override
    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+      if (this.selectedCategory == Category.THEME
+              && this.bindingModule == null
+              && RenderUtils.isHoveringBound((int)mouseX, (int)mouseY, windowX + 5.0F, windowY + 20.0F, this.widthAnimation.value - 10.0F, this.heightAnimation.value - 25.0F)) {
+         this.themeMotionY.target = (float)(this.themeMotionY.target + verticalAmount * 24.0);
+         return true;
+      }
+
       if (this.bindingModule == null && RenderUtils.isHoveringBound((int)mouseX, (int)mouseY, windowX + 5.0F, windowY + 20.0F, 100.0F, windowHeight - 5.0F)) {
          this.categoryMotionY.target = (float)(this.categoryMotionY.target + verticalAmount * 15.0);
          this.moduleAlphaTimer.reset();
@@ -326,6 +351,7 @@ public class ClickGUI extends Screen {
    public void render(DrawContext g, int mouseX, int mouseY, float pPartialTick) {
       MatrixStack stack = g.getMatrices();
       this.hoveringModule = null;
+      this.hoveringTheme = null;
       this.clickReturnModules = this.clickReturnCategories = this.clickOpenCategoryModules = false;
       CustomTextRenderer opensans = Fonts.opensans;
       if (this.selectedCategory == null) {
@@ -421,6 +447,10 @@ public class ClickGUI extends Screen {
       StencilUtils.write(false);
       RenderUtils.fill(stack, windowX, windowY + 20.0F, windowX + this.widthAnimation.value, windowY + this.heightAnimation.value - 5.0F, Integer.MIN_VALUE);
       StencilUtils.erase(true);
+      if (this.selectedCategory == Category.THEME) {
+         this.categoryModules = null;
+         this.renderThemePage(stack, mouseX, mouseY, opensans);
+      } else {
       List<Module> inList = this.modules.get(this.selectedCategory);
       if (inList != null) {
          this.categoryModules = inList;
@@ -762,6 +792,7 @@ public class ClickGUI extends Screen {
             );
          }
       }
+      }
 
       if (this.draggingFloatValue != null) {
          float stage = ((float)mouseX - windowX - 140.0F) / (windowWidth - 160.0F);
@@ -784,7 +815,7 @@ public class ClickGUI extends Screen {
          this.SetDragPosition(mouseX, mouseY);
       }
 
-      if (this.categoryModules != null && !this.hoveringBack && this.clickResizeWindow && this.mouseDown) {
+      if ((this.categoryModules != null || this.selectedCategory == Category.THEME) && !this.hoveringBack && this.clickResizeWindow && this.mouseDown) {
          windowWidth = windowWidth + (float)(mouseX - this.dragMousePosition[0]);
          windowHeight = windowHeight + (float)(mouseY - this.dragMousePosition[1]);
          if (windowWidth < 500.0F) {
@@ -855,6 +886,85 @@ public class ClickGUI extends Screen {
       }
 
       StencilUtils.dispose();
+   }
+
+   private void renderThemePage(MatrixStack stack, int mouseX, int mouseY, CustomTextRenderer font) {
+      ThemeStyle selected = Naven.getInstance().getThemeManager().getCurrentStyle();
+      float contentX = windowX + 10.0F;
+      float contentY = windowY + 26.0F;
+      float contentWidth = Math.max(80.0F, this.widthAnimation.value - 20.0F);
+      float viewHeight = Math.max(40.0F, this.heightAnimation.value - 36.0F);
+      float gap = 10.0F;
+      int columns = Math.max(1, Math.min(4, (int)((contentWidth + gap) / 150.0F)));
+      float cardWidth = (contentWidth - gap * (columns - 1)) / columns;
+      float cardHeight = 54.0F;
+      int rows = (int)Math.ceil((double)ThemeStyle.VALUES.length / (double)columns);
+      float totalHeight = rows * cardHeight + Math.max(0, rows - 1) * gap;
+      float minScroll = Math.min(0.0F, viewHeight - totalHeight - 4.0F);
+
+      if (this.themeMotionY.target < minScroll) {
+         this.themeMotionY.target = minScroll;
+      }
+
+      if (this.themeMotionY.target > 0.0F) {
+         this.themeMotionY.target = 0.0F;
+      }
+
+      this.themeMotionY.update(true);
+
+      for (int i = 0; i < ThemeStyle.VALUES.length; i++) {
+         ThemeStyle style = ThemeStyle.VALUES[i];
+         int column = i % columns;
+         int row = i / columns;
+         float x = contentX + column * (cardWidth + gap);
+         float y = contentY + this.themeMotionY.value + row * (cardHeight + gap);
+
+         if (y + cardHeight < contentY - 6.0F || y > contentY + viewHeight + 6.0F) {
+            continue;
+         }
+
+         boolean hovered = RenderUtils.isHovering(mouseX, mouseY, x, y, x + cardWidth, y + cardHeight)
+                 && RenderUtils.isHovering(mouseX, mouseY, contentX, contentY, contentX + contentWidth, contentY + viewHeight)
+                 && this.bindingModule == null;
+         if (hovered) {
+            this.hoveringTheme = style;
+         }
+
+         SmoothAnimationTimer animation = this.themeAnimations.get(style);
+         animation.target = style == selected ? 255.0F : hovered ? 120.0F : 0.0F;
+         animation.update(true);
+
+         if (animation.value > 1.0F) {
+            int outlineColor = style == selected ? style.getColor(i * 40, 1.0F) : 0xFFFFFF;
+            RenderUtils.drawRoundedRect(stack, x - 1.0F, y - 1.0F, cardWidth + 2.0F, cardHeight + 2.0F, 6.0F, RenderUtils.reAlpha(outlineColor, animation.value / 255.0F));
+         }
+
+         RenderUtils.drawRoundedRect(stack, x, y, cardWidth, cardHeight, 5.0F, Colors.getColor(10, 12, 18, 230));
+         this.drawThemeGradient(stack, x, y, cardWidth, 34.0F, style);
+         RenderUtils.fillBound(stack, x, y + 34.0F, cardWidth, 1.0F, Colors.getColor(255, 255, 255, 12));
+
+         String name = trimToWidth(font, style.getName(), cardWidth - 10.0F, 0.38);
+         float textX = x + (cardWidth - font.getWidth(name, 0.38)) / 2.0F;
+         font.render(stack, name, (double)textX, (double)(y + 38.0F), Color.WHITE, true, 0.38);
+      }
+
+      if (totalHeight > viewHeight) {
+         float progress = minScroll == 0.0F ? 0.0F : this.themeMotionY.value / minScroll;
+         float barHeight = Math.max(20.0F, viewHeight * (viewHeight / totalHeight));
+         float barY = contentY + progress * (viewHeight - barHeight);
+         RenderUtils.drawRoundedRect(stack, contentX + contentWidth - 4.0F, contentY, 3.0F, viewHeight, 1.5F, Colors.getColor(255, 255, 255, 24));
+         RenderUtils.drawRoundedRect(stack, contentX + contentWidth - 4.0F, barY, 3.0F, barHeight, 1.5F, Colors.getColor(255, 255, 255, 120));
+      }
+   }
+
+   private void drawThemeGradient(MatrixStack stack, float x, float y, float width, float height, ThemeStyle style) {
+      int steps = Math.max(8, Math.min(36, (int)(width / 4.0F)));
+      for (int i = 0; i < steps; i++) {
+         float start = (float)i / (float)steps;
+         float end = (float)(i + 1) / (float)steps;
+         int color = 0xFF000000 | style.sample((start + end) * 0.5F);
+         RenderUtils.fillBound(stack, x + width * start, y, width * (end - start) + 0.75F, height, color);
+      }
    }
 
    public void SetDragPosition(double x, double y) {

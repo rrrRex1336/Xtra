@@ -8,7 +8,6 @@ import java.awt.Color;
 import net.minecraft.client.util.math.MatrixStack;
 
 public class Notification {
-   public static byte[] authTokens;
    private NotificationLevel level;
    private String message;
    private long maxAge;

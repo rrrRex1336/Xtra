@@ -1,6 +1,7 @@
 package org.mixin;
 
-import awa.qwq.ovo.Naven.utils.MixinProtectionUtils;
+import awa.qwq.ovo.Naven.Naven;
+import awa.qwq.ovo.Naven.events.impl.EventHandlePacket;
 import net.minecraft.network.NetworkThreadUtils;
 import net.minecraft.network.OffThreadException;
 import net.minecraft.network.listener.PacketListener;
@@ -25,8 +26,34 @@ public class MixinPacketThreadUtils {
       at = {@At("HEAD")},
       cancellable = true
    )
+   @SuppressWarnings({"rawtypes", "unchecked"})
    private static <T extends PacketListener> void onEnsureRunningOnSameThread(Packet<T> packet, T listener, ThreadExecutor<?> executor, CallbackInfo ci) throws OffThreadException {
-      ci.cancel();
-      MixinProtectionUtils.onEnsureRunningOnSameThread(LOGGER, packet, listener, executor);
+      if (!executor.isOnThread()) {
+         ci.cancel();
+         executor.executeSync(() -> {
+            if (listener.isConnectionOpen()) {
+               try {
+                  EventHandlePacket event = new EventHandlePacket((Packet) packet);
+                  if (executor.isOnThread()) {
+                     Naven.getInstance().getEventManager().call(event);
+                     if (event.isCancelled()) {
+                        return;
+                     }
+                  }
+
+                  packet.apply(listener);
+               } catch (Exception exception) {
+                  if (listener.shouldCrashOnException()) {
+                     throw exception;
+                  }
+
+                  LOGGER.error("Failed to handle packet {}, suppressing error", packet, exception);
+               }
+            } else {
+               LOGGER.debug("Ignoring packet due to disconnection: {}", packet);
+            }
+         });
+         throw OffThreadException.INSTANCE;
+      }
    }
 }

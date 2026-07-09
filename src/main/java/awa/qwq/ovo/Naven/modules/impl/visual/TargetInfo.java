@@ -6,7 +6,6 @@ import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventAttack;
 import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventShader;
-import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
@@ -365,11 +364,7 @@ public class TargetInfo extends Module {
     }
 
     private static int getRoundedAccent(float y) {
-        ModuleList moduleList = (ModuleList) Naven.getInstance().getModuleManager().getModule(ModuleList.class);
-        if (moduleList == null) {
-            return opaque(WaterMark.headerColor);
-        }
-        return opaque(moduleList.getModuleColor(y));
+        return opaque(Naven.getInstance().getThemeManager().getColor(y));
     }
 
     private static CustomTextRenderer getRoundedFont() {
@@ -446,10 +441,6 @@ public class TargetInfo extends Module {
     }
 
     private static String displayName(LivingEntity living) {
-        String name = living.getName().getString();
-        if (ChatClient.isIrcUser(name)) {
-            return awa.qwq.ovo.Naven.modules.impl.misc.IRC.ircStatusPrefix(name) + name;
-        }
-        return name;
+        return living.getName().getString();
     }
 }

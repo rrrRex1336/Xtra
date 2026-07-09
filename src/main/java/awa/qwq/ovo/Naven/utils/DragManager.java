@@ -1,7 +1,6 @@
 package awa.qwq.ovo.Naven.utils;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.ui.AkarinClickGUI;
 import awa.qwq.ovo.Naven.ui.ClickGUI;
 import awa.qwq.ovo.Naven.values.HasValue;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
@@ -105,9 +104,8 @@ public class DragManager {
             return false;
         }
 
-        return screen instanceof ChatScreen
+         return screen instanceof ChatScreen
                 || screen instanceof ClickGUI
-                || screen instanceof AkarinClickGUI
                 || !screen.shouldPause();
     }
 

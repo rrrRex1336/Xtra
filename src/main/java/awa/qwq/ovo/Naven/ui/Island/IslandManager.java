@@ -1,7 +1,6 @@
 package awa.qwq.ovo.Naven.ui.Island;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.auth.VerifyClient;
 import awa.qwq.ovo.Naven.modules.impl.visual.Island;
 import awa.qwq.ovo.Naven.utils.FontIcons;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
@@ -84,14 +83,7 @@ public class IslandManager {
         if (activeContent != null) {
             return new float[]{activeContent.getWidth(), activeContent.getHeight()};
         } else {
-            String username = "Shiroko";
-            try {
-                String verifiedName = VerifyClient.getUserName();
-                if (verifiedName != null && !verifiedName.isEmpty() && !verifiedName.equals("Shiroko")) {
-                    username = verifiedName;
-                }
-            } catch (Exception ex) {
-            }
+            String username = getSessionUsername();
             String fpsText = StringUtils.split(mc.fpsDebugString, " ")[0] + " FPS";
             String serverIP = getCurrentServerIP();
             String latencyText = getPingText();
@@ -217,14 +209,7 @@ public class IslandManager {
     }
 
     private void renderDefaultContent(MatrixStack stack) {
-        String username = "Shiroko";
-        try {
-            String verifiedName = VerifyClient.getUserName();
-            if (verifiedName != null && !verifiedName.isEmpty() && !verifiedName.equals("Shiroko")) {
-                username = verifiedName;
-            }
-        } catch (Exception e) {
-        }
+        String username = getSessionUsername();
 
         String fpsText = StringUtils.split(mc.fpsDebugString, " ")[0] + " FPS";
         String serverIP = getCurrentServerIP();
@@ -309,6 +294,10 @@ public class IslandManager {
 
     public float getPosY() {
         return posY.value;
+    }
+
+    private String getSessionUsername() {
+        return mc.getSession() == null ? "Player" : mc.getSession().getUsername();
     }
 
     public static SmoothAnimationTimer getAnimW() {

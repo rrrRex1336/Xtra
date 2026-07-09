@@ -1,7 +1,6 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.events.impl.*;
 import awa.qwq.ovo.Naven.modules.impl.player.NoPush;
 import awa.qwq.ovo.Naven.utils.BlinkingPlayer;
@@ -159,11 +158,6 @@ public abstract class MixinEntity{
    )
    public void push(Entity entity, CallbackInfo ci) {
       Entity self = (Entity) (Object) this;
-      if (this.isLocalIrcCollision(self, entity)) {
-         ci.cancel();
-         return;
-      }
-
       if (!(self instanceof PlayerEntity player)) return;
       NoPush noPush = (NoPush) Naven.getInstance().getModuleManager().getModule(NoPush.class);
       if (noPush == null || !noPush.isEnabled()) return;
@@ -187,15 +181,5 @@ public abstract class MixinEntity{
          return module.projectiles.getCurrentValue();
       }
       return false;
-   }
-
-   private boolean isLocalIrcCollision(Entity self, Entity other) {
-      MinecraftClient mc = MinecraftClient.getInstance();
-      if (mc == null || mc.player == null || self == null || other == null) {
-         return false;
-      }
-
-      return self == mc.player && ChatClient.isIrcPlayer(other)
-         || other == mc.player && ChatClient.isIrcPlayer(self);
    }
 }

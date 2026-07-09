@@ -10,7 +10,6 @@ import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.modules.impl.misc.Teams;
-import awa.qwq.ovo.Naven.modules.impl.visual.ModuleList;
 import awa.qwq.ovo.Naven.modules.impl.visual.TargetInfo;
 import awa.qwq.ovo.Naven.utils.*;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
@@ -636,11 +635,7 @@ public class Aura extends Module {
             }
             currentRotationSpeed = MathHelper.lerp(0.1f, currentRotationSpeed, targetRotationSpeed * rotationDirection);
             espRotationAngle += currentRotationSpeed;
-            ModuleList moduleList = (ModuleList) Naven.getInstance().getModuleManager().getModule(ModuleList.class);
-            int color = -1;
-            if (moduleList != null && moduleList.isEnabled()) {
-                color = moduleList.getModuleColor(espRotationAngle);
-            }
+            int color = Naven.getInstance().getThemeManager().getColor(espRotationAngle);
 
             MatrixStack stack = e.getPMatrixStack();
             Vec3d cameraPos = mc.gameRenderer.getCamera().getPos();

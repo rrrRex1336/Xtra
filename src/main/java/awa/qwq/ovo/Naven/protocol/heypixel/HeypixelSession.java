@@ -1,7 +1,6 @@
 package awa.qwq.ovo.Naven.protocol.heypixel;
 
 import awa.qwq.ovo.Naven.protocol.heypixel.crypto.CryptoHelper;
-import awa.qwq.ovo.Naven.protocol.heypixel.crypto.DataObfuscator;
 import awa.qwq.ovo.Naven.protocol.heypixel.data.HeypixelUUID;
 import awa.qwq.ovo.Naven.protocol.heypixel.data.UuidDerivation;
 import awa.qwq.ovo.Naven.protocol.heypixel.messages.ClickSyncPacket;
@@ -55,7 +54,6 @@ public class HeypixelSession {
    private String moduleVersion = "";
    private String encryptedUUID = "";
    private boolean encryptionEnabled;
-   private boolean obfuscationEnabled;
    private boolean handshakeComplete;
    private boolean sentInitialInfo;
 
@@ -137,7 +135,6 @@ public class HeypixelSession {
       this.sendMessage(message);
       this.sentInitialInfo = true;
       this.encryptionEnabled = true;
-      this.obfuscationEnabled = true;
    }
 
    public void handleChannelRegister(byte[] payload, PacketSender sender) {
@@ -212,10 +209,6 @@ public class HeypixelSession {
       ByteBuffer packetBuffer = new ByteBuffer();
       packetBuffer.writeVarInt(HeypixelMessageRegistry.getMessageId(message.getClass()));
       packetBuffer.writeVarInt(bodyData.length + 1);
-
-      if (message instanceof SessionMessage && this.obfuscationEnabled) {
-         bodyData = DataObfuscator.obfuscate(bodyData, this.sessionUUID.getObfuscationId());
-      }
 
       packetBuffer.writeBytes(bodyData);
       return packetBuffer.toArray();

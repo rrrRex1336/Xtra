@@ -1,7 +1,6 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
-import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.events.impl.EventRender;
 import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventRenderAfterWorld;
@@ -16,11 +15,6 @@ import net.minecraft.client.render.BufferBuilderStorage;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -45,13 +39,6 @@ public class MixinGameRenderer {
       SpearLogic.updateClientPick(this.client, partialTicks);
       if (this.client.player == null) {
          return;
-      }
-
-      if (this.client.crosshairTarget instanceof EntityHitResult entityHitResult && ChatClient.isIrcPlayer(entityHitResult.getEntity())) {
-         Vec3d eye = this.client.player.getCameraPosVec(partialTicks);
-         Vec3d view = this.client.player.getRotationVec(partialTicks);
-         this.client.targetedEntity = null;
-         this.client.crosshairTarget = BlockHitResult.createMissed(eye, Direction.getFacing(view.x, view.y, view.z), BlockPos.ofFloored(eye));
       }
    }
 

@@ -16,7 +16,6 @@
   ],
   "client": [
     "CapabilityTrackerMixin",
-    "ClientMainMixin",
     "ItemInHandRendererMixin",
     "MixinAbstractClientPlayer",
     "MixinCamera",

@@ -1,6 +1,5 @@
 package awa.qwq.ovo.Naven;
 
-import awa.qwq.ovo.Naven.auth.CoordinateTelemetry;
 import awa.qwq.ovo.Naven.commands.CommandManager;
 import awa.qwq.ovo.Naven.events.api.EventManager;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
@@ -10,11 +9,9 @@ import awa.qwq.ovo.Naven.events.impl.EventShutdown;
 import awa.qwq.ovo.Naven.files.FileManager;
 import awa.qwq.ovo.Naven.modules.ModuleManager;
 import awa.qwq.ovo.Naven.modules.Module;
-import awa.qwq.ovo.Naven.modules.impl.misc.ClientFriend;
-import awa.qwq.ovo.Naven.modules.impl.misc.IRC;
 import awa.qwq.ovo.Naven.modules.impl.visual.ClickGUIModule;
-import awa.qwq.ovo.Naven.security.AntiCrk;
 import awa.qwq.ovo.Naven.ui.notification.NotificationManager;
+import awa.qwq.ovo.Naven.managers.theme.ThemeManager;
 import awa.qwq.ovo.Naven.utils.*;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.utils.renderer.PostProcessRenderer;
@@ -22,7 +19,6 @@ import awa.qwq.ovo.Naven.utils.renderer.Shaders;
 import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
 import awa.qwq.ovo.Naven.values.HasValueManager;
 import awa.qwq.ovo.Naven.values.ValueManager;
-import linyanli1337.Loader;
 import net.minecraft.client.MinecraftClient;
 import java.awt.FontFormatException;
 import java.io.IOException;
@@ -42,6 +38,7 @@ public class Naven {
    private final ValueManager valueManager;
    private final HasValueManager hasValueManager;
    private final RotationManager rotationManager;
+   private final ThemeManager themeManager;
    public final ModuleManager moduleManager;
    private final CommandManager commandManager;
    private final FileManager fileManager;
@@ -54,13 +51,6 @@ public class Naven {
 
 
    private Naven() {
-      if (!Loader.isNativeLoaded()) {
-      }
-
-      if (!Loader.isVerified()) {
-      }
-      AntiCrk.verifyRuntime();
-
       System.out.println("Naven Init");
       instance = this;
       this.eventManager = new EventManager();
@@ -76,14 +66,13 @@ public class Naven {
       this.eventWrapper = new EventWrapper();
       this.valueManager = new ValueManager();
       this.hasValueManager = new HasValueManager();
+      this.themeManager = new ThemeManager();
       this.moduleManager = new ModuleManager();
       this.rotationManager = new RotationManager();
       this.commandManager = new CommandManager();
       this.fileManager = new FileManager();
       this.notificationManager = new NotificationManager();
       this.fileManager.load();
-      this.moduleManager.getModule(ClientFriend.class).setEnabled(true);
-      this.moduleManager.getModule(IRC.class).setEnabled(true);
       this.moduleManager.getModule(ClickGUIModule.class).setEnabled(false);
       this.eventManager.register(getInstance());
       this.eventManager.register(this.eventWrapper);
@@ -92,7 +81,6 @@ public class Naven {
       this.eventManager.register(MovementUtils.INSTANCE);
       this.eventManager.register(new ServerUtils());
       this.eventManager.register(new EntityWatcher());
-      CoordinateTelemetry.initialize();
       isReady = true;
    }
 
@@ -112,14 +100,6 @@ public class Naven {
          mc = MinecraftClient.getInstance();
          Module.refreshMinecraft();
          new Naven();
-         if (!Loader.isNativeLoaded()) {
-            return;
-         }
-
-         if (!Loader.isVerified()) {
-            return;
-         }
-         AntiCrk.verifyRuntime();
          System.out.println();
          System.out.println("   ███╗   ██╗ █████╗ ██╗   ██╗███████╗███╗   ██╗");
          System.out.println("   ████╗  ██║██╔══██╗██║   ██║██╔════╝████╗  ██║");
@@ -162,58 +142,51 @@ public class Naven {
    @EventTarget(0)
    public void onEarlyTick(EventRunTicks e) {
       if (e.getType() == EventType.PRE) {
-         AntiCrk.tick();
          TickTimeHelper.update();
       }
    }
 
    public static Naven getInstance() {
-      AntiCrk.verifyAccess();
       return instance;
    }
 
    public EventManager getEventManager() {
-      AntiCrk.verifyAccess();
       return this.eventManager;
    }
 
    public EventWrapper getEventWrapper() {
-      AntiCrk.verifyAccess();
       return this.eventWrapper;
    }
 
    public ValueManager getValueManager() {
-      AntiCrk.verifyAccess();
       return this.valueManager;
    }
 
    public HasValueManager getHasValueManager() {
-      AntiCrk.verifyAccess();
       return this.hasValueManager;
    }
 
    public RotationManager getRotationManager() {
-      AntiCrk.verifyAccess();
       return this.rotationManager;
    }
 
+   public ThemeManager getThemeManager() {
+      return this.themeManager;
+   }
+
    public ModuleManager getModuleManager() {
-      AntiCrk.verifyAccess();
       return this.moduleManager;
    }
 
    public CommandManager getCommandManager() {
-      AntiCrk.verifyAccess();
       return this.commandManager;
    }
 
    public FileManager getFileManager() {
-      AntiCrk.verifyAccess();
       return this.fileManager;
    }
 
    public NotificationManager getNotificationManager() {
-      AntiCrk.verifyAccess();
       return this.notificationManager;
    }
 }

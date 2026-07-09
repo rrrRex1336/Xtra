@@ -63,30 +63,6 @@ public class ModuleList extends Module {
             .build()
             .getModeValue();
 
-    public ModeValue colorMode = ValueBuilder.create(this, "Color Mode")
-            .setDefaultModeIndex(1)
-            .setModes("White", "Rainbow", "Water", "Snow")
-            .setVisibility(() -> !listMode.isCurrentMode("Adjust"))
-            .build().getModeValue();
-
-    public FloatValue colorSpeed = ValueBuilder.create(this, "Color Speed")
-            .setVisibility(() -> !colorMode.isCurrentMode("White") && !listMode.isCurrentMode("Adjust"))
-            .setMinFloatValue(0.1F)
-            .setMaxFloatValue(10.0F)
-            .setDefaultFloatValue(1.0F)
-            .setFloatStep(0.1F)
-            .build()
-            .getFloatValue();
-
-    public FloatValue colorOffset = ValueBuilder.create(this, "Color Offset")
-            .setVisibility(() -> !colorMode.isCurrentMode("White") && !listMode.isCurrentMode("Adjust"))
-            .setMinFloatValue(1.0F)
-            .setMaxFloatValue(20.0F)
-            .setDefaultFloatValue(10.0F)
-            .setFloatStep(0.1F)
-            .build()
-            .getFloatValue();
-
     public BooleanValue glowShader = ValueBuilder.create(this, "Glow Shader")
             .setDefaultBooleanValue(true)
             .setVisibility(() -> !listMode.isCurrentMode("Adjust"))
@@ -250,7 +226,7 @@ public class ModuleList extends Module {
                     );
                     this.blurMatrices.add(new Vector4f(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight));
 
-                    int color = this.getModuleColor(height);
+                    int color = Naven.getInstance().getThemeManager().getColor(height);
                     this.addGlowRect(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight, color);
 
                     font.setAlpha(progress);
@@ -308,7 +284,7 @@ public class ModuleList extends Module {
                     );
                     this.blurMatrices.add(new Vector4f(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight));
 
-                    int color = this.getModuleColor(height);
+                    int color = Naven.getInstance().getThemeManager().getColor(height);
                     this.addGlowRect(moduleListX + innerX, moduleListY + height + 2.0F, moduleWidth, moduleHeight, color);
 
                     float iconBoxHeight = moduleHeight;
@@ -603,57 +579,6 @@ public class ModuleList extends Module {
             0x9EBBEA,
             0x78A8E8
     };
-
-    public int getModuleColor(float height) {
-        int index = (int) (-height * this.colorOffset.getCurrentValue());
-        if (this.colorMode.isCurrentMode("Rainbow")) {
-            float mappedSpeed = 21.0F - (this.colorSpeed.getCurrentValue() * 1.9F);
-            return RenderUtils.getRainbowOpaque(index, 1.0F, 1.0F, mappedSpeed * 1000.0F);
-        }
-
-        if (this.colorMode.isCurrentMode("Water")) {
-            return getWaterColor(index, this.colorSpeed.getCurrentValue());
-        }
-
-        if (this.colorMode.isCurrentMode("Snow")) {
-            return getSnowColor(index, this.colorSpeed.getCurrentValue());
-        }
-
-        return -1;
-    }
-
-    private int getWaterColor(int index, float speed) {
-        long time = System.currentTimeMillis();
-        float period = speed * 300;
-        float progress = (float)((time + index * 50L) % (long)period) / period;
-        float t = (float)((Math.cos(progress * Math.PI * 2) + 1) / 2);
-        int c1 = WATER_COLORS[0];
-        int c2 = WATER_COLORS[1];
-
-        int r = (int)(((c1 >> 16) & 0xFF) + (((c2 >> 16) & 0xFF) - ((c1 >> 16) & 0xFF)) * t);
-        int g = (int)(((c1 >> 8) & 0xFF) + (((c2 >> 8) & 0xFF) - ((c1 >> 8) & 0xFF)) * t);
-        int b = (int)((c1 & 0xFF) + ((c2 & 0xFF) - (c1 & 0xFF)) * t);
-
-        return (r << 16) | (g << 8) | b;
-    }
-
-    private int getSnowColor(int index, float speed) {
-        long time = System.currentTimeMillis();
-        long period = Math.max(800L, (long) ((21.0F - speed * 1.9F) * 1000.0F));
-        float progress = (float) Math.floorMod(time + index * 50L, period) / (float) period;
-        float scaled = progress * SNOW_COLORS.length;
-        int colorIndex = (int) scaled;
-        float t = scaled - colorIndex;
-        t = t * t * (3.0F - 2.0F * t);
-
-        int c1 = SNOW_COLORS[colorIndex % SNOW_COLORS.length];
-        int c2 = SNOW_COLORS[(colorIndex + 1) % SNOW_COLORS.length];
-        return blendColor(c1, c2, t);
-    }
-
-    private static int blendColor(int c1, int c2, float t) {
-        return mixColor(c1, c2, t);
-    }
 
     private String getCategoryIcon(Category category) {
         if (category == null) return "?";

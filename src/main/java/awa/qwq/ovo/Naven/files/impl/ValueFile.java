@@ -41,6 +41,12 @@ public class ValueFile extends ClientFile {
             String name = split[1];
             String valueName = split[2];
             String value = split[3];
+            if ("ModuleList".equalsIgnoreCase(name) && isLegacyModuleListColorValue(valueName)) {
+               name = "Theme";
+               if ("Color Mode".equalsIgnoreCase(valueName)) {
+                  valueName = "Color";
+               }
+            }
             HasValue module = hasValueManager.getHasValue(name);
 
             if (module == null) {
@@ -96,6 +102,12 @@ public class ValueFile extends ClientFile {
             logger.error("Failed to read value {}!", line, var15);
          }
       }
+   }
+
+   private static boolean isLegacyModuleListColorValue(String valueName) {
+      return "Color Mode".equalsIgnoreCase(valueName)
+              || "Color Speed".equalsIgnoreCase(valueName)
+              || "Color Offset".equalsIgnoreCase(valueName);
    }
 
    @Override
