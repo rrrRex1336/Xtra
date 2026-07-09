@@ -91,6 +91,7 @@ public class ModuleManager {
          new Island(),
          new ClientFriend(),
          new IRC(),
+         new ClientSpoofer(),
          new Protocol(),
          new ViaVersionFix(),
          new NoJumpDelay(),
