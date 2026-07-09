@@ -1,13 +1,13 @@
 package org.mixin.accessors;
 
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.VertexBuffer;
+import net.minecraft.client.gl.VertexBuffer;
+import net.minecraft.client.render.BufferRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin({BufferUploader.class})
+@Mixin({BufferRenderer.class})
 public interface BufferUploaderAccessor {
-   @Accessor("lastImmediateBuffer")
+   @Accessor("currentVertexBuffer")
    static void setCurrentVertexBuffer(VertexBuffer vertexBuffer) {
    }
 }

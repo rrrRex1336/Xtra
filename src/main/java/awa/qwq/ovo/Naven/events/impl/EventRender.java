@@ -1,21 +1,21 @@
 package awa.qwq.ovo.Naven.events.impl;
 
 import awa.qwq.ovo.Naven.events.api.events.Event;
-import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.util.math.MatrixStack;
 
 public class EventRender implements Event {
    private final float renderPartialTicks;
-   private final PoseStack pMatrixStack;
+   private final MatrixStack pMatrixStack;
 
    public float getRenderPartialTicks() {
       return this.renderPartialTicks;
    }
 
-   public PoseStack getPMatrixStack() {
+   public MatrixStack getPMatrixStack() {
       return this.pMatrixStack;
    }
 
-   public EventRender(float renderPartialTicks, PoseStack pMatrixStack) {
+   public EventRender(float renderPartialTicks, MatrixStack pMatrixStack) {
       this.renderPartialTicks = renderPartialTicks;
       this.pMatrixStack = pMatrixStack;
    }

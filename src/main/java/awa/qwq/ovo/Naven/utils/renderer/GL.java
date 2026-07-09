@@ -1,14 +1,15 @@
 package awa.qwq.ovo.Naven.utils.renderer;
 
 import com.google.common.collect.ImmutableList;
+import awa.qwq.ovo.Naven.utils.ICapabilityTracker;
 import org.mixin.accessors.BufferUploaderAccessor;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
-import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.util.Identifier;
 import org.joml.Matrix4f;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL20;
@@ -16,10 +17,10 @@ import org.lwjgl.opengl.GL32C;
 
 public class GL {
    private static final FloatBuffer MAT = BufferUtils.createFloatBuffer(16);
-   private static final Object DEPTH = getTracker("DEPTH");
-   private static final Object BLEND = getTracker("BLEND");
-   private static final Object CULL = getTracker("CULL");
-   private static final Object SCISSOR = getTracker("SCISSOR");
+   private static final ICapabilityTracker DEPTH = getTracker("DEPTH");
+   private static final ICapabilityTracker BLEND = getTracker("BLEND");
+   private static final ICapabilityTracker CULL = getTracker("CULL");
+   private static final ICapabilityTracker SCISSOR = getTracker("SCISSOR");
    private static boolean depthSaved;
    private static boolean blendSaved;
    private static boolean cullSaved;
@@ -280,9 +281,9 @@ public class GL {
       GL32C.glDisable(2848);
    }
 
-   public static void bindTexture(ResourceLocation id) {
+   public static void bindTexture(Identifier id) {
       GlStateManager._activeTexture(33984);
-      Minecraft.getInstance().getTextureManager().bindForSetup(id);
+      MinecraftClient.getInstance().getTextureManager().bindTexture(id);
    }
 
    public static void bindTexture(int i, int slot) {
@@ -298,22 +299,18 @@ public class GL {
       GlStateManager._activeTexture(33984);
    }
 
-   private static Object getTracker(String fieldName) {
+   private static ICapabilityTracker getTracker(String fieldName) {
       try {
-         // 1. 获取 GlStateManager 中的静态字段（BLEND, DEPTH, CULL, SCISSOR）
          Field stateField = GlStateManager.class.getDeclaredField(fieldName);
          stateField.setAccessible(true);
          Object state = stateField.get(null);
 
          if (state == null) return null;
 
-         // 2. 遍历这个 state 对象的所有字段，找到类型是 BooleanState 的那个
-         //    因为 BlendState.mode、DepthState.mode、ScissorState.mode 都是 BooleanState
          for (Field field : state.getClass().getDeclaredFields()) {
-            // 检查字段类型是否包含 "BooleanState"
-            if (field.getType().getName().contains("BooleanState")) {
+            if (field.getType().getName().contains("CapabilityTracker")) {
                field.setAccessible(true);
-               return field.get(state);
+               return (ICapabilityTracker)field.get(state);
             }
          }
 
@@ -325,23 +322,18 @@ public class GL {
    }
 
    /**
-    * 设置 BooleanState 对象的 enabled 字段值
-    * @param tracker 通过 getTracker 方法获取的 BooleanState 对象
-    * @param enabled 要设置的值
+    * 设置 CapabilityTracker 的 state 值
+    * @param tracker 通过 getTracker 方法获取的 CapabilityTracker 对象
+    * @param enabled 要设置的状态
     * @return 是否设置成功
     */
-   public static boolean setBooleanStateEnabled(Object tracker, boolean enabled) {
+   public static boolean setBooleanStateEnabled(ICapabilityTracker tracker, boolean enabled) {
       if (tracker == null) {
          return false;
       }
 
       try {
-         // 获取 enabled 字段
-         Field enabledField = tracker.getClass().getDeclaredField("enabled");
-         enabledField.setAccessible(true);
-
-         // 设置 enabled 值
-         enabledField.set(tracker, enabled);
+         tracker.set(enabled);
          return true;
       } catch (Exception e) {
          e.printStackTrace();
@@ -350,22 +342,17 @@ public class GL {
    }
 
    /**
-    * 获取 BooleanState 对象的 enabled 字段值
-    * @param tracker 通过 getTracker 方法获取的 BooleanState 对象
-    * @return enabled 字段的值，如果获取失败则返回 false
+    * 获取 CapabilityTracker 的 state 值
+    * @param tracker 通过 getTracker 方法获取的 CapabilityTracker 对象
+    * @return state 的值，如果获取失败则返回 false
     */
-   public static boolean getBooleanStateEnabled(Object tracker) {
+   public static boolean getBooleanStateEnabled(ICapabilityTracker tracker) {
       if (tracker == null) {
          return false;
       }
 
       try {
-         // 获取 enabled 字段
-         Field enabledField = tracker.getClass().getDeclaredField("enabled");
-         enabledField.setAccessible(true);
-
-         // 返回 enabled 值
-         return (boolean) enabledField.get(tracker);
+         return tracker.get();
       } catch (Exception e) {
          e.printStackTrace();
          return false;

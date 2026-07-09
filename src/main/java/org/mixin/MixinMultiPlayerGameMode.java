@@ -7,13 +7,13 @@ import awa.qwq.ovo.Naven.events.impl.EventPositionItem;
 import awa.qwq.ovo.Naven.modules.impl.misc.ViaVersionFix;
 import awa.qwq.ovo.Naven.utils.InventoryUtils;
 import awa.qwq.ovo.Naven.viaversionfix.MaceLogic;
-import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.client.multiplayer.MultiPlayerGameMode;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.network.ClientPlayerInteractionManager;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -21,47 +21,47 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin({MultiPlayerGameMode.class})
+@Mixin({ClientPlayerInteractionManager.class})
 public class MixinMultiPlayerGameMode {
    @Redirect(
-           method = {"useItem"},
+           method = {"interactItem"},
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/client/multiplayer/ClientPacketListener;send(Lnet/minecraft/network/protocol/Packet;)V",
+                   target = "Lnet/minecraft/client/network/ClientPlayNetworkHandler;sendPacket(Lnet/minecraft/network/packet/Packet;)V",
                    ordinal = 0
            )
    )
-   public void onSendPacket(ClientPacketListener instance, Packet<?> pPacket) {
+   public void onSendPacket(ClientPlayNetworkHandler instance, Packet<?> pPacket) {
       EventPositionItem event = new EventPositionItem(pPacket);
       Naven.getInstance().getEventManager().call(event);
       if (!event.isCancelled()) {
-         instance.send(event.getPacket());
+         instance.sendPacket(event.getPacket());
       }
    }
 
    @Inject(
-           method = {"startDestroyBlock"},
+           method = {"attackBlock"},
            at = {@At("HEAD")}
    )
    public void onStartDestroyBlock(BlockPos pLoc, Direction pFace, CallbackInfoReturnable<Boolean> cir) {
       Naven.getInstance().getEventManager().call(new EventDestroyBlock(pLoc, pFace));
    }
 
-   @Inject(method = {"attack"}, at = {@At("HEAD")}, cancellable = true)
-   private void onAttackPre(Player player, Entity entity, CallbackInfo ci) {
-      EventAttack event = new EventAttack(false, entity);  //  entity（目标）
+   @Inject(method = {"attackEntity"}, at = {@At("HEAD")}, cancellable = true)
+   private void onAttackPre(PlayerEntity player, Entity entity, CallbackInfo ci) {
+      EventAttack event = new EventAttack(false, entity);
       Naven.getInstance().getEventManager().call(event);
       if (event.isCancelled()) {
          ci.cancel();
       }
    }
 
-   @Inject(method = {"attack"}, at = {@At("RETURN")})
-   private void onAttackPost(Player player, Entity entity, CallbackInfo ci) {
-      if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace(player.getMainHandItem())) {
-         MaceLogic.playClientSmashSound(player.level(), entity, player);
+   @Inject(method = {"attackEntity"}, at = {@At("RETURN")})
+   private void onAttackPost(PlayerEntity player, Entity entity, CallbackInfo ci) {
+      if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace(player.getMainHandStack())) {
+         MaceLogic.playClientSmashSound(player.getWorld(), entity, player);
       }
 
-      Naven.getInstance().getEventManager().call(new EventAttack(true, entity));  // 已经是 entity，保持
+      Naven.getInstance().getEventManager().call(new EventAttack(true, entity));
    }
 }

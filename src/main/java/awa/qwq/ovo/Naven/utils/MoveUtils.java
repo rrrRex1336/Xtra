@@ -1,13 +1,13 @@
 package awa.qwq.ovo.Naven.utils;
 
 import awa.qwq.ovo.Naven.events.impl.EventMoveInput;
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.MinecraftClient;
 
 public class MoveUtils {
-   private static final Minecraft mc = Minecraft.getInstance();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
 
    private static float direction(float forward, float strafe) {
-      float direction = mc.player.getYRot();
+      float direction = mc.player.getYaw();
       boolean isMovingForward = forward > 0.0F;
       boolean isMovingBack = forward < 0.0F;
       boolean isMovingRight = strafe > 0.0F;
@@ -76,12 +76,12 @@ public class MoveUtils {
    }
 
    public static boolean isMoving() {
-      return mc.player.input.leftImpulse != 0.0F
-              || mc.player.input.forwardImpulse != 0.0F
-              || mc.options.keyJump.isDown()
-              || mc.options.keyLeft.isDown()
-              || mc.options.keyRight.isDown()
-              || mc.options.keyUp.isDown()
-              || mc.options.keyDown.isDown();
+      return mc.player.input.movementSideways != 0.0F
+              || mc.player.input.movementForward != 0.0F
+              || mc.options.jumpKey.isPressed()
+              || mc.options.leftKey.isPressed()
+              || mc.options.rightKey.isPressed()
+              || mc.options.forwardKey.isPressed()
+              || mc.options.backKey.isPressed();
    }
 }

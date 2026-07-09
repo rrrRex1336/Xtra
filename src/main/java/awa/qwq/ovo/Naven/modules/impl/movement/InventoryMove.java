@@ -15,19 +15,19 @@ import awa.qwq.ovo.Naven.utils.NetworkUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import com.mojang.blaze3d.platform.InputConstants;
-import net.minecraft.client.KeyMapping;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
-import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
-import net.minecraft.world.inventory.AbstractContainerMenu;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.gui.screen.ingame.InventoryScreen;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
+import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
+import net.minecraft.screen.ScreenHandler;
 
 @ModuleInfo(
         name = "InventoryMove",
@@ -35,7 +35,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
         category = Category.MOVEMENT
 )
 public class InventoryMove extends Module {
-    private final Minecraft minecraft = Minecraft.getInstance();
+    private final MinecraftClient minecraft = MinecraftClient.getInstance();
 
     public ModeValue mode = ValueBuilder.create(this, "Mode")
             .setModes("Normal", "Heypixel")
@@ -74,7 +74,7 @@ public class InventoryMove extends Module {
             return;
         }
 
-        if (event.getPacket() instanceof ServerboundContainerClickPacket clickPacket && this.shouldQueueHeypixelInventoryClick(clickPacket)) {
+        if (event.getPacket() instanceof ClickSlotC2SPacket clickPacket && this.shouldQueueHeypixelInventoryClick(clickPacket)) {
             if (!this.quickMoveWarning) {
                 this.quickMoveWarning = true;
                 ChatUtils.addChatMessage("You must close inventory after 0.4s~.");
@@ -84,7 +84,7 @@ public class InventoryMove extends Module {
             return;
         }
 
-        if (event.getPacket() instanceof ServerboundContainerClosePacket closePacket && this.shouldReleaseQueuedInventoryPackets(closePacket)) {
+        if (event.getPacket() instanceof CloseHandledScreenC2SPacket closePacket && this.shouldReleaseQueuedInventoryPackets(closePacket)) {
             event.setCancelled(true);
             this.releaseHeypixelInventoryPackets();
             NetworkUtils.sendPacketNoEvent(closePacket);
@@ -113,8 +113,8 @@ public class InventoryMove extends Module {
 
         event.setForward(this.calculateForwardMovement());
         event.setStrafe(this.calculateStrafeMovement());
-        event.setJump(this.isKeyActive(this.minecraft.options.keyJump));
-        event.setSneak(this.sneak.getCurrentValue() && this.isKeyActive(this.minecraft.options.keyShift));
+        event.setJump(this.isKeyActive(this.minecraft.options.jumpKey));
+        event.setSneak(this.sneak.getCurrentValue() && this.isKeyActive(this.minecraft.options.sneakKey));
     }
 
     @EventTarget
@@ -129,7 +129,7 @@ public class InventoryMove extends Module {
             return;
         }
 
-        LocalPlayer player = this.minecraft.player;
+        ClientPlayerEntity player = this.minecraft.player;
         if (this.shouldStopSprintInGui()) {
             this.stopGuiSprint(player);
         }
@@ -159,15 +159,15 @@ public class InventoryMove extends Module {
         this.wasInInventory = currentlyInInventory;
     }
 
-    private boolean shouldQueueHeypixelInventoryClick(ServerboundContainerClickPacket clickPacket) {
+    private boolean shouldQueueHeypixelInventoryClick(ClickSlotC2SPacket clickPacket) {
         return this.isPlayerInventoryScreen()
-                && clickPacket.getContainerId() == this.minecraft.player.inventoryMenu.containerId;
+                && clickPacket.getSyncId() == this.minecraft.player.playerScreenHandler.syncId;
     }
 
-    private boolean shouldReleaseQueuedInventoryPackets(ServerboundContainerClosePacket closePacket) {
+    private boolean shouldReleaseQueuedInventoryPackets(CloseHandledScreenC2SPacket closePacket) {
         return !this.heypixelInventoryPackets.isEmpty()
                 && this.minecraft.player != null
-                && closePacket.getContainerId() == this.minecraft.player.inventoryMenu.containerId;
+                && closePacket.getSyncId() == this.minecraft.player.playerScreenHandler.syncId;
     }
 
     private boolean isPlayerInventoryScreen() {
@@ -175,10 +175,10 @@ public class InventoryMove extends Module {
             return false;
         }
 
-        AbstractContainerMenu menu = this.minecraft.player.containerMenu;
-        return this.minecraft.screen instanceof InventoryScreen
+        ScreenHandler menu = this.minecraft.player.currentScreenHandler;
+        return this.minecraft.currentScreen instanceof InventoryScreen
                 && menu != null
-                && menu.containerId == this.minecraft.player.inventoryMenu.containerId;
+                && menu.syncId == this.minecraft.player.playerScreenHandler.syncId;
     }
 
     private void releaseHeypixelInventoryPackets() {
@@ -186,7 +186,7 @@ public class InventoryMove extends Module {
             return;
         }
 
-        if (this.minecraft.getConnection() == null) {
+        if (this.minecraft.getNetworkHandler() == null) {
             this.heypixelInventoryPackets.clear();
             return;
         }
@@ -204,23 +204,23 @@ public class InventoryMove extends Module {
         }
     }
 
-    private boolean isKeyActive(KeyMapping keyMapping) {
-        return InputConstants.isKeyDown(
-                minecraft.getWindow().getWindow(),
-                keyMapping.getDefaultKey().getValue()
+    private boolean isKeyActive(KeyBinding keyMapping) {
+        return InputUtil.isKeyPressed(
+                minecraft.getWindow().getHandle(),
+                keyMapping.getDefaultKey().getCode()
         );
     }
 
     private boolean isKeyActive(int keyCode) {
-        return InputConstants.isKeyDown(
-                minecraft.getWindow().getWindow(),
+        return InputUtil.isKeyPressed(
+                minecraft.getWindow().getHandle(),
                 keyCode
         );
     }
 
-    private boolean canContinueSprinting(LocalPlayer player) {
-        boolean isMovingForward = player.input.forwardImpulse > 0.0F;
-        boolean isInValidState = player.getHealth() > 0.0F && !player.isInWater() && !player.isInLava() && !player.isShiftKeyDown() && !player.isPassenger() && !player.input.jumping;
+    private boolean canContinueSprinting(ClientPlayerEntity player) {
+        boolean isMovingForward = player.input.movementForward > 0.0F;
+        boolean isInValidState = player.getHealth() > 0.0F && !player.isTouchingWater() && !player.isInLava() && !player.isSneaking() && !player.hasVehicle() && !player.input.jumping;
         return isMovingForward && isInValidState;
     }
 
@@ -239,21 +239,21 @@ public class InventoryMove extends Module {
         return false;
     }
 
-    private void stopGuiSprint(LocalPlayer player) {
-        this.minecraft.options.keySprint.setDown(false);
-        this.minecraft.options.toggleSprint().set(false);
+    private void stopGuiSprint(ClientPlayerEntity player) {
+        this.minecraft.options.sprintKey.setPressed(false);
+        this.minecraft.options.getSprintToggled().setValue(false);
         if (player.isSprinting()) {
             player.setSprinting(false);
         }
     }
 
     private boolean isMovementAllowed() {
-        Screen currentScreen = this.minecraft.screen;
+        Screen currentScreen = this.minecraft.currentScreen;
         return this.minecraft.player != null && currentScreen != null && (this.isContainerScreen(currentScreen) || this.isClickGuiScreen(currentScreen));
     }
 
     private boolean isContainerScreen(Screen screen) {
-        return screen instanceof AbstractContainerScreen;
+        return screen instanceof HandledScreen;
     }
 
     private boolean isClickGuiScreen(Screen screen) {
@@ -262,39 +262,39 @@ public class InventoryMove extends Module {
     }
 
     private float calculateForwardMovement() {
-        if (this.isKeyActive(this.minecraft.options.keyUp)) {
+        if (this.isKeyActive(this.minecraft.options.forwardKey)) {
             return 1.0F;
         } else {
-            return this.isKeyActive(this.minecraft.options.keyDown) ? -1.0F : 0.0F;
+            return this.isKeyActive(this.minecraft.options.backKey) ? -1.0F : 0.0F;
         }
     }
 
     private float calculateStrafeMovement() {
-        if (this.isKeyActive(this.minecraft.options.keyLeft)) {
+        if (this.isKeyActive(this.minecraft.options.leftKey)) {
             return 1.0F;
         } else {
-            return this.isKeyActive(this.minecraft.options.keyRight) ? -1.0F : 0.0F;
+            return this.isKeyActive(this.minecraft.options.rightKey) ? -1.0F : 0.0F;
         }
     }
 
     private void adjustPlayerRotation() {
-        LocalPlayer player = this.minecraft.player;
-        float currentPitch = player.getXRot();
-        float currentYaw = player.getYRot();
+        ClientPlayerEntity player = this.minecraft.player;
+        float currentPitch = player.getPitch();
+        float currentYaw = player.getYaw();
         if (this.isKeyActive(265)) {
-            player.setXRot(Math.max(currentPitch - 5.0F, -90.0F));
+            player.setPitch(Math.max(currentPitch - 5.0F, -90.0F));
         }
 
         if (this.isKeyActive(264)) {
-            player.setXRot(Math.min(currentPitch + 5.0F, 90.0F));
+            player.setPitch(Math.min(currentPitch + 5.0F, 90.0F));
         }
 
         if (this.isKeyActive(263)) {
-            player.setYRot(currentYaw - 5.0F);
+            player.setYaw(currentYaw - 5.0F);
         }
 
         if (this.isKeyActive(262)) {
-            player.setYRot(currentYaw + 5.0F);
+            player.setYaw(currentYaw + 5.0F);
         }
     }
 

@@ -3,7 +3,7 @@ package awa.qwq.ovo.Naven.modules.impl.visual.projectiles.datas;
 import awa.qwq.ovo.Naven.modules.impl.visual.projectiles.ProjectileData;
 import java.awt.Color;
 import java.util.Set;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.entity.Entity;
 
 public class BasicProjectileData implements ProjectileData {
    private final Color color;

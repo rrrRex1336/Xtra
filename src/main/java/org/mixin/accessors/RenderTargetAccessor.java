@@ -1,11 +1,11 @@
 package org.mixin.accessors;
 
-import com.mojang.blaze3d.pipeline.RenderTarget;
+import net.minecraft.client.gl.Framebuffer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin({RenderTarget.class})
+@Mixin({Framebuffer.class})
 public interface RenderTargetAccessor {
-   @Accessor
+   @Accessor("depthAttachment")
    void setDepthBufferId(int var1);
 }

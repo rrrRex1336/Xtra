@@ -4,8 +4,7 @@ import awa.qwq.ovo.Naven.events.api.events.callables.EventCancellable;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import net.minecraft.network.protocol.Packet;
-
+import net.minecraft.network.packet.Packet;
 import java.util.List;
 
 @EqualsAndHashCode(callSuper = true)

@@ -5,10 +5,10 @@ import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventShader;
 import awa.qwq.ovo.Naven.utils.TimeHelper;
-import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.util.Window;
 import org.lwjgl.opengl.GL11;
 
 public class ShadowUtils {
@@ -37,9 +37,9 @@ public class ShadowUtils {
       boolean renderStateSaved = false;
       boolean stencilStateSaved = false;
       try {
-         Window window = Minecraft.getInstance().getWindow();
-         int width = window.getWidth();
-         int height = window.getHeight();
+         Window window = MinecraftClient.getInstance().getWindow();
+         int width = window.getFramebufferWidth();
+         int height = window.getFramebufferHeight();
 
          if (!initialized || width != lastWidth || height != lastHeight) {
             cleanup();
@@ -112,7 +112,7 @@ public class ShadowUtils {
       GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
       GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
 
-      RenderSystem.setShader(GameRenderer::getPositionColorShader);
+      RenderSystem.setShader(GameRenderer::getPositionColorProgram);
       Naven.getInstance().getEventManager().call(new EventShader(e.getStack(), e.getGuiGraphics(), EventType.SHADOW));
 
       mainRenderBuffer.unbind();
@@ -140,8 +140,8 @@ public class ShadowUtils {
    }
 
    private static void renderCachedResult(EventRender2D e, Window window, float strength) {
-      Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
-      GL.viewport(0, 0, window.getWidth(), window.getHeight());
+      MinecraftClient.getInstance().getFramebuffer().beginWrite(false);
+      GL.viewport(0, 0, window.getFramebufferWidth(), window.getFramebufferHeight());
       GL.enableBlend();
       GL11.glDisable(GL11.GL_DEPTH_TEST);
 
@@ -157,7 +157,7 @@ public class ShadowUtils {
    }
 
    private static void setBlurUniforms(Window window, float strength) {
-      blurShader.set("u_Size", (double)window.getWidth(), (double)window.getHeight());
+      blurShader.set("u_Size", (double)window.getFramebufferWidth(), (double)window.getFramebufferHeight());
       blurShader.set("u_Radius", (double)(2.0F + strength * 1.2F));
       blurShader.set("u_Intensity", (double)(0.5F + strength * 0.15F));
    }

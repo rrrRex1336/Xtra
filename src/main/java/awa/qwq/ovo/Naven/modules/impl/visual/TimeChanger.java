@@ -9,7 +9,7 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
+import net.minecraft.network.packet.s2c.play.WorldTimeUpdateS2CPacket;
 
 @ModuleInfo(
    name = "TimeChanger",
@@ -28,13 +28,13 @@ public class TimeChanger extends Module {
    @EventTarget
    public void onMotion(EventMotion e) {
       if (e.getType() == EventType.PRE) {
-         mc.level.setDayTime((long)this.time.getCurrentValue());
+         mc.world.setTimeOfDay((long)this.time.getCurrentValue());
       }
    }
 
    @EventTarget
    public void onPacket(EventPacket event) {
-      if (event.getPacket() instanceof ClientboundSetTimePacket) {
+      if (event.getPacket() instanceof WorldTimeUpdateS2CPacket) {
          event.setCancelled(true);
       }
    }

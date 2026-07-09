@@ -1,15 +1,15 @@
 package awa.qwq.ovo.Naven.utils;
 
 import awa.qwq.ovo.Naven.Naven;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.ChatComponent;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.hud.ChatHud;
+import net.minecraft.text.Text;
 
 public class ChatUtils {
    private static final String PREFIX = "§d" + Naven.CLIENT_DISPLAY_NAME + " §7>> ";
 
-   public static void component(Component component) {
-      ChatComponent chat = Minecraft.getInstance().gui.getChat();
+   public static void component(Text component) {
+      ChatHud chat = MinecraftClient.getInstance().inGameHud.getChatHud();
       chat.addMessage(component);
    }
 
@@ -18,6 +18,6 @@ public class ChatUtils {
    }
 
    public static void addChatMessage(boolean prefix, String message) {
-      component(Component.nullToEmpty((prefix ? PREFIX : "") + message));
+      component(Text.of((prefix ? PREFIX : "") + message));
    }
 }

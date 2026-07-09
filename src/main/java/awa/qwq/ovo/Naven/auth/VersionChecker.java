@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 
 public final class VersionChecker {
     private static final Logger LOGGER = LogManager.getLogger("VersionChecker");
-    private static final String ENDPOINT = "http://neko.antichest.pw/api/index.php?route=/version";
+    private static final String ENDPOINT = "https://neko.antichest.pw/api/index.php?route=/version";
     private static final int TIMEOUT_MS = 6000;
 
     private VersionChecker() {

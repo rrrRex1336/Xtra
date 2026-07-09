@@ -8,7 +8,7 @@ import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.utils.ChatUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
 
 @ModuleInfo(name = "AutoPlay", description = "Automatically joins the next game after a delay.", category = Category.MISC)
 public class AutoPlay extends Module {
@@ -31,8 +31,8 @@ public class AutoPlay extends Module {
             return;
         }
 
-        if (event.getPacket() instanceof ClientboundSystemChatPacket) {
-            String message = ((ClientboundSystemChatPacket) event.getPacket()).content().getString();
+        if (event.getPacket() instanceof GameMessageS2CPacket) {
+            String message = ((GameMessageS2CPacket) event.getPacket()).content().getString();
             if (message.contains("游戏结束，请对")) {
                 long delayMillis = (long) (this.delay.getCurrentValue() * 1000.0f);
                 this.scheduledTime = System.currentTimeMillis() + delayMillis;
@@ -52,7 +52,7 @@ public class AutoPlay extends Module {
         }
 
         if (this.scheduledTime > 0L && System.currentTimeMillis() >= this.scheduledTime) {
-            AutoPlay.mc.player.connection.sendCommand("again");
+            AutoPlay.mc.player.networkHandler.sendChatCommand("again");
             ChatUtils.addChatMessage("§b[AutoPlay] §fEntering the next game.");
             this.resetTimer();
         }

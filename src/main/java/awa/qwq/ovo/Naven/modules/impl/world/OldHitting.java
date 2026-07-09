@@ -15,25 +15,25 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.util.Mth;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.world.item.ItemDisplayContext;
-import net.minecraft.client.renderer.entity.ItemRenderer;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.HumanoidArm;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.CrossbowItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SwordItem;
-import net.minecraft.world.item.ShieldItem;
-import net.minecraft.world.item.UseAnim;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.item.ItemRenderer;
+import net.minecraft.client.render.model.json.ModelTransformationMode;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.item.CrossbowItem;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.item.ShieldItem;
+import net.minecraft.item.SwordItem;
+import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
+import net.minecraft.util.Arm;
+import net.minecraft.util.Hand;
+import net.minecraft.util.UseAction;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.RotationAxis;
 
 @ModuleInfo(name = "OldHitting", description = "Customizes item animations and block animations", category = Category.WORLD)
 public class OldHitting extends Module {
@@ -66,7 +66,7 @@ public class OldHitting extends Module {
 
     private boolean flip;
     public static boolean isBlocking = false;
-    private final Minecraft mc = Minecraft.getInstance();
+    private final MinecraftClient mc = MinecraftClient.getInstance();
     private float mainHandHeight = 0.0F;
     private float offHandHeight = 0.0F;
     private float oMainHandHeight = 0.0F;
@@ -123,7 +123,7 @@ public class OldHitting extends Module {
 
     @EventTarget
     public void onPacket(EventPacket event) {
-        if (event.getType() == EventType.SEND && event.getPacket() instanceof ServerboundSwingPacket) {
+        if (event.getType() == EventType.SEND && event.getPacket() instanceof HandSwingC2SPacket) {
             flip = !flip;
         }
     }
@@ -140,27 +140,27 @@ public class OldHitting extends Module {
         oMainHandHeight = mainHandHeight;
         oOffHandHeight = offHandHeight;
 
-        LocalPlayer localplayer = mc.player;
-        ItemStack itemstack = localplayer.getMainHandItem();
-        ItemStack itemstack1 = localplayer.getOffhandItem();
+        ClientPlayerEntity localplayer = mc.player;
+        ItemStack itemstack = localplayer.getMainHandStack();
+        ItemStack itemstack1 = localplayer.getOffHandStack();
         boolean isBlocking = isBlocking();
 
         if (isBlocking) {
             mainHandHeight = 1.0F;
-            if (ItemStack.matches(mainHandItem, itemstack)) {
+            if (ItemStack.areEqual(mainHandItem, itemstack)) {
                 mainHandItem = itemstack;
             }
-            if (ItemStack.matches(offHandItem, itemstack1)) {
+            if (ItemStack.areEqual(offHandItem, itemstack1)) {
                 offHandItem = itemstack1;
             }
             return;
         }
 
-        if (localplayer.isHandsBusy()) {
-            mainHandHeight = Mth.clamp(mainHandHeight - 0.4F, 0.0F, 1.0F);
-            offHandHeight = Mth.clamp(offHandHeight - 0.4F, 0.0F, 1.0F);
+        if (localplayer.isRiding()) {
+            mainHandHeight = MathHelper.clamp(mainHandHeight - 0.4F, 0.0F, 1.0F);
+            offHandHeight = MathHelper.clamp(offHandHeight - 0.4F, 0.0F, 1.0F);
         } else {
-            float f = localplayer.getAttackStrengthScale(1.0F);
+            float f = localplayer.getAttackCooldownProgress(1.0F);
 
             // ========== 替换 ForgeHooksClient ==========
             boolean flag = shouldCauseReequipAnimation(mainHandItem, itemstack);
@@ -176,8 +176,8 @@ public class OldHitting extends Module {
             float targetMainHeight = !flag ? f * f * f : 0.0F;
             float targetOffHeight = !flag1 ? 1.0F : 0.0F;
 
-            mainHandHeight += Mth.clamp(targetMainHeight - mainHandHeight, -0.2F, 0.2F);
-            offHandHeight += Mth.clamp(targetOffHeight - offHandHeight, -0.2F, 0.2F);
+            mainHandHeight += MathHelper.clamp(targetMainHeight - mainHandHeight, -0.2F, 0.2F);
+            offHandHeight += MathHelper.clamp(targetOffHeight - offHandHeight, -0.2F, 0.2F);
         }
 
         if (mainHandHeight < 0.1F) {
@@ -193,8 +193,8 @@ public class OldHitting extends Module {
         if (from == to) return false;
         if (from.isEmpty() && to.isEmpty()) return false;
 
-        boolean itemsEqual = ItemStack.isSameItem(from, to);
-        boolean tagsEqual = ItemStack.matches(from, to);
+        boolean itemsEqual = ItemStack.areItemsEqual(from, to);
+        boolean tagsEqual = ItemStack.areEqual(from, to);
 
         return !itemsEqual || !tagsEqual;
     }
@@ -204,18 +204,18 @@ public class OldHitting extends Module {
         if (!this.isEnabled() || BlockMods.getCurrentMode().equals("None"))
             return false;
 
-        LocalPlayer player = mc.player;
+        ClientPlayerEntity player = mc.player;
         if (player == null)
             return false;
 
-        ItemStack mainHandItem = player.getMainHandItem();
+        ItemStack mainHandItem = player.getMainHandStack();
         if (!(mainHandItem.getItem() instanceof SwordItem))
             return false;
         boolean isOffhandUsing = false;
-        if (player.isUsingItem() && player.getUsedItemHand() == InteractionHand.OFF_HAND) {
-            ItemStack offhandItem = player.getOffhandItem();
-            UseAnim useAnim = offhandItem.getUseAnimation();
-            if (useAnim != UseAnim.BLOCK) {
+        if (player.isUsingItem() && player.getActiveHand() == Hand.OFF_HAND) {
+            ItemStack offhandItem = player.getOffHandStack();
+            UseAction useAnim = offhandItem.getUseAction();
+            if (useAnim != UseAction.BLOCK) {
                 isOffhandUsing = true;
             }
         }
@@ -227,69 +227,69 @@ public class OldHitting extends Module {
             return false;
         }
 
-        return mc.options.keyUse.isDown();
+        return mc.options.useKey.isPressed();
     }
 
     @EventTarget
     public void onRender(EventRender event) {
-        if (mc.player == null || mc.level == null)
+        if (mc.player == null || mc.world == null)
             return;
         renderHUDItem(event);
     }
 
     private void renderHUDItem(EventRender event) {
-        ItemStack mainHandItem = mc.player.getMainHandItem();
+        ItemStack mainHandItem = mc.player.getMainHandStack();
         if (mainHandItem.isEmpty())
             return;
 
-        PoseStack poseStack = new PoseStack();
-        MultiBufferSource bufferSource = mc.renderBuffers().bufferSource();
-        float partialTicks = mc.getFrameTime();
+        MatrixStack poseStack = new MatrixStack();
+        VertexConsumerProvider bufferSource = mc.getBufferBuilders().getEntityVertexConsumers();
+        float partialTicks = mc.getTickDelta();
         int packedLight = 15728880;
 
-        int screenWidth = mc.getWindow().getGuiScaledWidth();
-        int screenHeight = mc.getWindow().getGuiScaledHeight();
+        int screenWidth = mc.getWindow().getScaledWidth();
+        int screenHeight = mc.getWindow().getScaledHeight();
 
         float itemX = screenWidth - 100;
         float itemY = screenHeight - 100;
 
         poseStack.translate(itemX, itemY, 0);
 
-        float swingProgress = mc.player.getAttackAnim(partialTicks);
+        float swingProgress = mc.player.getHandSwingProgress(partialTicks);
         if (swingProgress > 0) {
-            float swingAngle = Mth.sin(swingProgress * swingProgress * (float) Math.PI) * 10.0F;
-            poseStack.mulPose(Axis.ZP.rotationDegrees(swingAngle));
+            float swingAngle = MathHelper.sin(swingProgress * swingProgress * (float) Math.PI) * 10.0F;
+            poseStack.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(swingAngle));
         }
 
         float scale = 1.5F;
         poseStack.scale(scale, scale, scale);
 
-        renderItem(mc.player, mainHandItem, ItemDisplayContext.GUI, false, poseStack, bufferSource, packedLight);
+        renderItem(mc.player, mainHandItem, ModelTransformationMode.GUI, false, poseStack, bufferSource, packedLight);
     }
 
     public void renderArmWithItem(
-            AbstractClientPlayer player,
+            AbstractClientPlayerEntity player,
             float partialTicks,
             float equipProgress,
-            InteractionHand interactionHand,
+            Hand interactionHand,
             float swingProgress,
             ItemStack itemStack,
             float equippedProg,
-            PoseStack poseStack,
-            MultiBufferSource multiBufferSource,
+            MatrixStack poseStack,
+            VertexConsumerProvider multiBufferSource,
             int light) {
-        if (!player.isScoping()) {
-            boolean flag = interactionHand == InteractionHand.MAIN_HAND;
-            HumanoidArm humanoidarm = flag ? player.getMainArm() : player.getMainArm().getOpposite();
+        if (!player.isUsingSpyglass()) {
+            boolean flag = interactionHand == Hand.MAIN_HAND;
+            Arm humanoidarm = flag ? player.getMainArm() : player.getMainArm().getOpposite();
             OldHitting oldHitting = this;
-            poseStack.pushPose();
+            poseStack.push();
             boolean skipOffhandShield = !flag &&
-                    player.getOffhandItem().getItem() instanceof ShieldItem;
+                    player.getOffHandStack().getItem() instanceof ShieldItem;
             if (!skipOffhandShield) {
                 if (itemStack.isEmpty()) {
                     if (flag && !player.isInvisible()) {renderPlayerArm(poseStack, multiBufferSource, light, equippedProg, swingProgress, humanoidarm);
                     }
-                } else if (itemStack.is(Items.FILLED_MAP)) {
+                } else if (itemStack.isOf(Items.FILLED_MAP)) {
                     if (flag && offHandItem.isEmpty()) {
                         renderTwoHandedMap(poseStack, multiBufferSource, light, equipProgress, equippedProg,
                                 swingProgress);
@@ -298,22 +298,22 @@ public class OldHitting extends Module {
                                 swingProgress, itemStack);
                     }
                 } else {
-                    boolean flag1 = itemStack.is(Items.CROSSBOW) && CrossbowItem.isCharged(itemStack);
-                    int i = humanoidarm == HumanoidArm.RIGHT ? 1 : -1;
-                    if (itemStack.is(Items.CROSSBOW)) {
-                        if (player.isUsingItem() && player.getUseItemRemainingTicks() > 0
-                                && player.getUsedItemHand() == interactionHand) {
+                    boolean flag1 = itemStack.isOf(Items.CROSSBOW) && CrossbowItem.isCharged(itemStack);
+                    int i = humanoidarm == Arm.RIGHT ? 1 : -1;
+                    if (itemStack.isOf(Items.CROSSBOW)) {
+                        if (player.isUsingItem() && player.getItemUseTimeLeft() > 0
+                                && player.getActiveHand() == interactionHand) {
                             applyItemArmTransform(poseStack, humanoidarm, equippedProg);
                             poseStack.translate((double) ((float) i * -0.4785682F), -0.094387F, 0.0573153F);
-                            poseStack.mulPose(Axis.XP.rotation(-11.935F * (float) Math.PI / 180.0F));
-                            poseStack.mulPose(Axis.YP.rotation((float) i * 65.3F * (float) Math.PI / 180.0F));
-                            poseStack.mulPose(Axis.ZP.rotation((float) i * -9.785F * (float) Math.PI / 180.0F));
-                            float f6 = (float) itemStack.getUseDuration()
-                                    - ((float) player.getUseItemRemainingTicks() - partialTicks + 1.0F);
-                            float f10 = f6 / (float) CrossbowItem.getChargeDuration(itemStack);
+                            poseStack.multiply(RotationAxis.POSITIVE_X.rotation(-11.935F * (float) Math.PI / 180.0F));
+                            poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * 65.3F * (float) Math.PI / 180.0F));
+                            poseStack.multiply(RotationAxis.POSITIVE_Z.rotation((float) i * -9.785F * (float) Math.PI / 180.0F));
+                            float f6 = (float) itemStack.getMaxUseTime()
+                                    - ((float) player.getItemUseTimeLeft() - partialTicks + 1.0F);
+                            float f10 = f6 / (float) CrossbowItem.getPullTime(itemStack);
                             f10 = Math.min(f10, 1.0F);
                             if (f10 > 0.1F) {
-                                float f14 = Mth.sin((f6 - 0.1F) * 1.3F);
+                                float f14 = MathHelper.sin((f6 - 0.1F) * 1.3F);
                                 float f20 = f10 - 0.1F;
                                 float f25 = f14 * f20;
                                 poseStack.translate((double) (f25 * 0.0F), (double) (f25 * 0.004F),
@@ -322,34 +322,34 @@ public class OldHitting extends Module {
 
                             poseStack.translate((double) (f10 * 0.0F), (double) (f10 * 0.0F), (double) (f10 * 0.04F));
                             poseStack.scale(1.0F, 1.0F, 1.0F + f10 * 0.2F);
-                            poseStack.mulPose(Axis.YP.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
+                            poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
                         } else {
-                            float f5 = -0.4F * Mth.sin(Mth.sqrt(swingProgress) * (float) Math.PI);
-                            float f9 = 0.2F * Mth.sin(Mth.sqrt(swingProgress) * (float) (Math.PI * 2));
-                            float f13 = -0.2F * Mth.sin(swingProgress * (float) Math.PI);
+                            float f5 = -0.4F * MathHelper.sin(MathHelper.sqrt(swingProgress) * (float) Math.PI);
+                            float f9 = 0.2F * MathHelper.sin(MathHelper.sqrt(swingProgress) * (float) (Math.PI * 2));
+                            float f13 = -0.2F * MathHelper.sin(swingProgress * (float) Math.PI);
                             poseStack.translate((double) ((float) i * f5), (double) f9, (double) f13);
                             applyItemArmTransform(poseStack, humanoidarm, equippedProg);
                             applyItemArmAttackTransform(poseStack, humanoidarm, swingProgress);
                             if (flag1 && swingProgress < 0.001F && flag) {
                                 poseStack.translate((double) ((float) i * -0.641864F), 0.0, 0.0);
-                                poseStack.mulPose(Axis.YP.rotation((float) i * 10.0F * (float) Math.PI / 180.0F));
+                                poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * 10.0F * (float) Math.PI / 180.0F));
                             }
                         }
 
                         renderItem(
                                 player,
                                 itemStack,
-                                i == 1 ? ItemDisplayContext.FIRST_PERSON_RIGHT_HAND
-                                        : ItemDisplayContext.FIRST_PERSON_LEFT_HAND,
+                                i == 1 ? ModelTransformationMode.FIRST_PERSON_RIGHT_HAND
+                                        : ModelTransformationMode.FIRST_PERSON_LEFT_HAND,
                                 i != 1,
                                 poseStack,
                                 multiBufferSource,
                                 light);
                     } else {
-                        boolean flag2 = humanoidarm == HumanoidArm.RIGHT;
-                        if (player.isUsingItem() && player.getUseItemRemainingTicks() > 0
-                                && player.getUsedItemHand() == interactionHand) {
-                            switch (itemStack.getUseAnimation()) {
+                        boolean flag2 = humanoidarm == Arm.RIGHT;
+                        if (player.isUsingItem() && player.getItemUseTimeLeft() > 0
+                                && player.getActiveHand() == interactionHand) {
+                            switch (itemStack.getUseAction()) {
                                 case NONE:
                                 case BLOCK:
                                     applyItemArmTransform(poseStack, humanoidarm, equippedProg);
@@ -362,16 +362,16 @@ public class OldHitting extends Module {
                                 case BOW:
                                     applyItemArmTransform(poseStack, humanoidarm, equippedProg);
                                     poseStack.translate((double) ((float) i * -0.2785682F), 0.183444F, 0.1573153F);
-                                    poseStack.mulPose(Axis.XP.rotation(-13.935F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.YP.rotation((float) i * 35.3F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.ZP.rotation((float) i * -9.785F * (float) Math.PI / 180.0F));
-                                    float f8 = (float) itemStack.getUseDuration()
-                                            - ((float) player.getUseItemRemainingTicks() - partialTicks + 1.0F);
+                                    poseStack.multiply(RotationAxis.POSITIVE_X.rotation(-13.935F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * 35.3F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Z.rotation((float) i * -9.785F * (float) Math.PI / 180.0F));
+                                    float f8 = (float) itemStack.getMaxUseTime()
+                                            - ((float) player.getItemUseTimeLeft() - partialTicks + 1.0F);
                                     float f12 = f8 / 20.0F;
                                     f12 = (f12 * f12 + f12 * 2.0F) / 3.0F;
                                     f12 = Math.min(f12, 1.0F);
                                     if (f12 > 0.1F) {
-                                        float f19 = Mth.sin((f8 - 0.1F) * 1.3F);
+                                        float f19 = MathHelper.sin((f8 - 0.1F) * 1.3F);
                                         float f24 = f12 - 0.1F;
                                         float f26 = f19 * f24;
                                         poseStack.translate((double) (f26 * 0.0F), (double) (f26 * 0.004F),
@@ -381,20 +381,20 @@ public class OldHitting extends Module {
                                     poseStack.translate((double) (f12 * 0.0F), (double) (f12 * 0.0F),
                                             (double) (f12 * 0.04F));
                                     poseStack.scale(1.0F, 1.0F, 1.0F + f12 * 0.2F);
-                                    poseStack.mulPose(Axis.YP.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
                                     break;
                                 case SPEAR:
                                     applyItemArmTransform(poseStack, humanoidarm, equippedProg);
                                     poseStack.translate((double) ((float) i * -0.5F), 0.7F, 0.1F);
-                                    poseStack.mulPose(Axis.XP.rotation(-55.0F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.YP.rotation((float) i * 35.3F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.ZP.rotation((float) i * -9.785F * (float) Math.PI / 180.0F));
-                                    float f7 = (float) itemStack.getUseDuration()
-                                            - ((float) player.getUseItemRemainingTicks() - partialTicks + 1.0F);
+                                    poseStack.multiply(RotationAxis.POSITIVE_X.rotation(-55.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * 35.3F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Z.rotation((float) i * -9.785F * (float) Math.PI / 180.0F));
+                                    float f7 = (float) itemStack.getMaxUseTime()
+                                            - ((float) player.getItemUseTimeLeft() - partialTicks + 1.0F);
                                     float f11 = f7 / 10.0F;
                                     f11 = Math.min(f11, 1.0F);
                                     if (f11 > 0.1F) {
-                                        float f18 = Mth.sin((f7 - 0.1F) * 1.3F);
+                                        float f18 = MathHelper.sin((f7 - 0.1F) * 1.3F);
                                         float f23 = f11 - 0.1F;
                                         float f4 = f18 * f23;
                                         poseStack.translate((double) (f4 * 0.0F), (double) (f4 * 0.004F),
@@ -403,57 +403,57 @@ public class OldHitting extends Module {
 
                                     poseStack.translate(0.0, 0.0, (double) (f11 * 0.2F));
                                     poseStack.scale(1.0F, 1.0F, 1.0F + f11 * 0.2F);
-                                    poseStack.mulPose(Axis.YP.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
                             }
                         } else if ((player.isUsingItem()
-                                || Minecraft.getInstance().options.keyUse.isDown()
+                                || MinecraftClient.getInstance().options.useKey.isPressed()
                                 || oldHitting.KillauraAutoBlock.getCurrentValue() && getAuraTarget() != null)
-                                && player.getMainHandItem().getItem() instanceof SwordItem
+                                && player.getMainHandStack().getItem() instanceof SwordItem
                                 && !oldHitting.BlockMods.getCurrentMode().equals("None")) {
                             String s = oldHitting.BlockMods.getCurrentMode().toLowerCase();
                             switch (s) {
                                 case "1.7":
                                     poseStack.translate((double) ((float) i * BlockingX.getCurrentValue()),
                                             (double) (BlockingY.getCurrentValue()), -0.72F);
-                                    float f17 = Mth.sin(swingProgress * swingProgress * (float) Math.PI);
-                                    float f22 = Mth.sin(Mth.sqrt(swingProgress) * (float) Math.PI);
-                                    poseStack.mulPose(Axis.YP
+                                    float f17 = MathHelper.sin(swingProgress * swingProgress * (float) Math.PI);
+                                    float f22 = MathHelper.sin(MathHelper.sqrt(swingProgress) * (float) Math.PI);
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y
                                             .rotation((float) i * (45.0F + f17 * -20.0F) * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(
-                                            Axis.ZP.rotation((float) i * f22 * -20.0F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.XP.rotation(f22 * -80.0F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.YP.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(
+                                            RotationAxis.POSITIVE_Z.rotation((float) i * f22 * -20.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_X.rotation(f22 * -80.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
                                     poseStack.scale(0.9F, 0.9F, 0.9F);
                                     poseStack.translate(-0.2F, 0.126F, 0.2F);
-                                    poseStack.mulPose(Axis.XP.rotation(-102.25F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.YP.rotation((float) i * 15.0F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.ZP.rotation((float) i * 80.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_X.rotation(-102.25F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * 15.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Z.rotation((float) i * 80.0F * (float) Math.PI / 180.0F));
                                     break;
                                 case "push":
                                     poseStack.translate((double) ((float) i * BlockingX.getCurrentValue()),
                                             (double) (BlockingY.getCurrentValue()), -0.72F);
                                     poseStack.translate((double) ((float) i * -0.1414214F), 0.08F, 0.1414214F);
-                                    poseStack.mulPose(Axis.XP.rotation(-102.25F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.YP.rotation((float) i * 13.365F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.ZP.rotation((float) i * 78.05F * (float) Math.PI / 180.0F));
-                                    float f15 = Mth.sin(swingProgress * swingProgress * (float) Math.PI);
-                                    float f3 = Mth.sin(Mth.sqrt(swingProgress) * (float) Math.PI);
-                                    poseStack.mulPose(Axis.XP.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.YP.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.ZP.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.XP.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.YP.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
-                                    poseStack.mulPose(Axis.ZP.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_X.rotation(-102.25F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * 13.365F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Z.rotation((float) i * 78.05F * (float) Math.PI / 180.0F));
+                                    float f15 = MathHelper.sin(swingProgress * swingProgress * (float) Math.PI);
+                                    float f3 = MathHelper.sin(MathHelper.sqrt(swingProgress) * (float) Math.PI);
+                                    poseStack.multiply(RotationAxis.POSITIVE_X.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Z.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_X.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
+                                    poseStack.multiply(RotationAxis.POSITIVE_Z.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
                             }
-                        } else if (player.isAutoSpinAttack()) {
+                        } else if (player.isUsingRiptide()) {
                             applyItemArmTransform(poseStack, humanoidarm, equippedProg);
                             poseStack.translate((double) ((float) i * -0.4F), 0.8F, 0.3F);
-                            poseStack.mulPose(Axis.YP.rotation((float) i * 65.0F * (float) Math.PI / 180.0F));
-                            poseStack.mulPose(Axis.ZP.rotation((float) i * -85.0F * (float) Math.PI / 180.0F));
+                            poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * 65.0F * (float) Math.PI / 180.0F));
+                            poseStack.multiply(RotationAxis.POSITIVE_Z.rotation((float) i * -85.0F * (float) Math.PI / 180.0F));
                         } else {
                             applyItemArmTransform(poseStack, humanoidarm, equippedProg);
                             if (itemStack.getItem() instanceof SwordItem &&
-                                    (mc.options.keyUse.isDown() || (oldHitting.KillauraAutoBlock.getCurrentValue()
+                                    (mc.options.useKey.isPressed() || (oldHitting.KillauraAutoBlock.getCurrentValue()
                                             && getAuraTarget() != null && getAuraTarget() instanceof LivingEntity
                                             && getTargetHudEnabled()))) {
                                 String s = oldHitting.BlockMods.getCurrentMode().toLowerCase();
@@ -461,40 +461,40 @@ public class OldHitting extends Module {
                                     case "1.7":
                                         poseStack.translate((double) ((float) i * 0.56F),
                                                 (double) (-0.52F), -0.72F);
-                                        float f17 = Mth.sin(swingProgress * swingProgress * (float) Math.PI);
-                                        float f22 = Mth.sin(Mth.sqrt(swingProgress) * (float) Math.PI);
-                                        poseStack.mulPose(Axis.YP.rotation(
+                                        float f17 = MathHelper.sin(swingProgress * swingProgress * (float) Math.PI);
+                                        float f22 = MathHelper.sin(MathHelper.sqrt(swingProgress) * (float) Math.PI);
+                                        poseStack.multiply(RotationAxis.POSITIVE_Y.rotation(
                                                 (float) i * (45.0F + f17 * -20.0F) * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(
-                                                Axis.ZP.rotation((float) i * f22 * -20.0F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(Axis.XP.rotation(f22 * -80.0F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(
-                                                Axis.YP.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(
+                                                RotationAxis.POSITIVE_Z.rotation((float) i * f22 * -20.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(f22 * -80.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(
+                                                RotationAxis.POSITIVE_Y.rotation((float) i * -45.0F * (float) Math.PI / 180.0F));
                                         poseStack.scale(0.9F, 0.9F, 0.9F);
                                         poseStack.translate(-0.2F, 0.126F, 0.2F);
-                                        poseStack.mulPose(Axis.XP.rotation(-102.25F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(
-                                                Axis.YP.rotation((float) i * 15.0F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(
-                                                Axis.ZP.rotation((float) i * 80.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(-102.25F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(
+                                                RotationAxis.POSITIVE_Y.rotation((float) i * 15.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(
+                                                RotationAxis.POSITIVE_Z.rotation((float) i * 80.0F * (float) Math.PI / 180.0F));
                                         break;
                                     case "Push":
                                         poseStack.translate((double) ((float) i * 0.56F),
                                                 (double) (-0.52F), -0.72F);
                                         poseStack.translate((double) ((float) i * -0.1414214F), 0.08F, 0.1414214F);
-                                        poseStack.mulPose(Axis.XP.rotation(-102.25F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(
-                                                Axis.YP.rotation((float) i * 13.365F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(
-                                                Axis.ZP.rotation((float) i * 78.05F * (float) Math.PI / 180.0F));
-                                        float f15 = Mth.sin(swingProgress * swingProgress * (float) Math.PI);
-                                        float f3 = Mth.sin(Mth.sqrt(swingProgress) * (float) Math.PI);
-                                        poseStack.mulPose(Axis.XP.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(Axis.YP.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(Axis.ZP.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(Axis.XP.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(Axis.YP.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
-                                        poseStack.mulPose(Axis.ZP.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(-102.25F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(
+                                                RotationAxis.POSITIVE_Y.rotation((float) i * 13.365F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(
+                                                RotationAxis.POSITIVE_Z.rotation((float) i * 78.05F * (float) Math.PI / 180.0F));
+                                        float f15 = MathHelper.sin(swingProgress * swingProgress * (float) Math.PI);
+                                        float f3 = MathHelper.sin(MathHelper.sqrt(swingProgress) * (float) Math.PI);
+                                        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(RotationAxis.POSITIVE_Y.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(RotationAxis.POSITIVE_Z.rotation(f15 * -10.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(RotationAxis.POSITIVE_Y.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
+                                        poseStack.multiply(RotationAxis.POSITIVE_Z.rotation(f3 * -10.0F * (float) Math.PI / 180.0F));
                                         break;
                                     default:
                                         applyItemArmAttackTransform(poseStack, humanoidarm, swingProgress);
@@ -507,8 +507,8 @@ public class OldHitting extends Module {
                         renderItem(
                                 player,
                                 itemStack,
-                                flag2 ? ItemDisplayContext.FIRST_PERSON_RIGHT_HAND
-                                        : ItemDisplayContext.FIRST_PERSON_LEFT_HAND,
+                                flag2 ? ModelTransformationMode.FIRST_PERSON_RIGHT_HAND
+                                        : ModelTransformationMode.FIRST_PERSON_LEFT_HAND,
                                 !flag2,
                                 poseStack,
                                 multiBufferSource,
@@ -517,7 +517,7 @@ public class OldHitting extends Module {
                 }
             }
 
-            poseStack.popPose();
+            poseStack.pop();
         }
     }
 
@@ -562,102 +562,102 @@ public class OldHitting extends Module {
         return false;
     }
 
-    private void renderPlayerArm(PoseStack poseStack, MultiBufferSource bufferSource, int light, float equippedProg,
-                                 float swingProgress, HumanoidArm arm) {
-        boolean flag = arm == HumanoidArm.RIGHT;
+    private void renderPlayerArm(MatrixStack poseStack, VertexConsumerProvider bufferSource, int light, float equippedProg,
+                                 float swingProgress, Arm arm) {
+        boolean flag = arm == Arm.RIGHT;
         float f = flag ? 1.0F : -1.0F;
-        float f1 = Mth.sqrt(swingProgress);
-        float f2 = -0.3F * Mth.sin(f1 * (float) Math.PI);
-        float f3 = 0.4F * Mth.sin(f1 * (float) (Math.PI * 2));
-        float f4 = -0.4F * Mth.sin(swingProgress * (float) Math.PI);
+        float f1 = MathHelper.sqrt(swingProgress);
+        float f2 = -0.3F * MathHelper.sin(f1 * (float) Math.PI);
+        float f3 = 0.4F * MathHelper.sin(f1 * (float) (Math.PI * 2));
+        float f4 = -0.4F * MathHelper.sin(swingProgress * (float) Math.PI);
         poseStack.translate((double) (f * (0.644764F + f2)), (double) (0.644764F + f3), (double) (0.644764F + f4));
-        poseStack.mulPose(Axis.XP.rotation(-0.3F * Mth.sin(f1 * (float) (Math.PI * 2))));
-        poseStack.mulPose(Axis.YP.rotation(f * 0.4F * Mth.sin(f1 * (float) Math.PI)));
-        poseStack.mulPose(Axis.ZP.rotation(f * -0.4F * Mth.sin(swingProgress * (float) Math.PI)));
-        float f5 = Mth.lerp(equippedProg, oMainHandHeight, mainHandHeight);
-        float f6 = Mth.lerp(equippedProg, oOffHandHeight, offHandHeight);
+        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(-0.3F * MathHelper.sin(f1 * (float) (Math.PI * 2))));
+        poseStack.multiply(RotationAxis.POSITIVE_Y.rotation(f * 0.4F * MathHelper.sin(f1 * (float) Math.PI)));
+        poseStack.multiply(RotationAxis.POSITIVE_Z.rotation(f * -0.4F * MathHelper.sin(swingProgress * (float) Math.PI)));
+        float f5 = MathHelper.lerp(equippedProg, oMainHandHeight, mainHandHeight);
+        float f6 = MathHelper.lerp(equippedProg, oOffHandHeight, offHandHeight);
         this.renderItem(mc.player, flag ? mainHandItem : offHandItem,
-                flag ? ItemDisplayContext.FIRST_PERSON_RIGHT_HAND : ItemDisplayContext.FIRST_PERSON_LEFT_HAND, !flag,
+                flag ? ModelTransformationMode.FIRST_PERSON_RIGHT_HAND : ModelTransformationMode.FIRST_PERSON_LEFT_HAND, !flag,
                 poseStack, bufferSource, light);
     }
 
-    private void renderTwoHandedMap(PoseStack poseStack, MultiBufferSource bufferSource, int light, float equipProgress,
+    private void renderTwoHandedMap(MatrixStack poseStack, VertexConsumerProvider bufferSource, int light, float equipProgress,
                                     float equippedProg, float swingProgress) {
-        float f = Mth.sqrt(swingProgress);
-        float f1 = -0.2F * Mth.sin(swingProgress * (float) Math.PI);
-        float f2 = -0.4F * Mth.sin(f * (float) Math.PI);
+        float f = MathHelper.sqrt(swingProgress);
+        float f1 = -0.2F * MathHelper.sin(swingProgress * (float) Math.PI);
+        float f2 = -0.4F * MathHelper.sin(f * (float) Math.PI);
         poseStack.translate(0.0D, (double) (-f1 / 2.0F), (double) f2);
-        float f3 = Mth.lerp(equippedProg, oMainHandHeight, mainHandHeight);
-        float f4 = Mth.lerp(equippedProg, oOffHandHeight, offHandHeight);
-        this.renderItem(mc.player, mainHandItem, ItemDisplayContext.FIRST_PERSON_RIGHT_HAND, false, poseStack,
+        float f3 = MathHelper.lerp(equippedProg, oMainHandHeight, mainHandHeight);
+        float f4 = MathHelper.lerp(equippedProg, oOffHandHeight, offHandHeight);
+        this.renderItem(mc.player, mainHandItem, ModelTransformationMode.FIRST_PERSON_RIGHT_HAND, false, poseStack,
                 bufferSource, light);
-        this.renderItem(mc.player, offHandItem, ItemDisplayContext.FIRST_PERSON_LEFT_HAND, true, poseStack,
+        this.renderItem(mc.player, offHandItem, ModelTransformationMode.FIRST_PERSON_LEFT_HAND, true, poseStack,
                 bufferSource, light);
     }
 
-    private void renderOneHandedMap(PoseStack poseStack, MultiBufferSource bufferSource, int light, float equippedProg,
-                                    HumanoidArm arm, float swingProgress, ItemStack item) {
-        float f = arm == HumanoidArm.RIGHT ? 1.0F : -1.0F;
+    private void renderOneHandedMap(MatrixStack poseStack, VertexConsumerProvider bufferSource, int light, float equippedProg,
+                                    Arm arm, float swingProgress, ItemStack item) {
+        float f = arm == Arm.RIGHT ? 1.0F : -1.0F;
         poseStack.translate((double) (f * 0.125F), 0.0D, 0.0D);
-        float f1 = Mth.sqrt(swingProgress);
-        float f2 = -0.1F * Mth.sin(f1 * (float) Math.PI);
-        float f3 = -0.3F * Mth.sin(f1 * (float) (Math.PI * 2));
-        float f4 = -0.4F * Mth.sin(swingProgress * (float) Math.PI);
+        float f1 = MathHelper.sqrt(swingProgress);
+        float f2 = -0.1F * MathHelper.sin(f1 * (float) Math.PI);
+        float f3 = -0.3F * MathHelper.sin(f1 * (float) (Math.PI * 2));
+        float f4 = -0.4F * MathHelper.sin(swingProgress * (float) Math.PI);
         poseStack.translate(0.0D, (double) (-f2 / 2.0F), (double) f4);
-        poseStack.mulPose(Axis.XP.rotation(f3 * (float) Math.PI / 180.0F));
-        poseStack.mulPose(Axis.YP.rotation(f * f1 * (float) Math.PI / 180.0F));
-        poseStack.mulPose(Axis.ZP.rotation(f * f2 * (float) Math.PI / 180.0F));
-        float f5 = Mth.lerp(equippedProg, oMainHandHeight, mainHandHeight);
-        float f6 = Mth.lerp(equippedProg, oOffHandHeight, offHandHeight);
+        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(f3 * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_Y.rotation(f * f1 * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_Z.rotation(f * f2 * (float) Math.PI / 180.0F));
+        float f5 = MathHelper.lerp(equippedProg, oMainHandHeight, mainHandHeight);
+        float f6 = MathHelper.lerp(equippedProg, oOffHandHeight, offHandHeight);
         this.renderItem(mc.player, item,
-                arm == HumanoidArm.RIGHT ? ItemDisplayContext.FIRST_PERSON_RIGHT_HAND
-                        : ItemDisplayContext.FIRST_PERSON_LEFT_HAND,
-                arm != HumanoidArm.RIGHT, poseStack, bufferSource, light);
+                arm == Arm.RIGHT ? ModelTransformationMode.FIRST_PERSON_RIGHT_HAND
+                        : ModelTransformationMode.FIRST_PERSON_LEFT_HAND,
+                arm != Arm.RIGHT, poseStack, bufferSource, light);
     }
 
-    private void applyItemArmTransform(PoseStack poseStack, HumanoidArm arm, float equippedProg) {
-        int i = arm == HumanoidArm.RIGHT ? 1 : -1;
-        float f = Mth.lerp(equippedProg, oMainHandHeight, mainHandHeight);
-        float f1 = Mth.lerp(equippedProg, oOffHandHeight, offHandHeight);
+    private void applyItemArmTransform(MatrixStack poseStack, Arm arm, float equippedProg) {
+        int i = arm == Arm.RIGHT ? 1 : -1;
+        float f = MathHelper.lerp(equippedProg, oMainHandHeight, mainHandHeight);
+        float f1 = MathHelper.lerp(equippedProg, oOffHandHeight, offHandHeight);
         poseStack.translate((double) ((float) i * 0.56F), (double) (-0.52F + f * -0.6F), -0.72F);
     }
 
-    private void applyItemArmAttackTransform(PoseStack poseStack, HumanoidArm arm, float swingProgress) {
-        int i = arm == HumanoidArm.RIGHT ? 1 : -1;
-        float f = Mth.sin(swingProgress * swingProgress * (float) Math.PI);
-        float f1 = Mth.sin(Mth.sqrt(swingProgress) * (float) Math.PI);
+    private void applyItemArmAttackTransform(MatrixStack poseStack, Arm arm, float swingProgress) {
+        int i = arm == Arm.RIGHT ? 1 : -1;
+        float f = MathHelper.sin(swingProgress * swingProgress * (float) Math.PI);
+        float f1 = MathHelper.sin(MathHelper.sqrt(swingProgress) * (float) Math.PI);
         poseStack.translate((double) ((float) i * 0.56F), (double) (-0.52F), -0.72F);
-        poseStack.mulPose(Axis.XP.rotation(-102.25F * (float) Math.PI / 180.0F));
-        poseStack.mulPose(Axis.YP.rotation((float) i * 13.365F * (float) Math.PI / 180.0F));
-        poseStack.mulPose(Axis.ZP.rotation((float) i * 78.05F * (float) Math.PI / 180.0F));
-        float swingFactor = Mth.clamp(swingProgress, 0.0F, 1.0F);
-        poseStack.mulPose(Axis.XP.rotation(f * -15.0F * swingFactor * (float) Math.PI / 180.0F));
-        poseStack.mulPose(Axis.YP.rotation(f1 * -15.0F * swingFactor * (float) Math.PI / 180.0F));
-        poseStack.mulPose(Axis.ZP.rotation(f1 * -70.0F * swingFactor * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(-102.25F * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * 13.365F * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_Z.rotation((float) i * 78.05F * (float) Math.PI / 180.0F));
+        float swingFactor = MathHelper.clamp(swingProgress, 0.0F, 1.0F);
+        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(f * -15.0F * swingFactor * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_Y.rotation(f1 * -15.0F * swingFactor * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_Z.rotation(f1 * -70.0F * swingFactor * (float) Math.PI / 180.0F));
     }
 
-    private void applyEatTransform(PoseStack poseStack, float partialTicks, HumanoidArm arm, ItemStack item) {
-        float f = (float) item.getUseDuration() - ((float) mc.player.getUseItemRemainingTicks() - partialTicks + 1.0F);
-        float f1 = f / (float) item.getUseDuration();
+    private void applyEatTransform(MatrixStack poseStack, float partialTicks, Arm arm, ItemStack item) {
+        float f = (float) item.getMaxUseTime() - ((float) mc.player.getItemUseTimeLeft() - partialTicks + 1.0F);
+        float f1 = f / (float) item.getMaxUseTime();
         if (f1 < 0.8F) {
-            float f2 = Mth.abs(Mth.cos(f / 4.0F * (float) Math.PI) * 0.1F);
+            float f2 = MathHelper.abs(MathHelper.cos(f / 4.0F * (float) Math.PI) * 0.1F);
             poseStack.translate(0.0D, (double) f2, 0.0D);
         }
         float f3 = 1.0F - (float) Math.pow((double) (1.0F - f1), 27.0D);
-        int i = arm == HumanoidArm.RIGHT ? 1 : -1;
+        int i = arm == Arm.RIGHT ? 1 : -1;
         poseStack.translate((double) (f3 * 0.6F * (float) i), (double) (f3 * -0.5F), (double) (f3 * 0.0F));
-        poseStack.mulPose(Axis.YP.rotation((float) i * f3 * 90.0F * (float) Math.PI / 180.0F));
-        poseStack.mulPose(Axis.XP.rotation(f3 * 10.0F * (float) Math.PI / 180.0F));
-        poseStack.mulPose(Axis.ZP.rotation((float) i * f3 * 30.0F * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_Y.rotation((float) i * f3 * 90.0F * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_X.rotation(f3 * 10.0F * (float) Math.PI / 180.0F));
+        poseStack.multiply(RotationAxis.POSITIVE_Z.rotation((float) i * f3 * 30.0F * (float) Math.PI / 180.0F));
     }
 
     private void renderItem(LivingEntity entity, ItemStack stack,
-                            ItemDisplayContext transformType, boolean leftHand,
-                            PoseStack poseStack, MultiBufferSource buffer, int light) {
+                            ModelTransformationMode transformType, boolean leftHand,
+                            MatrixStack poseStack, VertexConsumerProvider buffer, int light) {
         if (stack.isEmpty())
             return;
         ItemRenderer itemRenderer = mc.getItemRenderer();
-        itemRenderer.renderStatic(entity, stack, transformType, leftHand, poseStack, buffer, entity.level(), light, 0,
+        itemRenderer.renderItem(entity, stack, transformType, leftHand, poseStack, buffer, entity.getWorld(), light, 0,
                 0);
     }
 }

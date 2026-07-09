@@ -2,7 +2,7 @@ package awa.qwq.ovo.Naven.events.impl;
 
 import awa.qwq.ovo.Naven.events.api.events.callables.EventCancellable;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
-import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.packet.Packet;
 
 public class EventGlobalPacket extends EventCancellable {
    private final EventType type;

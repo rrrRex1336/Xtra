@@ -1,33 +1,33 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.modules.impl.misc.ViaVersionFix;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemPlacementContext;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(BlockPlaceContext.class)
+@Mixin(ItemPlacementContext.class)
 public class MixinBlockPlaceContext {
-   @Inject(method = "getNearestLookingDirection", at = @At("HEAD"), cancellable = true)
+   @Inject(method = "getPlayerLookDirection", at = @At("HEAD"), cancellable = true)
    private void getLegacyNearestLookingDirection(CallbackInfoReturnable<Direction> cir) {
       if (!ViaVersionFix.isPlacementFixEnabled() || !ViaVersionFix.isTargetOlderThanOrEqualTo("v1_12_2")) {
          return;
       }
 
-      BlockPlaceContext context = (BlockPlaceContext)(Object)this;
-      Player player = context.getPlayer();
+      ItemPlacementContext context = (ItemPlacementContext)(Object)this;
+      PlayerEntity player = context.getPlayer();
       if (player == null) {
          return;
       }
 
-      BlockPos pos = context.getClickedPos();
+      BlockPos pos = context.getBlockPos();
       double centerOffset = ViaVersionFix.isTargetNewerThan("v1_10") ? 0.5D : 0.0D;
       if (Math.abs(player.getX() - ((double)pos.getX() + centerOffset)) < 2.0D
          && Math.abs(player.getZ() - ((double)pos.getZ() + centerOffset)) < 2.0D) {
@@ -43,7 +43,7 @@ public class MixinBlockPlaceContext {
          }
       }
 
-      cir.setReturnValue(player.getDirection());
+      cir.setReturnValue(player.getHorizontalFacing());
    }
 
    @Inject(method = "canPlace", at = @At("RETURN"), cancellable = true)
@@ -52,9 +52,9 @@ public class MixinBlockPlaceContext {
          return;
       }
 
-      BlockPlaceContext context = (BlockPlaceContext)(Object)this;
-      BlockState state = context.getLevel().getBlockState(context.getClickedPos());
-      if (!state.blocksMotion() && Block.byItem(context.getItemInHand().getItem()) == Blocks.AIR) {
+      ItemPlacementContext context = (ItemPlacementContext)(Object)this;
+      BlockState state = context.getWorld().getBlockState(context.getBlockPos());
+      if (!state.blocksMovement() && Block.getBlockFromItem(context.getStack().getItem()) == Blocks.AIR) {
          cir.setReturnValue(true);
       }
    }

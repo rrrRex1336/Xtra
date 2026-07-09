@@ -2,10 +2,10 @@ package org.mixin;
 
 import org.mixin.accessors.ShapeIndexBufferAccessor;
 import awa.qwq.ovo.Naven.utils.renderer.GL;
-import com.mojang.blaze3d.systems.RenderSystem.AutoStorageIndexBuffer;
-import com.mojang.blaze3d.vertex.VertexBuffer;
-import com.mojang.blaze3d.vertex.BufferBuilder.DrawState;
+import com.mojang.blaze3d.systems.RenderSystem.ShapeIndexBuffer;
 import java.nio.ByteBuffer;
+import net.minecraft.client.gl.VertexBuffer;
+import net.minecraft.client.render.BufferBuilder.DrawParameters;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -21,7 +21,7 @@ public abstract class MixinVertexBuffer {
       method = {"uploadIndexBuffer"},
       at = {@At("RETURN")}
    )
-   private void onConfigureIndexBuffer(DrawState arg, ByteBuffer byteBuffer, CallbackInfoReturnable<AutoStorageIndexBuffer> info) {
+   private void onConfigureIndexBuffer(DrawParameters arg, ByteBuffer byteBuffer, CallbackInfoReturnable<ShapeIndexBuffer> info) {
       if (info.getReturnValue() == null) {
          GL.CURRENT_IBO = this.indexBufferId;
       } else {

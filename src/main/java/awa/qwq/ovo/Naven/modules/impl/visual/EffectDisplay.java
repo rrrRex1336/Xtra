@@ -23,15 +23,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
-
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.resources.MobEffectTextureManager;
-import net.minecraft.client.resources.language.I18n;
-import net.minecraft.util.StringUtil;
-import net.minecraft.world.effect.MobEffect;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.resource.language.I18n;
+import net.minecraft.client.texture.Sprite;
+import net.minecraft.client.texture.StatusEffectSpriteManager;
+import net.minecraft.entity.effect.StatusEffect;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.util.StringHelper;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
 
@@ -44,7 +43,7 @@ public class EffectDisplay extends Module {
    private static final String PREVIEW_EFFECT_NAME = "EffectDisplay\u7684\u6548\u679c";
 
    private List<Runnable> list;
-   private final Map<MobEffect, EffectDisplay.MobEffectInfo> infos = new ConcurrentHashMap<>();
+   private final Map<StatusEffect, EffectDisplay.MobEffectInfo> infos = new ConcurrentHashMap<>();
    private final Color headerColor = new Color(150, 45, 45, 255);
    private final Color bodyColor = new Color(0, 0, 0, 50);
    private final List<Vector4f> blurMatrices = new ArrayList<>();
@@ -88,13 +87,13 @@ public class EffectDisplay extends Module {
       this.prepareHudRenderState();
 
       try {
-         for (MobEffectInstance effect : mc.player.getActiveEffects()) {
+         for (StatusEffectInstance effect : mc.player.getStatusEffects()) {
             EffectDisplay.MobEffectInfo info;
-            if (this.infos.containsKey(effect.getEffect())) {
-               info = this.infos.get(effect.getEffect());
+            if (this.infos.containsKey(effect.getEffectType())) {
+               info = this.infos.get(effect.getEffectType());
             } else {
                info = new EffectDisplay.MobEffectInfo();
-               this.infos.put(effect.getEffect(), info);
+               this.infos.put(effect.getEffectType(), info);
             }
 
             info.maxDuration = Math.max(info.maxDuration, effect.getDuration());
@@ -103,26 +102,26 @@ public class EffectDisplay extends Module {
             info.shouldDisappear = false;
          }
 
-         boolean hasRealEffects = !mc.player.getActiveEffects().isEmpty();
+         boolean hasRealEffects = !mc.player.getStatusEffects().isEmpty();
          boolean preview = !hasRealEffects && DragManager.isHudEditorActive();
          if (preview) {
             this.infos.clear();
          }
 
-         List<Entry<MobEffect, EffectDisplay.MobEffectInfo>> displayEntries = new ArrayList<>(this.infos.entrySet());
+         List<Entry<StatusEffect, EffectDisplay.MobEffectInfo>> displayEntries = new ArrayList<>(this.infos.entrySet());
          if (preview) {
             this.preparePreviewInfo();
-            displayEntries.add(new AbstractMap.SimpleEntry<>(MobEffects.MOVEMENT_SPEED, this.previewInfo));
+            displayEntries.add(new AbstractMap.SimpleEntry<>(StatusEffects.SPEED, this.previewInfo));
          }
 
-         int startY = mc.getWindow().getGuiScaledHeight() / 2 - displayEntries.size() * 16;
+         int startY = mc.getWindow().getScaledHeight() / 2 - displayEntries.size() * 16;
          this.list = Lists.newArrayListWithExpectedSize(displayEntries.size());
          this.blurMatrices.clear();
          Fonts.harmony.setAlpha(1.0F);
 
          CustomTextRenderer harmony = Fonts.harmony;
          float maxWidth = 0.0F;
-         for (Entry<MobEffect, EffectDisplay.MobEffectInfo> entry : displayEntries) {
+         for (Entry<StatusEffect, EffectDisplay.MobEffectInfo> entry : displayEntries) {
             EffectDisplay.MobEffectInfo effectInfo = entry.getValue();
             String text = effectInfo == this.previewInfo ? PREVIEW_EFFECT_NAME : this.getDisplayName(entry.getKey(), effectInfo);
             effectInfo.width = 25.0F + harmony.getWidth(text, 0.3) + 20.0F;
@@ -134,8 +133,8 @@ public class EffectDisplay extends Module {
          float stackX = this.dragManager.getX(10.0F);
          float rowY = this.dragManager.getY((float) startY);
 
-         for (Entry<MobEffect, EffectDisplay.MobEffectInfo> entry : displayEntries) {
-            e.getStack().pushPose();
+         for (Entry<StatusEffect, EffectDisplay.MobEffectInfo> entry : displayEntries) {
+            e.getStack().push();
             try {
                EffectDisplay.MobEffectInfo effectInfo = entry.getValue();
                boolean previewEntry = effectInfo == this.previewInfo;
@@ -147,7 +146,7 @@ public class EffectDisplay extends Module {
                harmony.setAlpha(1.0F);
                float x = effectInfo.xTimer.value;
                float y = effectInfo.yTimer.value;
-               effectInfo.shouldDisappear = !previewEntry && !mc.player.hasEffect(entry.getKey());
+               effectInfo.shouldDisappear = !previewEntry && !mc.player.hasStatusEffect(entry.getKey());
                if (effectInfo.shouldDisappear) {
                   effectInfo.xTimer.target = -effectInfo.width - 20.0F;
                   if (x <= -effectInfo.width - 20.0F) {
@@ -175,20 +174,20 @@ public class EffectDisplay extends Module {
                RenderUtils.drawRoundedRect(e.getStack(), x + effectInfo.width - 10.0F, y + 7.0F, 5.0F, 18.0F, 2.0F, this.headerColor.getRGB());
                harmony.setAlpha(1.0F);
                harmony.render(e.getStack(), text, (double)(x + 27.0F), (double)(y + 7.0F), this.headerColor, true, 0.3);
-               float tickRate = Minecraft.getInstance().level != null ? Minecraft.getInstance().level.tickRateManager().tickrate() : 20.0F;
-               String duration = previewEntry ? "00:30" : StringUtil.formatTickDuration(effectInfo.duration, tickRate);
+               float tickRate = MinecraftClient.getInstance().world != null ? MinecraftClient.getInstance().world.getTickManager().getTickRate() : 20.0F;
+               String duration = previewEntry ? "00:30" : StringHelper.formatTicks(effectInfo.duration, tickRate);
                harmony.render(e.getStack(), duration, (double)(x + 27.0F), (double)(y + 17.0F), Color.WHITE, true, 0.25);
-               MobEffectTextureManager mobeffecttexturemanager = mc.getMobEffectTextures();
-               TextureAtlasSprite textureatlassprite = mobeffecttexturemanager.get(entry.getKey());
+               StatusEffectSpriteManager mobeffecttexturemanager = mc.getStatusEffectSpriteManager();
+               Sprite textureatlassprite = mobeffecttexturemanager.getSprite(entry.getKey());
                this.list.add(() -> {
-                  RenderSystem.setShaderTexture(0, textureatlassprite.atlasLocation());
+                  RenderSystem.setShaderTexture(0, textureatlassprite.getAtlasId());
                   RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-                  e.getGuiGraphics().blit((int)(x + 6.0F), (int)(y + 8.0F), 1, 18, 18, textureatlassprite);
+                  e.getGuiGraphics().drawSprite((int)(x + 6.0F), (int)(y + 8.0F), 1, 18, 18, textureatlassprite);
                });
                rowY += 34.0F;
             } finally {
                StencilUtils.dispose();
-               e.getStack().popPose();
+               e.getStack().pop();
             }
          }
       } finally {
@@ -197,17 +196,17 @@ public class EffectDisplay extends Module {
       }
    }
 
-   public String getDisplayName(MobEffect effect, EffectDisplay.MobEffectInfo info) {
-      String effectName = effect.getDisplayName().getString();
+   public String getDisplayName(StatusEffect effect, EffectDisplay.MobEffectInfo info) {
+      String effectName = effect.getName().getString();
       String amplifierName;
       if (info.amplifier == 0) {
          amplifierName = "";
       } else if (info.amplifier == 1) {
-         amplifierName = " " + I18n.get("enchantment.level.2", new Object[0]);
+         amplifierName = " " + I18n.translate("enchantment.level.2", new Object[0]);
       } else if (info.amplifier == 2) {
-         amplifierName = " " + I18n.get("enchantment.level.3", new Object[0]);
+         amplifierName = " " + I18n.translate("enchantment.level.3", new Object[0]);
       } else if (info.amplifier == 3) {
-         amplifierName = " " + I18n.get("enchantment.level.4", new Object[0]);
+         amplifierName = " " + I18n.translate("enchantment.level.4", new Object[0]);
       } else {
          amplifierName = " " + info.amplifier;
       }

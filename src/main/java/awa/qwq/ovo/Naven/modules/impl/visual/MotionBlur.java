@@ -10,10 +10,10 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import com.mojang.blaze3d.shaders.Uniform;
 import java.io.IOException;
-import net.minecraft.client.renderer.PostChain;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.gl.GlUniform;
+import net.minecraft.client.gl.PostEffectProcessor;
+import net.minecraft.util.Identifier;
 
 @ModuleInfo(
    name = "MotionBlur",
@@ -30,8 +30,8 @@ public class MotionBlur extends Module {
       .build()
       .getFloatValue();
    @SuppressWarnings("removal")
-   private final ResourceLocation shaderLocation = new ResourceLocation("shaders/post/motion_blur.json");
-   public PostChain shader;
+   private final Identifier shaderLocation = new Identifier("shaders/post/motion_blur.json");
+   public PostEffectProcessor shader;
    private int lastWidth;
    private float currentBlur;
    private int lastHeight;
@@ -43,15 +43,15 @@ public class MotionBlur extends Module {
    @EventTarget
    public void onTick(EventRunTicks event) {
       if (event.getType() != EventType.POST) {
-         if (mc.player != null && mc.level != null && mc.player.tickCount > 10) {
-            if ((this.shader == null || mc.getWindow().getWidth() != this.lastWidth || mc.getWindow().getHeight() != this.lastHeight)
-               && mc.getWindow().getWidth() > 0
-               && mc.getWindow().getHeight() > 0) {
+         if (mc.player != null && mc.world != null && mc.player.age > 10) {
+            if ((this.shader == null || mc.getWindow().getFramebufferWidth() != this.lastWidth || mc.getWindow().getFramebufferHeight() != this.lastHeight)
+               && mc.getWindow().getFramebufferWidth() > 0
+               && mc.getWindow().getFramebufferHeight() > 0) {
                this.currentBlur = Float.NaN;
 
                try {
-                  this.shader = new PostChain(mc.getTextureManager(), mc.getResourceManager(), mc.getMainRenderTarget(), this.shaderLocation);
-                  this.shader.resize(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+                  this.shader = new PostEffectProcessor(mc.getTextureManager(), mc.getResourceManager(), mc.getFramebuffer(), this.shaderLocation);
+                  this.shader.setupDimensions(mc.getWindow().getFramebufferWidth(), mc.getWindow().getFramebufferHeight());
                } catch (IOException | JsonSyntaxException var3) {
                   var3.printStackTrace();
                }
@@ -60,7 +60,7 @@ public class MotionBlur extends Module {
             float blur = 1.0F - Math.min(this.strength.getCurrentValue() / 10.0F, 0.9F);
             if (this.currentBlur != blur && this.shader != null) {
                ((PostChainAccessor)this.shader).getPasses().forEach(shader -> {
-                  Uniform blendFactor = shader.getEffect().getUniform("BlurFactor");
+                  GlUniform blendFactor = shader.getProgram().getUniformByName("BlurFactor");
                   if (blendFactor != null) {
                      blendFactor.set(blur, 0.0F, 0.0F);
                   }
@@ -68,8 +68,8 @@ public class MotionBlur extends Module {
                this.currentBlur = blur;
             }
 
-            this.lastWidth = mc.getWindow().getWidth();
-            this.lastHeight = mc.getWindow().getHeight();
+            this.lastWidth = mc.getWindow().getFramebufferWidth();
+            this.lastHeight = mc.getWindow().getFramebufferHeight();
          }
       }
    }

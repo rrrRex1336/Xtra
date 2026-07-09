@@ -1,28 +1,28 @@
 package awa.qwq.ovo.Naven.managers.packets;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
-import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 
 public class PacketManager {
-    private static final Minecraft mc = Minecraft.getInstance();
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
 
     public void sendC0BPacket() {
-        if (mc.getConnection() != null && mc.player != null) {
-            ServerboundPlayerCommandPacket packet = new ServerboundPlayerCommandPacket(
+        if (mc.getNetworkHandler() != null && mc.player != null) {
+            ClientCommandC2SPacket packet = new ClientCommandC2SPacket(
                     mc.player,
-                    ServerboundPlayerCommandPacket.Action.STOP_SPRINTING
+                    ClientCommandC2SPacket.Mode.STOP_SPRINTING
             );
-            mc.getConnection().send(packet);
+            mc.getNetworkHandler().sendPacket(packet);
         }
 
     }
     public void sendC09Packet() {
-        if (mc.player != null && mc.getConnection() != null) {
-            int current = mc.player.getInventory().selected;
+        if (mc.player != null && mc.getNetworkHandler() != null) {
+            int current = mc.player.getInventory().selectedSlot;
             int next = (current + 1) % 9;
-            mc.getConnection().send(new ServerboundSetCarriedItemPacket(next));
-            mc.getConnection().send(new ServerboundSetCarriedItemPacket(current));
+            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(next));
+            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(current));
         }
     }
 }

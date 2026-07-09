@@ -7,7 +7,7 @@ import awa.qwq.ovo.Naven.events.impl.EventClientChat;
 import awa.qwq.ovo.Naven.events.impl.EventMotion;
 import awa.qwq.ovo.Naven.events.impl.EventRespawn;
 import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents;
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.MinecraftClient;
 
 public class EventWrapper {
 
@@ -34,7 +34,7 @@ public class EventWrapper {
 
    @EventTarget
    public void onMotion(EventMotion e) {
-      if (e.getType() == EventType.PRE && Minecraft.getInstance().player != null && Minecraft.getInstance().player.tickCount <= 1) {
+      if (e.getType() == EventType.PRE && MinecraftClient.getInstance().player != null && MinecraftClient.getInstance().player.age <= 1) {
          Naven.getInstance().getEventManager().call(new EventRespawn());
       }
    }

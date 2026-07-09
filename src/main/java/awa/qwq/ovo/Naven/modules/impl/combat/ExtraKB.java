@@ -10,8 +10,8 @@ import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
 
 @ModuleInfo(
         name = "ExtraKB",
@@ -52,18 +52,18 @@ public class ExtraKB extends Module {
 
     @EventTarget
     private void onAttack(EventAttack event) {
-        if (mc.player == null || mc.level == null || !(event.getTarget() instanceof LivingEntity target)) {
+        if (mc.player == null || mc.world == null || !(event.getTarget() instanceof LivingEntity target)) {
             return;
         }
-        if (target.hurtTime < this.hurtTime.getCurrentValue() || this.lastApplyTick == mc.player.tickCount) {
+        if (target.hurtTime < this.hurtTime.getCurrentValue() || this.lastApplyTick == mc.player.age) {
             return;
         }
 
-        this.lastApplyTick = mc.player.tickCount;
+        this.lastApplyTick = mc.player.age;
         switch (this.modeValue.getCurrentMode()) {
             case "Cancel W" -> {
                 this.tick = 2;
-                this.restoreForward = mc.options.keyUp.isDown();
+                this.restoreForward = mc.options.forwardKey.isPressed();
             }
             case "LegitFast" -> this.sprintTicks = 2;
             case "Packet" -> this.sendSprintReset();
@@ -103,15 +103,15 @@ public class ExtraKB extends Module {
     }
 
     private void sendSprintReset() {
-        if (mc.player == null || mc.getConnection() == null) {
+        if (mc.player == null || mc.getNetworkHandler() == null) {
             return;
         }
         if (mc.player.isSprinting()) {
-            mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
+            mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
         }
-        mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
-        mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
-        mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
+        mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
+        mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+        mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
         mc.player.setSprinting(true);
     }
 

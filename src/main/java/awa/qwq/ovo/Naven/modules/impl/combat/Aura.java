@@ -20,29 +20,9 @@ import awa.qwq.ovo.Naven.values.impl.AddonsValue;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import com.mojang.blaze3d.vertex.*;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.Mth;
 import org.joml.Matrix4f;
 import org.mixin.accessors.MinecraftAccessor;
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.KeyMapping;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ambient.Bat;
-import net.minecraft.world.entity.animal.AbstractGolem;
-import net.minecraft.world.entity.animal.Animal;
-import net.minecraft.world.entity.animal.Squid;
-import net.minecraft.world.entity.decoration.ArmorStand;
-import net.minecraft.world.entity.monster.Slime;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
@@ -52,6 +32,31 @@ import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.BufferRenderer;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.render.VertexFormat;
+import net.minecraft.client.render.VertexFormats;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.mob.SlimeEntity;
+import net.minecraft.entity.passive.AnimalEntity;
+import net.minecraft.entity.passive.BatEntity;
+import net.minecraft.entity.passive.GolemEntity;
+import net.minecraft.entity.passive.SquidEntity;
+import net.minecraft.entity.passive.VillagerEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
+import net.minecraft.util.Hand;
+import net.minecraft.util.Identifier;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(
         name = "Aura",
@@ -213,7 +218,7 @@ public class Aura extends Module {
 
     @EventTarget
     public void onMotion(EventRunTicks e) {
-        if (mc.player == null || mc.level == null) {
+        if (mc.player == null || mc.world == null) {
             this.working = false;
             return;
         }
@@ -234,8 +239,8 @@ public class Aura extends Module {
                 targetPitch = rotations.getY();
                 this.working = true;
             } else {
-                targetYaw = mc.player.getYRot();
-                targetPitch = mc.player.getXRot();
+                targetYaw = mc.player.getYaw();
+                targetPitch = mc.player.getPitch();
                 if (this.targetRotation.getX() % 360.0F == targetYaw % 360.0F) {
                     this.working = false;
                 }
@@ -265,21 +270,21 @@ public class Aura extends Module {
                 float maxSpeed = this.rotateMaxSpeed.getCurrentValue();
                 float currentSpeed = minSpeed + (random.nextFloat() * (maxSpeed - minSpeed));
 
-                float originalYaw = mc.player.getYRot();
+                float originalYaw = mc.player.getYaw();
                 float currentYaw = this.targetRotation.getX();
                 float yawDiff = getAngleDifference(originalYaw, currentYaw);
 
                 if (Math.abs(yawDiff) <= currentSpeed) {
                     this.targetRotation.setX(originalYaw);
-                    this.targetRotation.setY(mc.player.getXRot());
+                    this.targetRotation.setY(mc.player.getPitch());
                 } else {
                     float yawStep = currentSpeed * Math.signum(yawDiff);
                     this.targetRotation.setX(normalizeAngle(currentYaw + yawStep));
-                    this.targetRotation.setY(mc.player.getXRot());
+                    this.targetRotation.setY(mc.player.getPitch());
                 }
             } else {
-                this.targetRotation.setX(mc.player.getYRot());
-                this.targetRotation.setY(mc.player.getXRot());
+                this.targetRotation.setX(mc.player.getYaw());
+                this.targetRotation.setY(mc.player.getPitch());
             }
             if (attackTiming.isCurrentMode("Pre") || attackTiming.isCurrentMode("Both")) {
                 doAttack();
@@ -303,7 +308,7 @@ public class Aura extends Module {
 
         if (hasValidTarget && targetEntity != null) {
             if (attackCooldowns.getCurrentValue()) {
-                if (mc.player.getAttackStrengthScale(0.0F) >= 1.0F) {
+                if (mc.player.getAttackCooldownProgress(0.0F) >= 1.0F) {
                     performAttackByMode(targetEntity);
                     accessor.setMissTime(0);
                 }
@@ -352,8 +357,8 @@ public class Aura extends Module {
     }
 
     private boolean isWithinAttackRange(Entity entity) {
-        Vec3 closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePosition(), entity.getBoundingBox());
-        return closestPoint.distanceTo(mc.player.getEyePosition()) <= this.attackRange.getCurrentValue();
+        Vec3d closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePos(), entity.getBoundingBox());
+        return closestPoint.distanceTo(mc.player.getEyePos()) <= this.attackRange.getCurrentValue();
     }
 
     private float getAngleDifference(float target, float current) {
@@ -407,22 +412,22 @@ public class Aura extends Module {
 
         boolean attacked = false;
         if (method.equals("Direct")) {
-            if (mc.gameMode != null) {
-                mc.gameMode.attack(mc.player, target);
-                mc.player.swing(InteractionHand.MAIN_HAND);
+            if (mc.interactionManager != null) {
+                mc.interactionManager.attackEntity(mc.player, target);
+                mc.player.swingHand(Hand.MAIN_HAND);
                 attacked = true;
             }
         } else if (method.equals("Packet")) {
-            if (mc.getConnection() != null && mc.player != null) {
-                ServerboundInteractPacket packet = ServerboundInteractPacket.createAttackPacket(target, mc.player.isShiftKeyDown());
-                mc.getConnection().send(packet);
+            if (mc.getNetworkHandler() != null && mc.player != null) {
+                PlayerInteractEntityC2SPacket packet = PlayerInteractEntityC2SPacket.attack(target, mc.player.isSneaking());
+                mc.getNetworkHandler().sendPacket(packet);
                 mc.player.attack(target);
-                mc.player.swing(InteractionHand.MAIN_HAND);
-                mc.player.resetAttackStrengthTicker();
+                mc.player.swingHand(Hand.MAIN_HAND);
+                mc.player.resetLastAttackedTicks();
                 attacked = true;
             }
         } else {
-            KeyMapping.click(mc.options.keyAttack.getDefaultKey());
+            KeyBinding.onKeyPressed(mc.options.attackKey.getDefaultKey());
             attacked = true;
         }
 
@@ -447,23 +452,23 @@ public class Aura extends Module {
                         return false;
                     } else if (FriendManager.isFriend(living)) {
                         return false;
-                    } else if (living.isDeadOrDying() || living.getHealth() <= 0.0F) {
+                    } else if (living.isDead() || living.getHealth() <= 0.0F) {
                         return false;
-                    } else if (entity instanceof ArmorStand) {
+                    } else if (entity instanceof ArmorStandEntity) {
                         return false;
-                    } else if (entity instanceof Villager) {
+                    } else if (entity instanceof VillagerEntity) {
                         return false;
                     } else if (entity.isInvisible() && !atarget.isSelected("Invisible")) {
                         return false;
-                    } else if (entity instanceof Player && !atarget.isSelected("Player")) {
+                    } else if (entity instanceof PlayerEntity && !atarget.isSelected("Player")) {
                         return false;
-                    } else if ((entity instanceof Mob || entity instanceof Slime || entity instanceof Bat || entity instanceof AbstractGolem)
+                    } else if ((entity instanceof MobEntity || entity instanceof SlimeEntity || entity instanceof BatEntity || entity instanceof GolemEntity)
                             && !atarget.isSelected("Mobs")) {
                         return false;
-                    } else if ((entity instanceof Animal || entity instanceof Squid) && !atarget.isSelected("Animals")) {
+                    } else if ((entity instanceof AnimalEntity || entity instanceof SquidEntity) && !atarget.isSelected("Animals")) {
                         return false;
                     } else {
-                        return !(entity instanceof Player) || !entity.isSpectator();
+                        return !(entity instanceof PlayerEntity) || !entity.isSpectator();
                     }
                 } else {
                     return false;
@@ -479,8 +484,8 @@ public class Aura extends Module {
             return false;
         }
 
-        Vec3 closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePosition(), entity.getBoundingBox());
-        double distance = closestPoint.distanceTo(mc.player.getEyePosition());
+        Vec3d closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePos(), entity.getBoundingBox());
+        double distance = closestPoint.distanceTo(mc.player.getEyePos());
         if (distance > (double) this.rotationRange.getCurrentValue()) {
             return false;
         }
@@ -523,8 +528,8 @@ public class Aura extends Module {
                 needSwitch = true;
             }
             if (!needSwitch && currentTarget != null) {
-                Vec3 closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePosition(), currentTarget.getBoundingBox());
-                if (closestPoint.distanceTo(mc.player.getEyePosition()) > this.attackRange.getCurrentValue() + 0.5) {
+                Vec3d closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePos(), currentTarget.getBoundingBox());
+                if (closestPoint.distanceTo(mc.player.getEyePos()) > this.attackRange.getCurrentValue() + 0.5) {
                     needSwitch = true;
                 }
             }
@@ -548,11 +553,11 @@ public class Aura extends Module {
     }
 
     private List<Entity> getAllValidTargets() {
-        if (mc.level == null || mc.player == null) {
+        if (mc.world == null || mc.player == null) {
             return new ArrayList<>();
         }
 
-        Stream<Entity> stream = StreamSupport.stream(mc.level.entitiesForRendering().spliterator(), true)
+        Stream<Entity> stream = StreamSupport.stream(mc.world.getEntities().spliterator(), true)
                 .filter(entity -> entity instanceof Entity)
                 .filter(this::isValidAttack);
 
@@ -579,30 +584,30 @@ public class Aura extends Module {
         String currentEspMode = espMode.getCurrentMode();
 
         if (currentEspMode.equals("Box")) {
-            PoseStack stack = e.getPMatrixStack();
+            MatrixStack stack = e.getPMatrixStack();
             float partialTicks = e.getRenderPartialTicks();
-            stack.pushPose();
+            stack.push();
             GL11.glEnable(3042);
             GL11.glBlendFunc(770, 771);
             GL11.glDisable(2929);
             GL11.glDepthMask(false);
             GL11.glEnable(2848);
-            RenderSystem.setShader(GameRenderer::getPositionShader);
+            RenderSystem.setShader(GameRenderer::getPositionProgram);
             RenderUtils.applyRegionalRenderOffset(stack);
 
             for (Entity entity : targets) {
                 if (entity instanceof LivingEntity living) {
                     float[] color = target == living ? targetColorRed : targetColorGreen;
-                    stack.pushPose();
+                    stack.push();
                     RenderSystem.setShaderColor(color[0], color[1], color[2], color[3]);
-                    double motionX = entity.getX() - entity.xo;
-                    double motionY = entity.getY() - entity.yo;
-                    double motionZ = entity.getZ() - entity.zo;
-                    AABB boundingBox = entity.getBoundingBox()
-                            .move(-motionX, -motionY, -motionZ)
-                            .move(partialTicks * motionX, partialTicks * motionY, partialTicks * motionZ);
+                    double motionX = entity.getX() - entity.prevX;
+                    double motionY = entity.getY() - entity.prevY;
+                    double motionZ = entity.getZ() - entity.prevZ;
+                    Box boundingBox = entity.getBoundingBox()
+                            .offset(-motionX, -motionY, -motionZ)
+                            .offset(partialTicks * motionX, partialTicks * motionY, partialTicks * motionZ);
                     RenderUtils.drawSolidBox(boundingBox, stack);
-                    stack.popPose();
+                    stack.pop();
                 }
             }
 
@@ -611,7 +616,7 @@ public class Aura extends Module {
             GL11.glEnable(2929);
             GL11.glDepthMask(true);
             GL11.glDisable(2848);
-            stack.popPose();
+            stack.pop();
         } else if (currentEspMode.equals("Rectangle")) {
             rotationSpeedTickCounter++;
             if (rotationSpeedTickCounter >= 10) {
@@ -629,7 +634,7 @@ public class Aura extends Module {
                 rotationDirection *= -1;
                 targetRotationSpeed = 3.0f + espRandom.nextFloat() * 3.0f;
             }
-            currentRotationSpeed = Mth.lerp(0.1f, currentRotationSpeed, targetRotationSpeed * rotationDirection);
+            currentRotationSpeed = MathHelper.lerp(0.1f, currentRotationSpeed, targetRotationSpeed * rotationDirection);
             espRotationAngle += currentRotationSpeed;
             ModuleList moduleList = (ModuleList) Naven.getInstance().getModuleManager().getModule(ModuleList.class);
             int color = -1;
@@ -637,19 +642,19 @@ public class Aura extends Module {
                 color = moduleList.getModuleColor(espRotationAngle);
             }
 
-            PoseStack stack = e.getPMatrixStack();
-            Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
+            MatrixStack stack = e.getPMatrixStack();
+            Vec3d cameraPos = mc.gameRenderer.getCamera().getPos();
             float partialTicks = e.getRenderPartialTicks();
 
-            stack.pushPose();
+            stack.push();
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             RenderSystem.disableDepthTest();
             RenderSystem.depthMask(false);
             RenderSystem.disableCull();
-            RenderSystem.setShader(GameRenderer::getPositionTexShader);
+            RenderSystem.setShader(GameRenderer::getPositionTexProgram);
 
-            ResourceLocation texture = new ResourceLocation("naven-modern", "client/textures/targets/rectangle.png");
+            Identifier texture = new Identifier("naven-modern", "client/textures/targets/rectangle.png");
             RenderSystem.setShaderTexture(0, texture);
             if (color == -1) {
                 RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 0.8f);
@@ -660,37 +665,37 @@ public class Aura extends Module {
                 RenderSystem.setShaderColor(r, g, b, 0.8f);
             }
 
-            Tesselator tesselator = Tesselator.getInstance();
-            BufferBuilder buffer = tesselator.getBuilder();
+            Tessellator tesselator = Tessellator.getInstance();
+            BufferBuilder buffer = tesselator.getBuffer();
 
             for (Entity entity : targets) {
                 if (!(entity instanceof LivingEntity) || !entity.isAlive()) {
                     continue;
                 }
 
-                double x = Mth.lerp(partialTicks, entity.xo, entity.getX());
-                double y = Mth.lerp(partialTicks, entity.yo, entity.getY()) + entity.getBbHeight() * 0.5;
-                double z = Mth.lerp(partialTicks, entity.zo, entity.getZ());
+                double x = MathHelper.lerp(partialTicks, entity.prevX, entity.getX());
+                double y = MathHelper.lerp(partialTicks, entity.prevY, entity.getY()) + entity.getHeight() * 0.5;
+                double z = MathHelper.lerp(partialTicks, entity.prevZ, entity.getZ());
 
-                float distance = (float) cameraPos.distanceTo(new Vec3(x, y, z));
+                float distance = (float) cameraPos.distanceTo(new Vec3d(x, y, z));
                 float size = 1.2f;
 
-                stack.pushPose();
+                stack.push();
                 stack.translate(x - cameraPos.x, y - cameraPos.y, z - cameraPos.z);
-                stack.mulPose(mc.gameRenderer.getMainCamera().rotation());
-                stack.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(espRotationAngle));
+                stack.multiply(mc.gameRenderer.getCamera().getRotation());
+                stack.multiply(net.minecraft.util.math.RotationAxis.POSITIVE_Z.rotationDegrees(espRotationAngle));
                 stack.scale(size, size, size);
 
-                Matrix4f matrix = stack.last().pose();
+                Matrix4f matrix = stack.peek().getPositionMatrix();
 
-                buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-                buffer.vertex(matrix, -0.5f, -0.5f, 0.0f).uv(0.0f, 1.0f).endVertex();
-                buffer.vertex(matrix, 0.5f, -0.5f, 0.0f).uv(1.0f, 1.0f).endVertex();
-                buffer.vertex(matrix, 0.5f, 0.5f, 0.0f).uv(1.0f, 0.0f).endVertex();
-                buffer.vertex(matrix, -0.5f, 0.5f, 0.0f).uv(0.0f, 0.0f).endVertex();
-                BufferUploader.drawWithShader(buffer.end());
+                buffer.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_TEXTURE);
+                buffer.vertex(matrix, -0.5f, -0.5f, 0.0f).texture(0.0f, 1.0f).next();
+                buffer.vertex(matrix, 0.5f, -0.5f, 0.0f).texture(1.0f, 1.0f).next();
+                buffer.vertex(matrix, 0.5f, 0.5f, 0.0f).texture(1.0f, 0.0f).next();
+                buffer.vertex(matrix, -0.5f, 0.5f, 0.0f).texture(0.0f, 0.0f).next();
+                BufferRenderer.drawWithGlobalProgram(buffer.end());
 
-                stack.popPose();
+                stack.pop();
             }
 
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -698,7 +703,7 @@ public class Aura extends Module {
             RenderSystem.depthMask(true);
             RenderSystem.enableDepthTest();
             RenderSystem.disableBlend();
-            stack.popPose();
+            stack.pop();
         }
     }
 }

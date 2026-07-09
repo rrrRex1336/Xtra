@@ -1,38 +1,38 @@
 package awa.qwq.ovo.Naven.events.impl;
 
-import net.minecraft.client.Options;
-import net.minecraft.client.player.Input;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.input.Input;
+import net.minecraft.client.option.GameOptions;
 import net.fabricmc.api.EnvType;
 
 @Environment(EnvType.CLIENT)
 
 public class CustomKeyboardInput extends Input {
-   private final Options options;
+   private final GameOptions options;
    private boolean cancel;
 
-   public CustomKeyboardInput(Options p_108580_) {
+   public CustomKeyboardInput(GameOptions p_108580_) {
       this.options = p_108580_;
       this.cancel = false;
    }
 
    public void tick(boolean p_108582_) {
-      this.up = this.options.keyUp.isDown();
-      this.down = this.options.keyDown.isDown();
-      this.left = this.options.keyLeft.isDown();
-      this.right = this.options.keyRight.isDown();
-      this.forwardImpulse = this.up == this.down ? 0.0F : (this.up ? 1.0F : -1.0F);
-      this.leftImpulse = this.left == this.right ? 0.0F : (this.left ? 1.0F : -1.0F);
-      this.jumping = this.options.keyJump.isDown();
-      this.shiftKeyDown = this.options.keyShift.isDown();
+      this.pressingForward = this.options.forwardKey.isPressed();
+      this.pressingBack = this.options.backKey.isPressed();
+      this.pressingLeft = this.options.leftKey.isPressed();
+      this.pressingRight = this.options.rightKey.isPressed();
+      this.movementForward = this.pressingForward == this.pressingBack ? 0.0F : (this.pressingForward ? 1.0F : -1.0F);
+      this.movementSideways = this.pressingLeft == this.pressingRight ? 0.0F : (this.pressingLeft ? 1.0F : -1.0F);
+      this.jumping = this.options.jumpKey.isPressed();
+      this.sneaking = this.options.sneakKey.isPressed();
       if (p_108582_) {
-         this.leftImpulse = (float)((double)this.leftImpulse * 0.3);
-         this.forwardImpulse = (float)((double)this.forwardImpulse * 0.3);
+         this.movementSideways = (float)((double)this.movementSideways * 0.3);
+         this.movementForward = (float)((double)this.movementForward * 0.3);
       }
 
       if (this.cancel) {
-         super.leftImpulse *= 5.0F;
-         super.forwardImpulse *= 5.0F;
+         super.movementSideways *= 5.0F;
+         super.movementForward *= 5.0F;
       }
    }
 

@@ -10,39 +10,39 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.MobType;
-import net.minecraft.world.entity.ai.attributes.Attribute;
-import net.minecraft.world.entity.ai.attributes.AttributeModifier;
-import net.minecraft.world.item.ArmorItem;
-import net.minecraft.world.item.ArmorMaterial;
-import net.minecraft.world.item.ArmorMaterials;
-import net.minecraft.world.item.ArrowItem;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.BookItem;
-import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.CrossbowItem;
-import net.minecraft.world.item.ExperienceBottleItem;
-import net.minecraft.world.item.FireworkRocketItem;
-import net.minecraft.world.item.FishingRodItem;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.PickaxeItem;
-import net.minecraft.world.item.PlayerHeadItem;
-import net.minecraft.world.item.ShovelItem;
-import net.minecraft.world.item.SwordItem;
-import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.SkullBlock;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.SkullBlock;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.enchantment.Enchantments;
+import net.minecraft.entity.EntityGroup;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.attribute.EntityAttribute;
+import net.minecraft.entity.attribute.EntityAttributeModifier;
+import net.minecraft.item.ArmorItem;
+import net.minecraft.item.ArmorMaterial;
+import net.minecraft.item.ArmorMaterials;
+import net.minecraft.item.ArrowItem;
+import net.minecraft.item.AxeItem;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.BookItem;
+import net.minecraft.item.BowItem;
+import net.minecraft.item.CrossbowItem;
+import net.minecraft.item.ExperienceBottleItem;
+import net.minecraft.item.FireworkRocketItem;
+import net.minecraft.item.FishingRodItem;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.item.PickaxeItem;
+import net.minecraft.item.PlayerHeadItem;
+import net.minecraft.item.ShovelItem;
+import net.minecraft.item.SwordItem;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.registry.Registries;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
+import net.minecraft.util.Identifier;
 
 public class InventoryUtils {
    private static final int NBT_STRING = 8;
@@ -50,14 +50,14 @@ public class InventoryUtils {
    public static final int EXCLUDE_ARMOR_BEGIN = 9;
    public static final int ONLY_HOT_BAR_BEGIN = 36;
    public static final int END = 45;
-   private static final Minecraft mc = Minecraft.getInstance();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
 
    public static boolean shouldDisableFeatures() {
       return getAllItems().stream().anyMatch(item -> {
          if (item.isEmpty()) {
             return false;
          } else {
-            String string = item.getDisplayName().getString();
+            String string = item.toHoverableText().getString();
             return string.contains("长按点击") || string.contains("点击使用") || string.contains("离开游戏") || string.contains("选择一个队伍") || string.contains("再来一局");
          }
       });
@@ -65,21 +65,21 @@ public class InventoryUtils {
 
    public static double getItemDamage(ItemStack stack) {
       double damage = 0.0;
-      Multimap<Attribute, AttributeModifier> attributeModifierMap = stack.getAttributeModifiers(EquipmentSlot.MAINHAND);
+      Multimap<EntityAttribute, EntityAttributeModifier> attributeModifierMap = stack.getAttributeModifiers(EquipmentSlot.MAINHAND);
 
-      for (Attribute attributeName : attributeModifierMap.keySet()) {
-         if (attributeName.getDescriptionId().equals("attribute.name.generic.attack_damage")) {
-            Iterator<AttributeModifier> attributeModifiers = attributeModifierMap.get(attributeName).iterator();
+      for (EntityAttribute attributeName : attributeModifierMap.keySet()) {
+         if (attributeName.getTranslationKey().equals("attribute.name.generic.attack_damage")) {
+            Iterator<EntityAttributeModifier> attributeModifiers = attributeModifierMap.get(attributeName).iterator();
             if (attributeModifiers.hasNext()) {
-               damage += attributeModifiers.next().getAmount();
+               damage += attributeModifiers.next().getValue();
             }
             break;
          }
       }
 
-      if (stack.hasFoil()) {
-         damage += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FIRE_ASPECT, stack);
-         damage += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, stack) * 1.25;
+      if (stack.hasGlint()) {
+         damage += EnchantmentHelper.getLevel(Enchantments.FIRE_ASPECT, stack);
+         damage += EnchantmentHelper.getLevel(Enchantments.SHARPNESS, stack) * 1.25;
       }
 
       return damage;
@@ -108,7 +108,7 @@ public class InventoryUtils {
       } else if (!(stack.getItem() instanceof AxeItem)) {
          return false;
       } else {
-         int itemEnchantmentLevel = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, stack);
+         int itemEnchantmentLevel = EnchantmentHelper.getLevel(Enchantments.SHARPNESS, stack);
          return itemEnchantmentLevel >= 8 && itemEnchantmentLevel < 50;
       }
    }
@@ -118,7 +118,7 @@ public class InventoryUtils {
          return false;
       }
 
-      return stack.is(ModItems.MACE) || (ViaVersionFix.isHighVersionItemFixEnabled() && isServerMace(stack));
+      return stack.isOf(ModItems.MACE) || (ViaVersionFix.isHighVersionItemFixEnabled() && isServerMace(stack));
    }
 
    public static boolean isWindCharge(ItemStack stack) {
@@ -126,7 +126,7 @@ public class InventoryUtils {
          return false;
       }
 
-      return stack.is(ModItems.WIND_CHARGE) || (ViaVersionFix.isHighVersionItemFixEnabled() && isServerWindCharge(stack));
+      return stack.isOf(ModItems.WIND_CHARGE) || (ViaVersionFix.isHighVersionItemFixEnabled() && isServerWindCharge(stack));
    }
 
    public static boolean isSpear(ItemStack stack) {
@@ -142,7 +142,7 @@ public class InventoryUtils {
          return false;
       }
 
-      String name = ChatFormatting.stripFormatting(getRawHoverName(stack));
+      String name = Formatting.strip(getRawHoverName(stack));
       if (name == null) {
          return false;
       }
@@ -156,7 +156,7 @@ public class InventoryUtils {
          return false;
       }
 
-      String name = ChatFormatting.stripFormatting(getRawHoverName(stack));
+      String name = Formatting.strip(getRawHoverName(stack));
       if (name == null) {
          return false;
       }
@@ -171,7 +171,7 @@ public class InventoryUtils {
          return false;
       }
 
-      String name = ChatFormatting.stripFormatting(getRawHoverName(stack));
+      String name = Formatting.strip(getRawHoverName(stack));
       if (name == null) {
          return false;
       }
@@ -184,7 +184,7 @@ public class InventoryUtils {
          return null;
       }
 
-      String name = ChatFormatting.stripFormatting(getRawHoverName(stack));
+      String name = Formatting.strip(getRawHoverName(stack));
       return SpearMaterial.fromServerName(name);
    }
 
@@ -210,11 +210,11 @@ public class InventoryUtils {
    }
 
    private static String getRawHoverName(ItemStack stack) {
-      CompoundTag display = stack.getTagElement(ItemStack.TAG_DISPLAY);
-      if (display != null && display.contains(ItemStack.TAG_DISPLAY_NAME, NBT_STRING)) {
-         String rawName = display.getString(ItemStack.TAG_DISPLAY_NAME);
+      NbtCompound display = stack.getSubNbt(ItemStack.DISPLAY_KEY);
+      if (display != null && display.contains(ItemStack.NAME_KEY, NBT_STRING)) {
+         String rawName = display.getString(ItemStack.NAME_KEY);
          try {
-            Component component = Component.Serializer.fromJson(rawName);
+            Text component = Text.Serialization.fromJson(rawName);
             if (component != null) {
                return component.getString();
             }
@@ -228,12 +228,12 @@ public class InventoryUtils {
          return rawName;
       }
 
-      ResourceLocation key = BuiltInRegistries.ITEM.getKey(stack.getItem());
+      Identifier key = Registries.ITEM.getId(stack.getItem());
       return key == null ? "" : key.toString();
    }
 
    public static ItemStack getMace() {
-      for (ItemStack stack : mc.player.getInventory().items) {
+      for (ItemStack stack : mc.player.getInventory().main) {
          if (isMace(stack)) {
             return stack;
          }
@@ -243,7 +243,7 @@ public class InventoryUtils {
    }
 
    public static ItemStack getWindCharge() {
-      for (ItemStack stack : mc.player.getInventory().items) {
+      for (ItemStack stack : mc.player.getInventory().main) {
          if (isWindCharge(stack)) {
             return stack;
          }
@@ -256,7 +256,7 @@ public class InventoryUtils {
       if (stack.isEmpty()) {
          return false;
       } else {
-         return stack.getItem() != Items.GOLDEN_AXE ? false : EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, stack) > 100;
+         return stack.getItem() != Items.GOLDEN_AXE ? false : EnchantmentHelper.getLevel(Enchantments.SHARPNESS, stack) > 100;
       }
    }
 
@@ -272,7 +272,7 @@ public class InventoryUtils {
       if (stack.isEmpty()) {
          return false;
       } else {
-         return stack.getItem() != Items.SLIME_BALL ? false : EnchantmentHelper.getItemEnchantmentLevel(Enchantments.KNOCKBACK, stack) > 1;
+         return stack.getItem() != Items.SLIME_BALL ? false : EnchantmentHelper.getLevel(Enchantments.KNOCKBACK, stack) > 1;
       }
    }
 
@@ -280,13 +280,13 @@ public class InventoryUtils {
       if (stack.isEmpty()) {
          return false;
       } else {
-         return stack.getItem() != Items.STICK ? false : EnchantmentHelper.getItemEnchantmentLevel(Enchantments.KNOCKBACK, stack) > 1;
+         return stack.getItem() != Items.STICK ? false : EnchantmentHelper.getLevel(Enchantments.KNOCKBACK, stack) > 1;
       }
    }
 
    public static int findEmptyInventory() {
-      for (int i = 9; i < mc.player.getInventory().items.size(); i++) {
-         if (((ItemStack)mc.player.getInventory().items.get(i)).isEmpty()) {
+      for (int i = 9; i < mc.player.getInventory().main.size(); i++) {
+         if (((ItemStack)mc.player.getInventory().main.get(i)).isEmpty()) {
             return i;
          }
       }
@@ -296,7 +296,7 @@ public class InventoryUtils {
 
    public static int findEmptySlot() {
       for (int i = 0; i < 9; i++) {
-         if (((ItemStack)mc.player.getInventory().items.get(i)).isEmpty()) {
+         if (((ItemStack)mc.player.getInventory().main.get(i)).isEmpty()) {
             return i;
          }
       }
@@ -305,16 +305,16 @@ public class InventoryUtils {
    }
 
    public static int getPunchLevel(ItemStack stack) {
-      return EnchantmentHelper.getItemEnchantmentLevel(Enchantments.PUNCH_ARROWS, stack);
+      return EnchantmentHelper.getLevel(Enchantments.PUNCH, stack);
    }
 
    public static int getPowerLevel(ItemStack stack) {
-      return EnchantmentHelper.getItemEnchantmentLevel(Enchantments.POWER_ARROWS, stack);
+      return EnchantmentHelper.getLevel(Enchantments.POWER, stack);
    }
 
    public static List<ItemStack> getAllItems() {
       ArrayList<ItemStack> list = new ArrayList<>(40);
-      list.addAll(mc.player.getInventory().items);
+      list.addAll(mc.player.getInventory().main);
       list.addAll(mc.player.getInventory().armor);
       return list;
    }
@@ -322,7 +322,7 @@ public class InventoryUtils {
    public static float getBestArmorScore(EquipmentSlot slot) {
       return getAllItems()
               .stream()
-              .filter(item -> !item.isEmpty() && item.getItem() instanceof ArmorItem && ((ArmorItem)item.getItem()).getEquipmentSlot() == slot)
+              .filter(item -> !item.isEmpty() && item.getItem() instanceof ArmorItem && ((ArmorItem)item.getItem()).getSlotType() == slot)
               .map(InventoryUtils::getProtection)
               .max(Float::compareTo)
               .orElse(0.0F);
@@ -361,8 +361,8 @@ public class InventoryUtils {
       if (stack == null) {
          return -1;
       } else {
-         for (int i = 0; i < mc.player.getInventory().items.size(); i++) {
-            if (mc.player.getInventory().items.get(i) == stack) {
+         for (int i = 0; i < mc.player.getInventory().main.size(); i++) {
+            if (mc.player.getInventory().main.get(i) == stack) {
                return i;
             }
          }
@@ -377,7 +377,7 @@ public class InventoryUtils {
             return false;
          }
 
-         String string = s.getDisplayName().getString();
+         String string = s.toHoverableText().getString();
          if (string.contains("Click")) {
             return false;
          }
@@ -411,8 +411,8 @@ public class InventoryUtils {
    }
 
    public static int getItemSlot(Item item) {
-      for (int i = 0; i < mc.player.getInventory().items.size(); i++) {
-         ItemStack itemStack = (ItemStack)mc.player.getInventory().items.get(i);
+      for (int i = 0; i < mc.player.getInventory().main.size(); i++) {
+         ItemStack itemStack = (ItemStack)mc.player.getInventory().main.get(i);
          if (item == ModItems.WIND_CHARGE && isWindCharge(itemStack)) {
             return i;
          }
@@ -618,11 +618,11 @@ public class InventoryUtils {
          return 0.0F;
       } else if (stack.getItem() instanceof BowItem) {
          float valence = 10.0F;
-         valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.PUNCH_ARROWS, stack);
-         valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS, stack);
-         valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FLAMING_ARROWS, stack);
-         valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.POWER_ARROWS, stack) / 10.0F;
-         return valence + (float)stack.getDamageValue() / stack.getMaxDamage();
+         valence += EnchantmentHelper.getLevel(Enchantments.PUNCH, stack);
+         valence += EnchantmentHelper.getLevel(Enchantments.INFINITY, stack);
+         valence += EnchantmentHelper.getLevel(Enchantments.FLAME, stack);
+         valence += EnchantmentHelper.getLevel(Enchantments.POWER, stack) / 10.0F;
+         return valence + (float)stack.getDamage() / stack.getMaxDamage();
       } else {
          return 0.0F;
       }
@@ -635,11 +635,11 @@ public class InventoryUtils {
          return 0.0F;
       } else if (stack.getItem() instanceof BowItem) {
          float valence = 10.0F;
-         valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.PUNCH_ARROWS, stack) / 10.0F;
-         valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS, stack);
-         valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FLAMING_ARROWS, stack);
-         valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.POWER_ARROWS, stack);
-         return valence + (float)stack.getDamageValue() / stack.getMaxDamage();
+         valence += EnchantmentHelper.getLevel(Enchantments.PUNCH, stack) / 10.0F;
+         valence += EnchantmentHelper.getLevel(Enchantments.INFINITY, stack);
+         valence += EnchantmentHelper.getLevel(Enchantments.FLAME, stack);
+         valence += EnchantmentHelper.getLevel(Enchantments.POWER, stack);
+         return valence + (float)stack.getDamage() / stack.getMaxDamage();
       } else {
          return 0.0F;
       }
@@ -659,18 +659,18 @@ public class InventoryUtils {
          return 0.0F;
       } else {
          if (stack.getItem() instanceof PickaxeItem) {
-            valence += stack.getDestroySpeed(Blocks.STONE.defaultBlockState());
+            valence += stack.getMiningSpeedMultiplier(Blocks.STONE.getDefaultState());
          } else if (stack.getItem() instanceof AxeItem) {
-            valence += stack.getDestroySpeed(Blocks.OAK_LOG.defaultBlockState());
+            valence += stack.getMiningSpeedMultiplier(Blocks.OAK_LOG.getDefaultState());
          } else {
             if (!(stack.getItem() instanceof ShovelItem)) {
                return 0.0F;
             }
 
-            valence += stack.getDestroySpeed(Blocks.DIRT.defaultBlockState());
+            valence += stack.getMiningSpeedMultiplier(Blocks.DIRT.getDefaultState());
          }
 
-         int efficiency = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.BLOCK_EFFICIENCY, stack);
+         int efficiency = EnchantmentHelper.getLevel(Enchantments.EFFICIENCY, stack);
          if (efficiency > 0) {
             valence += efficiency * 0.0075F;
          }
@@ -703,9 +703,9 @@ public class InventoryUtils {
             }
          }
 
-         int itemEnchantmentLevel = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, stack);
+         int itemEnchantmentLevel = EnchantmentHelper.getLevel(Enchantments.SHARPNESS, stack);
          if (itemEnchantmentLevel > 0) {
-            float damageBonus = Enchantments.SHARPNESS.getDamageBonus(itemEnchantmentLevel, MobType.UNDEFINED);
+            float damageBonus = Enchantments.SHARPNESS.getAttackDamage(itemEnchantmentLevel, EntityGroup.DEFAULT);
             valence += damageBonus;
          }
 
@@ -722,12 +722,12 @@ public class InventoryUtils {
       } else {
          if (stack.getItem() instanceof SwordItem) {
             SwordItem sword = (SwordItem)stack.getItem();
-            valence += sword.getDamage() + 1.0F;
+            valence += sword.getAttackDamage() + 1.0F;
          }
 
-         int itemEnchantmentLevel = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, stack);
+         int itemEnchantmentLevel = EnchantmentHelper.getLevel(Enchantments.SHARPNESS, stack);
          if (itemEnchantmentLevel > 0) {
-            float damageBonus = Enchantments.SHARPNESS.getDamageBonus(itemEnchantmentLevel, MobType.UNDEFINED);
+            float damageBonus = Enchantments.SHARPNESS.getAttackDamage(itemEnchantmentLevel, EntityGroup.DEFAULT);
             valence += damageBonus;
          }
 
@@ -760,7 +760,7 @@ public class InventoryUtils {
             }
          }
 
-         valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.ALL_DAMAGE_PROTECTION, itemStack);
+         valence += EnchantmentHelper.getLevel(Enchantments.PROTECTION, itemStack);
          return valence;
       }
    }
@@ -773,9 +773,9 @@ public class InventoryUtils {
          return 0.0F;
       } else {
          if (stack.getItem() instanceof CrossbowItem) {
-            valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.QUICK_CHARGE, stack);
-            valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.MULTISHOT, stack);
-            valence += EnchantmentHelper.getItemEnchantmentLevel(Enchantments.PIERCING, stack);
+            valence += EnchantmentHelper.getLevel(Enchantments.QUICK_CHARGE, stack);
+            valence += EnchantmentHelper.getLevel(Enchantments.MULTISHOT, stack);
+            valence += EnchantmentHelper.getLevel(Enchantments.PIERCING, stack);
          }
 
          return valence;
@@ -785,9 +785,9 @@ public class InventoryUtils {
    public static boolean isGodItem(ItemStack stack) {
       if (stack.isEmpty()) {
          return false;
-      } else if (stack.getItem() instanceof AxeItem && stack.getItem() == Items.GOLDEN_AXE && EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SHARPNESS, stack) > 100) {
+      } else if (stack.getItem() instanceof AxeItem && stack.getItem() == Items.GOLDEN_AXE && EnchantmentHelper.getLevel(Enchantments.SHARPNESS, stack) > 100) {
          return true;
-      } else if (stack.getItem() == Items.SLIME_BALL && EnchantmentHelper.getItemEnchantmentLevel(Enchantments.KNOCKBACK, stack) > 1) {
+      } else if (stack.getItem() == Items.SLIME_BALL && EnchantmentHelper.getLevel(Enchantments.KNOCKBACK, stack) > 1) {
          return true;
       } else {
          return stack.getItem() == Items.TOTEM_OF_UNDYING ? true : stack.getItem() == Items.END_CRYSTAL;

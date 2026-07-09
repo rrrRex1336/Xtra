@@ -18,34 +18,34 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.ItemNameBlockItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.AirBlock;
-import net.minecraft.world.level.block.AnvilBlock;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.BushBlock;
-import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.CraftingTableBlock;
-import net.minecraft.world.level.block.CropBlock;
-import net.minecraft.world.level.block.EnchantmentTableBlock;
-import net.minecraft.world.level.block.EnderChestBlock;
-import net.minecraft.world.level.block.FlowerBlock;
-import net.minecraft.world.level.block.FungusBlock;
-import net.minecraft.world.level.block.FurnaceBlock;
-import net.minecraft.world.level.block.LiquidBlock;
-import net.minecraft.world.level.block.SlabBlock;
-import net.minecraft.world.level.block.SnowLayerBlock;
-import net.minecraft.world.level.block.TallGrassBlock;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.block.AirBlock;
+import net.minecraft.block.AnvilBlock;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.ChestBlock;
+import net.minecraft.block.CraftingTableBlock;
+import net.minecraft.block.CropBlock;
+import net.minecraft.block.EnchantingTableBlock;
+import net.minecraft.block.EnderChestBlock;
+import net.minecraft.block.FlowerBlock;
+import net.minecraft.block.FluidBlock;
+import net.minecraft.block.FungusBlock;
+import net.minecraft.block.FurnaceBlock;
+import net.minecraft.block.PlantBlock;
+import net.minecraft.block.ShortPlantBlock;
+import net.minecraft.block.SlabBlock;
+import net.minecraft.block.SnowBlock;
+import net.minecraft.item.AliasedBlockItem;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(name = "Surround", description = "Find suitable conditions and place blocks to surround yourself.", category = Category.WORLD)
 public class Surround extends Module {
@@ -84,19 +84,19 @@ public class Surround extends Module {
 
    @Override
    public void onEnable() {
-      if (mc.player == null || mc.level == null) {
+      if (mc.player == null || mc.world == null) {
          return;
       }
 
-      this.oldSlot = mc.player.getInventory().selected;
-      this.rots.set(mc.player.getYRot(), mc.player.getXRot());
-      this.center = BlockPos.containing(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-      this.front = Direction.fromYRot(mc.player.getYRot());
+      this.oldSlot = mc.player.getInventory().selectedSlot;
+      this.rots.set(mc.player.getYaw(), mc.player.getPitch());
+      this.center = BlockPos.ofFloored(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+      this.front = Direction.fromRotation(mc.player.getYaw());
       this.orderedDirections = new Direction[]{
          this.front,
-         this.front.getCounterClockWise(),
+         this.front.rotateYCounterclockwise(),
          this.front.getOpposite(),
-         this.front.getClockWise()
+         this.front.rotateYClockwise()
       };
       this.supportDirection = null;
       this.currentPlacement = null;
@@ -126,17 +126,17 @@ public class Surround extends Module {
       this.jumpRushSawAir = false;
       this.phase = Phase.IDLE;
       if (mc.player != null && this.oldSlot >= 0 && this.oldSlot < 9) {
-         mc.player.getInventory().selected = this.oldSlot;
+         mc.player.getInventory().selectedSlot = this.oldSlot;
       }
    }
 
    @EventTarget(1)
    public void onRunTick(EventRunTicks event) {
-      if (event.getType() != EventType.PRE || mc.player == null || mc.level == null || mc.gameMode == null || this.center == null) {
+      if (event.getType() != EventType.PRE || mc.player == null || mc.world == null || mc.interactionManager == null || this.center == null) {
          return;
       }
 
-      if (mc.screen != null || ++this.activeTicks > MAX_ACTIVE_TICKS || !ensureBlockSelected()) {
+      if (mc.currentScreen != null || ++this.activeTicks > MAX_ACTIVE_TICKS || !ensureBlockSelected()) {
          this.setEnabled(false);
          return;
       }
@@ -161,13 +161,13 @@ public class Surround extends Module {
 
    @EventTarget
    public void onClick(EventClick event) {
-      if (mc.player == null || mc.level == null || mc.gameMode == null || this.currentPlacement == null) {
+      if (mc.player == null || mc.world == null || mc.interactionManager == null || this.currentPlacement == null) {
          return;
       }
 
       event.setCancelled(true);
       int placeDelay = Math.max(0, Math.round(this.delay.getCurrentValue()));
-      if (placeDelay > 0 && this.lastPlaceTick >= 0L && mc.level.getGameTime() - this.lastPlaceTick < placeDelay) {
+      if (placeDelay > 0 && this.lastPlaceTick >= 0L && mc.world.getTime() - this.lastPlaceTick < placeDelay) {
          return;
       }
 
@@ -177,7 +177,7 @@ public class Surround extends Module {
          return;
       }
 
-      InteractionHand hand = getPlaceHand();
+      Hand hand = getPlaceHand();
       if (hand == null) {
          this.setEnabled(false);
          return;
@@ -185,10 +185,10 @@ public class Surround extends Module {
 
       RotationManager.setRotations(new Vector2f(this.rots.x, this.rots.y));
       RotationManager.active = true;
-      InteractionResult result = mc.gameMode.useItemOn(mc.player, hand, this.currentPlacement.hitResult);
-      if (result == InteractionResult.SUCCESS) {
-         NetworkUtils.sendPacket(new ServerboundSwingPacket(hand));
-         this.lastPlaceTick = mc.level.getGameTime();
+      ActionResult result = mc.interactionManager.interactBlock(mc.player, hand, this.currentPlacement.hitResult);
+      if (result == ActionResult.SUCCESS) {
+         NetworkUtils.sendPacket(new HandSwingC2SPacket(hand));
+         this.lastPlaceTick = mc.world.getTime();
          this.queue.remove(this.currentPlacement.task);
          this.currentPlacement = null;
          this.noProgressTicks = 0;
@@ -204,14 +204,14 @@ public class Surround extends Module {
          this.phase = Phase.WAIT_LANDING;
       }
 
-      if (this.phase == Phase.WAIT_LANDING && !mc.player.onGround()) {
+      if (this.phase == Phase.WAIT_LANDING && !mc.player.isOnGround()) {
          this.jumpRushSawAir = true;
       }
 
-      if (this.phase == Phase.WAIT_LANDING && this.jumpRushSawAir && mc.player.onGround()) {
+      if (this.phase == Phase.WAIT_LANDING && this.jumpRushSawAir && mc.player.isOnGround()) {
          this.phase = Phase.CAP;
          this.queue.clear();
-         addTask(this.center.above(2), TaskType.CAP);
+         addTask(this.center.up(2), TaskType.CAP);
       }
 
       removeCompletedTasks();
@@ -236,7 +236,7 @@ public class Surround extends Module {
       }
 
       this.phase = Phase.JUMP_PILLAR;
-      this.jumpRushSawAir = !mc.player.onGround();
+      this.jumpRushSawAir = !mc.player.isOnGround();
       this.queue.clear();
       addSideColumn(this.supportDirection, 3);
    }
@@ -251,9 +251,9 @@ public class Surround extends Module {
    }
 
    private void addSideColumn(Direction direction, int height) {
-      BlockPos base = this.center.relative(direction);
+      BlockPos base = this.center.offset(direction);
       for (int y = 0; y < height; ++y) {
-         addTask(base.above(y), TaskType.SIDE);
+         addTask(base.up(y), TaskType.SIDE);
       }
    }
 
@@ -293,13 +293,13 @@ public class Surround extends Module {
       }
 
       for (Direction face : PLACE_FACES) {
-         BlockPos support = task.pos.relative(face.getOpposite());
+         BlockPos support = task.pos.offset(face.getOpposite());
          if (!isValidSupport(support)) {
             continue;
          }
 
-         Vec3 hitVec = getHitVec(support, face);
-         if (hitVec.distanceTo(mc.player.getEyePosition()) > 4.5D) {
+         Vec3d hitVec = getHitVec(support, face);
+         if (hitVec.distanceTo(mc.player.getEyePos()) > 4.5D) {
             continue;
          }
 
@@ -324,10 +324,10 @@ public class Surround extends Module {
          int existing = 0;
          boolean feasible = true;
          Set<BlockPos> planned = new HashSet<>();
-         BlockPos base = this.center.relative(direction);
+         BlockPos base = this.center.offset(direction);
 
          for (int y = 0; y < 3; ++y) {
-            BlockPos pos = base.above(y);
+            BlockPos pos = base.up(y);
             if (isCompleted(pos)) {
                ++existing;
                planned.add(pos);
@@ -355,7 +355,7 @@ public class Surround extends Module {
 
    private boolean hasSupport(BlockPos pos, Set<BlockPos> planned) {
       for (Direction face : PLACE_FACES) {
-         BlockPos support = pos.relative(face.getOpposite());
+         BlockPos support = pos.offset(face.getOpposite());
          if (planned.contains(support) || isValidSupport(support)) {
             return true;
          }
@@ -369,7 +369,7 @@ public class Surround extends Module {
    }
 
    private boolean canOccupy(BlockPos pos) {
-      AABB box = new AABB(
+      Box box = new Box(
          pos.getX(),
          pos.getY(),
          pos.getZ(),
@@ -377,36 +377,36 @@ public class Surround extends Module {
          pos.getY() + 1.0D,
          pos.getZ() + 1.0D
       );
-      return isReplaceable(pos) && !mc.player.getBoundingBox().intersects(box) && mc.level.noCollision(box);
+      return isReplaceable(pos) && !mc.player.getBoundingBox().intersects(box) && mc.world.isSpaceEmpty(box);
    }
 
    private boolean isReplaceable(BlockPos pos) {
-      BlockState state = mc.level.getBlockState(pos);
-      return state.isAir() || state.canBeReplaced();
+      BlockState state = mc.world.getBlockState(pos);
+      return state.isAir() || state.isReplaceable();
    }
 
    private boolean isValidSupport(BlockPos pos) {
-      BlockState state = mc.level.getBlockState(pos);
+      BlockState state = mc.world.getBlockState(pos);
       Block block = state.getBlock();
       return !isReplaceable(pos)
-         && !(block instanceof LiquidBlock)
+         && !(block instanceof FluidBlock)
          && !(block instanceof AirBlock)
          && !(block instanceof ChestBlock)
          && !(block instanceof FurnaceBlock)
          && !(block instanceof EnderChestBlock)
-         && !(block instanceof TallGrassBlock)
-         && !(block instanceof SnowLayerBlock)
-         && !(block instanceof EnchantmentTableBlock)
+         && !(block instanceof ShortPlantBlock)
+         && !(block instanceof SnowBlock)
+         && !(block instanceof EnchantingTableBlock)
          && !(block instanceof AnvilBlock)
          && !(block instanceof CraftingTableBlock)
-         && !state.getShape(mc.level, pos).isEmpty();
+         && !state.getOutlineShape(mc.world, pos).isEmpty();
    }
 
-   private Vec3 getHitVec(BlockPos support, Direction face) {
-      return new Vec3(
-         support.getX() + 0.5D + face.getStepX() * 0.5D,
-         support.getY() + 0.5D + face.getStepY() * 0.5D,
-         support.getZ() + 0.5D + face.getStepZ() * 0.5D
+   private Vec3d getHitVec(BlockPos support, Direction face) {
+      return new Vec3d(
+         support.getX() + 0.5D + face.getOffsetX() * 0.5D,
+         support.getY() + 0.5D + face.getOffsetY() * 0.5D,
+         support.getZ() + 0.5D + face.getOffsetZ() * 0.5D
       );
    }
 
@@ -420,17 +420,17 @@ public class Surround extends Module {
          return false;
       }
 
-      mc.player.getInventory().selected = slot;
+      mc.player.getInventory().selectedSlot = slot;
       return true;
    }
 
-   private InteractionHand getPlaceHand() {
-      if (isValidStack(mc.player.getMainHandItem())) {
-         return InteractionHand.MAIN_HAND;
+   private Hand getPlaceHand() {
+      if (isValidStack(mc.player.getMainHandStack())) {
+         return Hand.MAIN_HAND;
       }
 
-      if (isValidStack(mc.player.getOffhandItem())) {
-         return InteractionHand.OFF_HAND;
+      if (isValidStack(mc.player.getOffHandStack())) {
+         return Hand.OFF_HAND;
       }
 
       return null;
@@ -438,7 +438,7 @@ public class Surround extends Module {
 
    private int findBlockSlot() {
       for (int i = 0; i < 9; ++i) {
-         if (isValidStack(mc.player.getInventory().getItem(i))) {
+         if (isValidStack(mc.player.getInventory().getStack(i))) {
             return i;
          }
       }
@@ -451,18 +451,18 @@ public class Surround extends Module {
          return false;
       }
 
-      if (stack.getItem() instanceof ItemNameBlockItem) {
+      if (stack.getItem() instanceof AliasedBlockItem) {
          return false;
       }
 
-      String name = stack.getDisplayName().getString();
+      String name = stack.toHoverableText().getString();
       if (name.contains("Click") || name.contains("点击") || name.contains("鐐瑰嚮")) {
          return false;
       }
 
       Block block = blockItem.getBlock();
       return !(block instanceof FlowerBlock)
-         && !(block instanceof BushBlock)
+         && !(block instanceof PlantBlock)
          && !(block instanceof FungusBlock)
          && !(block instanceof CropBlock)
          && !(block instanceof SlabBlock)
@@ -470,7 +470,7 @@ public class Surround extends Module {
    }
 
    private boolean isJumpRequested() {
-      return !mc.player.onGround() || mc.options.keyJump.isDown() || mc.player.getDeltaMovement().y > 0.05D;
+      return !mc.player.isOnGround() || mc.options.jumpKey.isPressed() || mc.player.getVelocity().y > 0.05D;
    }
 
    private enum Phase {

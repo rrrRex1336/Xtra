@@ -1,6 +1,6 @@
 package awa.qwq.ovo.Naven.utils.renderer;
 
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.MinecraftClient;
 
 public class Framebuffer {
    private int id;
@@ -28,9 +28,9 @@ public class Framebuffer {
       GL.textureParam(3553, 10243, 33071);
       GL.textureParam(3553, 10241, 9729);
       GL.textureParam(3553, 10240, 9729);
-      Minecraft mc = Minecraft.getInstance();
-      this.width = Math.max(1, (int)((double)mc.getWindow().getWidth() * this.sizeMulti));
-      this.height = Math.max(1, (int)((double)mc.getWindow().getHeight() * this.sizeMulti));
+      MinecraftClient mc = MinecraftClient.getInstance();
+      this.width = Math.max(1, (int)((double)mc.getWindow().getFramebufferWidth() * this.sizeMulti));
+      this.height = Math.max(1, (int)((double)mc.getWindow().getFramebufferHeight() * this.sizeMulti));
       GL.textureImage2D(3553, 0, 6408, this.width, this.height, 0, 6408, 5121, null);
       GL.framebufferTexture2D(36160, 36064, 3553, this.texture, 0);
       this.unbind();
@@ -45,7 +45,7 @@ public class Framebuffer {
    }
 
    public void unbind() {
-      Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+      MinecraftClient.getInstance().getFramebuffer().beginWrite(false);
    }
 
    public void resize() {

@@ -1,12 +1,12 @@
 package org.mixin.accessors;
 
-import net.minecraft.world.Container;
-import net.minecraft.world.inventory.BrewingStandMenu;
+import net.minecraft.inventory.Inventory;
+import net.minecraft.screen.BrewingStandScreenHandler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(BrewingStandMenu.class)
+@Mixin(BrewingStandScreenHandler.class)
 public interface BrewingStandMenuAccessor {
-    @Accessor("brewingStand")
-    Container getBrewingStand();
+    @Accessor("inventory")
+    Inventory getBrewingStand();
 }

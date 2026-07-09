@@ -19,10 +19,17 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.AddonsValue;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import org.mixin.accessors.ServerboundMovePlayerPacketAccessor;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.common.ClientboundKeepAlivePacket;
-import net.minecraft.network.protocol.common.ServerboundPongPacket;
-import net.minecraft.network.protocol.game.*;
+import net.minecraft.network.listener.ClientPlayPacketListener;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.common.CommonPongC2SPacket;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
+import net.minecraft.network.packet.s2c.common.KeepAliveS2CPacket;
+import net.minecraft.network.packet.s2c.play.OpenScreenS2CPacket;
+
 
 import java.util.Random;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -91,7 +98,7 @@ public class Disabler extends Module {
    // Inventory Frequency
    private boolean inventoryOpen;
    private long inventoryOpenTime;
-   private ServerboundContainerClosePacket storedClosePacket;
+   private CloseHandledScreenC2SPacket storedClosePacket;
    private long inventoryCloseDelay;
 
    // Themis Blink
@@ -185,7 +192,7 @@ public class Disabler extends Module {
    private void sendIntermediateSlots(int from, int to) {
       int step = to > from ? 1 : -1;
       for (int i = from + step; i != to + step; i += step) {
-         PacketUtils.sendPacketNoEvent(new ServerboundSetCarriedItemPacket(i));
+         PacketUtils.sendPacketNoEvent(new UpdateSelectedSlotC2SPacket(i));
       }
    }
 
@@ -193,12 +200,12 @@ public class Disabler extends Module {
 
    @EventTarget
    public void badPacketUDetector(EventDispatchPacket e) {
-      if (e.getPacket() instanceof ServerboundMovePlayerPacket) {
+      if (e.getPacket() instanceof PlayerMoveC2SPacket) {
          dispatchEntityActionCount = 0;
       }
-      if (isGrim("Post") && e.getPacket() instanceof ServerboundPlayerCommandPacket packet) {
-         if (packet.getAction() == ServerboundPlayerCommandPacket.Action.START_SPRINTING
-                 || packet.getAction() == ServerboundPlayerCommandPacket.Action.STOP_SPRINTING) {
+      if (isGrim("Post") && e.getPacket() instanceof ClientCommandC2SPacket packet) {
+         if (packet.getMode() == ClientCommandC2SPacket.Mode.START_SPRINTING
+                 || packet.getMode() == ClientCommandC2SPacket.Mode.STOP_SPRINTING) {
             if (dispatchEntityActionCount > 0) log("You may just flagged BadPacketU!");
             dispatchEntityActionCount++;
          }
@@ -209,7 +216,7 @@ public class Disabler extends Module {
    public void duplicateRotPlaceDisabler(EventPacket e) {
       if (e.getType() != EventType.SEND || e.isCancelled() || mc.player == null) return;
 
-      if (e.getPacket() instanceof ServerboundMovePlayerPacket packet) {
+      if (e.getPacket() instanceof PlayerMoveC2SPacket packet) {
          ServerboundMovePlayerPacketAccessor acc = (ServerboundMovePlayerPacketAccessor) packet;
          float yaw = acc.getYRot(), pitch = acc.getXRot();
 
@@ -227,46 +234,46 @@ public class Disabler extends Module {
          }
 
          if (yaw != acc.getYRot()) {
-            e.setPacket(packet.hasPosition()
-                    ? new ServerboundMovePlayerPacket.PosRot(acc.getX(), acc.getY(), acc.getZ(), yaw, pitch, packet.isOnGround())
-                    : new ServerboundMovePlayerPacket.Rot(yaw, pitch, packet.isOnGround()));
+            e.setPacket(packet.changesPosition()
+                    ? new PlayerMoveC2SPacket.Full(acc.getX(), acc.getY(), acc.getZ(), yaw, pitch, packet.isOnGround())
+                    : new PlayerMoveC2SPacket.LookAndOnGround(yaw, pitch, packet.isOnGround()));
          }
 
          // Duplicate Rot Place
          if (isGrim("Duplicate Rot Place")) {
-            if (packet.hasRotation()) {
+            if (packet.changesLook()) {
                if (acc.getYRot() < 360F && acc.getYRot() > -360F) {
-                  e.setPacket(packet.hasPosition()
-                          ? new ServerboundMovePlayerPacket.PosRot(acc.getX(), acc.getY(), acc.getZ(), acc.getYRot() + 720F, acc.getXRot(), packet.isOnGround())
-                          : new ServerboundMovePlayerPacket.Rot(acc.getYRot() + 720F, acc.getXRot(), packet.isOnGround()));
+                  e.setPacket(packet.changesPosition()
+                          ? new PlayerMoveC2SPacket.Full(acc.getX(), acc.getY(), acc.getZ(), acc.getYRot() + 720F, acc.getXRot(), packet.isOnGround())
+                          : new PlayerMoveC2SPacket.LookAndOnGround(acc.getYRot() + 720F, acc.getXRot(), packet.isOnGround()));
                }
                updatePlaceDelta(acc.getYRot());
                if (deltaYaw > 2F && Math.abs(deltaYaw - lastPlacedDeltaYaw) < 1E-4) {
                   log("Disabling DuplicateRotPlace!");
-                  e.setPacket(packet.hasPosition()
-                          ? new ServerboundMovePlayerPacket.PosRot(acc.getX(), acc.getY(), acc.getZ(), acc.getYRot() + 0.002F, acc.getXRot(), packet.isOnGround())
-                          : new ServerboundMovePlayerPacket.Rot(acc.getYRot() + 0.002F, acc.getXRot(), packet.isOnGround()));
+                  e.setPacket(packet.changesPosition()
+                          ? new PlayerMoveC2SPacket.Full(acc.getX(), acc.getY(), acc.getZ(), acc.getYRot() + 0.002F, acc.getXRot(), packet.isOnGround())
+                          : new PlayerMoveC2SPacket.LookAndOnGround(acc.getYRot() + 0.002F, acc.getXRot(), packet.isOnGround()));
                }
             }
          } else {
             updatePlaceDelta(acc.getYRot());
             if (deltaYaw > 2F && Math.abs(deltaYaw - lastPlacedDeltaYaw) < 1E-4) {
-               e.setPacket(packet.hasPosition()
-                       ? new ServerboundMovePlayerPacket.PosRot(acc.getX(), acc.getY(), acc.getZ(), acc.getYRot() + 0.002F, acc.getXRot(), packet.isOnGround())
-                       : new ServerboundMovePlayerPacket.Rot(acc.getYRot() + 0.002F, acc.getXRot(), packet.isOnGround()));
+               e.setPacket(packet.changesPosition()
+                       ? new PlayerMoveC2SPacket.Full(acc.getX(), acc.getY(), acc.getZ(), acc.getYRot() + 0.002F, acc.getXRot(), packet.isOnGround())
+                       : new PlayerMoveC2SPacket.LookAndOnGround(acc.getYRot() + 0.002F, acc.getXRot(), packet.isOnGround()));
             }
          }
 
          lastSentYaw = yaw;
          lastSentPitch = pitch;
 
-      } else if (e.getPacket() instanceof ServerboundUseItemOnPacket && rotated) {
+      } else if (e.getPacket() instanceof PlayerInteractBlockC2SPacket && rotated) {
          lastPlacedDeltaYaw = deltaYaw;
          rotated = false;
       }
 
       // ACA Aim Step / Perfect Rotation
-      if (e.getPacket() instanceof ServerboundMovePlayerPacket movePacket) {
+      if (e.getPacket() instanceof PlayerMoveC2SPacket movePacket) {
          ServerboundMovePlayerPacketAccessor acc = (ServerboundMovePlayerPacketAccessor) movePacket;
          float yaw = acc.getYRot(), pitch = acc.getXRot();
          boolean mod = false;
@@ -302,7 +309,7 @@ public class Disabler extends Module {
 
    @EventTarget
    public void onTick(EventRunTicks e) {
-      if (isAca("Inventory MultiInteraction") && mc.player != null && mc.level != null) {
+      if (isAca("Inventory MultiInteraction") && mc.player != null && mc.world != null) {
          ContainerStealer stealer = (ContainerStealer) Naven.getInstance().getModuleManager().getModule(ContainerStealer.class);
          if (stealer.isEnabled() && stealer.instant.getCurrentValue()) {
             long now = System.currentTimeMillis();
@@ -320,9 +327,9 @@ public class Disabler extends Module {
 
       // === ACA Inventory MultiInteraction ===
       if (event.getType() == EventType.RECEIVE && isAca("Inventory MultiInteraction")
-              && mc.player != null && mc.level != null && !acaInventoryPass) {
+              && mc.player != null && mc.world != null && !acaInventoryPass) {
          ContainerStealer stealer = (ContainerStealer) Naven.getInstance().getModuleManager().getModule(ContainerStealer.class);
-         if (stealer.isEnabled() && stealer.instant.getCurrentValue() && packet instanceof ClientboundKeepAlivePacket) {
+         if (stealer.isEnabled() && stealer.instant.getCurrentValue() && packet instanceof KeepAliveS2CPacket) {
             acaInventoryPackets.add(new PacketData(packet, System.currentTimeMillis()));
             event.setCancelled(true);
          }
@@ -334,11 +341,11 @@ public class Disabler extends Module {
             PacketUtils.sendPacketNoEvent(storedClosePacket);
             storedClosePacket = null;
          }
-         if (packet instanceof ClientboundOpenScreenPacket) {
+         if (packet instanceof OpenScreenS2CPacket) {
             inventoryOpenTime = System.currentTimeMillis();
             inventoryOpen = true;
          }
-         if (packet instanceof ServerboundContainerClosePacket closePacket) {
+         if (packet instanceof CloseHandledScreenC2SPacket closePacket) {
             if (inventoryOpen) {
                long duration = System.currentTimeMillis() - inventoryOpenTime;
                if (duration <= 150L) {
@@ -358,29 +365,29 @@ public class Disabler extends Module {
       if (isThemis("Blink")) {
          if (System.currentTimeMillis() - themisBlinkLastSend > 200L) {
             if (themisBlinkCount == 0) {
-               if (mc.player != null && mc.player.connection != null) {
-                  ServerboundPongPacket keepAlive = new ServerboundPongPacket(0);
-                  mc.player.connection.send(keepAlive);
+               if (mc.player != null && mc.player.networkHandler != null) {
+                  CommonPongC2SPacket keepAlive = new CommonPongC2SPacket(0);
+                  mc.player.networkHandler.sendPacket(keepAlive);
                }
             }
             themisBlinkLastSend = System.currentTimeMillis();
             themisBlinkCount = 0;
          }
-         if (packet instanceof ServerboundMovePlayerPacket.StatusOnly) {
+         if (packet instanceof PlayerMoveC2SPacket.OnGroundOnly) {
             themisBlinkCount++;
          }
       }
 
       // === Slot handling ===
-      if (packet instanceof ServerboundSetCarriedItemPacket slotPacket) {
-         int slot = slotPacket.getSlot();
+      if (packet instanceof UpdateSelectedSlotC2SPacket slotPacket) {
+         int slot = slotPacket.getSelectedSlot();
 
          if (isGrim("BadPackets A") && slot == lastSentSlot && slot != -1) {
             event.setCancelled(true);
             return;
          }
 
-         if (isAca("Fast Switch") && lastSentSlot != -1 && slot != lastSentSlot && mc.getConnection() != null) {
+         if (isAca("Fast Switch") && lastSentSlot != -1 && slot != lastSentSlot && mc.getNetworkHandler() != null) {
             event.setCancelled(true);
             sendIntermediateSlots(lastSentSlot, slot);
             lastSentSlot = slot;
@@ -391,22 +398,22 @@ public class Disabler extends Module {
       }
 
       // === Grim BadPackets F ===
-      if (isGrim("BadPackets F") && packet instanceof ServerboundPlayerCommandPacket pkt) {
-         if (pkt.getAction() == ServerboundPlayerCommandPacket.Action.START_SPRINTING) {
+      if (isGrim("BadPackets F") && packet instanceof ClientCommandC2SPacket pkt) {
+         if (pkt.getMode() == ClientCommandC2SPacket.Mode.START_SPRINTING) {
             if (lastSprinting) event.setCancelled(true);
             lastSprinting = true;
-         } else if (pkt.getAction() == ServerboundPlayerCommandPacket.Action.STOP_SPRINTING) {
+         } else if (pkt.getMode() == ClientCommandC2SPacket.Mode.STOP_SPRINTING) {
             if (!lastSprinting) event.setCancelled(true);
             lastSprinting = false;
          }
       }
 
       // === Grim BadPackets G ===
-      if (isGrim("BadPackets G") && packet instanceof ServerboundPlayerCommandPacket pkt) {
-         if (pkt.getAction() == ServerboundPlayerCommandPacket.Action.PRESS_SHIFT_KEY) {
+      if (isGrim("BadPackets G") && packet instanceof ClientCommandC2SPacket pkt) {
+         if (pkt.getMode() == ClientCommandC2SPacket.Mode.PRESS_SHIFT_KEY) {
             if (lastSneaking) { event.setCancelled(true); return; }
             lastSneaking = true;
-         } else if (pkt.getAction() == ServerboundPlayerCommandPacket.Action.RELEASE_SHIFT_KEY) {
+         } else if (pkt.getMode() == ClientCommandC2SPacket.Mode.RELEASE_SHIFT_KEY) {
             if (!lastSneaking) { event.setCancelled(true); return; }
             lastSneaking = false;
          }
@@ -415,10 +422,10 @@ public class Disabler extends Module {
 
    @SuppressWarnings("unchecked")
    private void processACAPacket(Packet<?> packet) {
-      if (mc.getConnection() == null) return;
+      if (mc.getNetworkHandler() == null) return;
       acaInventoryPass = true;
       try {
-         ((Packet<ClientGamePacketListener>) packet).handle(mc.getConnection());
+         ((Packet<ClientPlayPacketListener>) packet).apply(mc.getNetworkHandler());
       } catch (Exception ignored) {
       } finally {
          acaInventoryPass = false;
@@ -448,7 +455,7 @@ public class Disabler extends Module {
    public void onEnable() {
       super.onEnable();
       reset();
-      if (mc.player != null) lastSentSlot = mc.player.getInventory().selected;
+      if (mc.player != null) lastSentSlot = mc.player.getInventory().selectedSlot;
    }
 
    @Override

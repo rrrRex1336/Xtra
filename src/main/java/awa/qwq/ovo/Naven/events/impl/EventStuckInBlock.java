@@ -1,18 +1,18 @@
 package awa.qwq.ovo.Naven.events.impl;
 
 import awa.qwq.ovo.Naven.events.api.events.callables.EventCancellable;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.block.BlockState;
+import net.minecraft.util.math.Vec3d;
 
 public class EventStuckInBlock extends EventCancellable {
    private BlockState state;
-   private Vec3 stuckSpeedMultiplier;
+   private Vec3d stuckSpeedMultiplier;
 
    public BlockState getState() {
       return this.state;
    }
 
-   public Vec3 getStuckSpeedMultiplier() {
+   public Vec3d getStuckSpeedMultiplier() {
       return this.stuckSpeedMultiplier;
    }
 
@@ -20,7 +20,7 @@ public class EventStuckInBlock extends EventCancellable {
       this.state = state;
    }
 
-   public void setStuckSpeedMultiplier(Vec3 stuckSpeedMultiplier) {
+   public void setStuckSpeedMultiplier(Vec3d stuckSpeedMultiplier) {
       this.stuckSpeedMultiplier = stuckSpeedMultiplier;
    }
 
@@ -64,7 +64,7 @@ public class EventStuckInBlock extends EventCancellable {
       return result * 59 + ($stuckSpeedMultiplier == null ? 43 : $stuckSpeedMultiplier.hashCode());
    }
 
-   public EventStuckInBlock(BlockState state, Vec3 stuckSpeedMultiplier) {
+   public EventStuckInBlock(BlockState state, Vec3d stuckSpeedMultiplier) {
       this.state = state;
       this.stuckSpeedMultiplier = stuckSpeedMultiplier;
    }

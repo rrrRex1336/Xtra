@@ -5,18 +5,18 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ambient.AmbientCreature;
-import net.minecraft.world.entity.animal.Animal;
-import net.minecraft.world.entity.animal.WaterAnimal;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
-import net.minecraft.world.entity.boss.EnderDragonPart;
-import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
-import net.minecraft.world.entity.monster.Monster;
-import net.minecraft.world.entity.monster.Slime;
-import net.minecraft.world.entity.npc.AbstractVillager;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.boss.dragon.EnderDragonEntity;
+import net.minecraft.entity.boss.dragon.EnderDragonPart;
+import net.minecraft.entity.mob.AmbientEntity;
+import net.minecraft.entity.mob.HostileEntity;
+import net.minecraft.entity.mob.SlimeEntity;
+import net.minecraft.entity.mob.WaterCreatureEntity;
+import net.minecraft.entity.passive.AbstractHorseEntity;
+import net.minecraft.entity.passive.AnimalEntity;
+import net.minecraft.entity.passive.MerchantEntity;
+import net.minecraft.entity.player.PlayerEntity;
 
 /**
  * @Author：jiuxian_baka
@@ -45,26 +45,26 @@ public class Target extends Module {
     public boolean isTarget(Entity entity) {
         if (!(entity instanceof LivingEntity)) return false;
         if (entity == mc.player) return false;
-        if (entity instanceof Player && entity.isSpectator()) return false;
+        if (entity instanceof PlayerEntity && entity.isSpectator()) return false;
         if (!entity.isAlive()) return false;
 
         if (entity.isInvisible() && !invisibles.getCurrentValue()) {
             return false;
         }
 
-        if (entity instanceof Player) {
+        if (entity instanceof PlayerEntity) {
             return player.getCurrentValue();
         }
 
-        if (entity instanceof AbstractVillager) {
+        if (entity instanceof MerchantEntity) {
             return villager.getCurrentValue();
         }
 
-        if (entity instanceof Monster || entity instanceof Slime || entity instanceof EnderDragon || entity instanceof EnderDragonPart) {
+        if (entity instanceof HostileEntity || entity instanceof SlimeEntity || entity instanceof EnderDragonEntity || entity instanceof EnderDragonPart) {
             return mobs.getCurrentValue();
         }
 
-        if (entity instanceof Animal || entity instanceof AmbientCreature || entity instanceof WaterAnimal || entity instanceof AbstractHorse) {
+        if (entity instanceof AnimalEntity || entity instanceof AmbientEntity || entity instanceof WaterCreatureEntity || entity instanceof AbstractHorseEntity) {
             return animals.getCurrentValue();
         }
 

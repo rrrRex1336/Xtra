@@ -1,8 +1,8 @@
 package awa.qwq.ovo.Naven.utils;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.util.math.Vec3d;
 
 public class RegionPos {
    private int x;
@@ -20,8 +20,8 @@ public class RegionPos {
       return new RegionPos(-this.x, -this.z);
    }
 
-   public Vec3 toVec3() {
-      return new Vec3((double)this.x, 0.0, (double)this.z);
+   public Vec3d toVec3() {
+      return new Vec3d((double)this.x, 0.0, (double)this.z);
    }
 
    public BlockPos toBlockPos() {

@@ -9,7 +9,7 @@ import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.client.CameraType;
+import net.minecraft.client.option.Perspective;
 
 @ModuleInfo(
    name = "ViewClip",
@@ -37,13 +37,13 @@ public class ViewClip extends Module {
    public BooleanValue fixSkipTickUpdateAnimation = ValueBuilder.create(this, "Fix Skip Tick Update Animation")
            .setDefaultBooleanValue(false).build().getBooleanValue();
    public SmoothAnimationTimer personViewAnimation = new SmoothAnimationTimer(100.0F);
-   CameraType lastPersonView;
+   Perspective lastPersonView;
 
    @EventTarget
    public void onRender(EventRender2D e) {
-      if (this.lastPersonView != mc.options.getCameraType()) {
-         this.lastPersonView = mc.options.getCameraType();
-         if (this.lastPersonView == CameraType.FIRST_PERSON || this.lastPersonView == CameraType.THIRD_PERSON_BACK) {
+      if (this.lastPersonView != mc.options.getPerspective()) {
+         this.lastPersonView = mc.options.getPerspective();
+         if (this.lastPersonView == Perspective.FIRST_PERSON || this.lastPersonView == Perspective.THIRD_PERSON_BACK) {
             this.personViewAnimation.value = 0.0F;
          }
       }

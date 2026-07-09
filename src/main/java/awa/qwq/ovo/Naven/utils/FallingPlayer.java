@@ -1,8 +1,8 @@
 package awa.qwq.ovo.Naven.utils;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.util.Mth;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.math.MathHelper;
 
 public class FallingPlayer {
    public double x;
@@ -15,7 +15,7 @@ public class FallingPlayer {
    private final float strafe;
    private final float forward;
    private float jumpMovementFactor;
-   private Minecraft mc = Minecraft.getInstance();
+   private MinecraftClient mc = MinecraftClient.getInstance();
 
    public FallingPlayer(double x, double y, double z, double motionX, double motionY, double motionZ, float yaw, float strafe, float forward) {
       this.x = x;
@@ -29,21 +29,21 @@ public class FallingPlayer {
       this.forward = forward;
    }
 
-   public FallingPlayer(Player player) {
+   public FallingPlayer(PlayerEntity player) {
       this(
          player.getX(),
          player.getY(),
          player.getZ(),
-         player.getDeltaMovement().x,
-         player.getDeltaMovement().y,
-         player.getDeltaMovement().z,
-         player.getYRot(),
-         player.xxa,
-         player.zza
+         player.getVelocity().x,
+         player.getVelocity().y,
+         player.getVelocity().z,
+         player.getYaw(),
+         player.sidewaysSpeed,
+         player.forwardSpeed
       );
-      float f = player.level().getBlockState(player.blockPosition()).getBlock().getJumpFactor();
-      float f1 = player.level().getBlockState(player.getOnPos()).getBlock().getJumpFactor();
-      float jumpingVelocity = 0.42F * ((double)f == 1.0 ? f1 : f) + player.getJumpBoostPower();
+      float f = player.getWorld().getBlockState(player.getBlockPos()).getBlock().getJumpVelocityMultiplier();
+      float f1 = player.getWorld().getBlockState(player.getSteppingPos()).getBlock().getJumpVelocityMultiplier();
+      float jumpingVelocity = 0.42F * ((double)f == 1.0 ? f1 : f) + player.getJumpBoostVelocityModifier();
       this.jumpMovementFactor = jumpingVelocity;
    }
 
@@ -52,7 +52,7 @@ public class FallingPlayer {
       float fw = this.forward;
       float v = sr * sr + fw * fw;
       if (v >= 1.0E-4F) {
-         v = Mth.sqrt(v);
+         v = MathHelper.sqrt(v);
          if (v < 1.0F) {
             v = 1.0F;
          }
@@ -65,8 +65,8 @@ public class FallingPlayer {
          v = fixedJumpFactor / v;
          sr *= v;
          fw *= v;
-         float f1 = Mth.sin(this.yaw * (float) Math.PI / 180.0F);
-         float f2 = Mth.cos(this.yaw * (float) Math.PI / 180.0F);
+         float f1 = MathHelper.sin(this.yaw * (float) Math.PI / 180.0F);
+         float f2 = MathHelper.cos(this.yaw * (float) Math.PI / 180.0F);
          this.motionX += (double)(sr * f2 - fw * f1);
          this.motionZ += (double)(fw * f2 + sr * f1);
       }
@@ -83,7 +83,7 @@ public class FallingPlayer {
       float fw = this.forward * 0.98F;
       float v = sr * sr + fw * fw;
       if (v >= 1.0E-4F) {
-         v = Mth.sqrt(v);
+         v = MathHelper.sqrt(v);
          if (v < 1.0F) {
             v = 1.0F;
          }
@@ -96,8 +96,8 @@ public class FallingPlayer {
          v = fixedJumpFactor / v;
          sr *= v;
          fw *= v;
-         float f1 = Mth.sin(this.yaw * (float) Math.PI / 180.0F);
-         float f2 = Mth.cos(this.yaw * (float) Math.PI / 180.0F);
+         float f1 = MathHelper.sin(this.yaw * (float) Math.PI / 180.0F);
+         float f2 = MathHelper.cos(this.yaw * (float) Math.PI / 180.0F);
          this.motionX += (double)(sr * f2 - fw * f1);
          this.motionZ += (double)(fw * f2 + sr * f1);
       }

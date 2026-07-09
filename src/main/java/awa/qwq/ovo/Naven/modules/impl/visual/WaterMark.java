@@ -69,7 +69,7 @@ public class WaterMark extends Module {
 
     @EventTarget
     public void onRender(EventRender2D e) {
-        e.getStack().pushPose();
+        e.getStack().push();
 
         if (mode.isCurrentMode("Naven")) {
             CustomTextRenderer font = Fonts.opensans;
@@ -85,7 +85,7 @@ public class WaterMark extends Module {
             String userDisplay = userName + "[" + userRole + "]";
 
             String text = "Naven | " + Version.getVersion() + " | " + userDisplay + "§r | " +
-                    StringUtils.split(mc.fpsString, " ")[0] + " FPS | " + format.format(new Date());
+                    StringUtils.split(mc.fpsDebugString, " ")[0] + " FPS | " + format.format(new Date());
 
             this.width = font.getWidth(text, this.watermarkSize.getCurrentValue()) + 14.0F;
             this.watermarkHeight = (float) font.getHeight(true, this.watermarkSize.getCurrentValue());
@@ -113,7 +113,7 @@ public class WaterMark extends Module {
             CustomTextRenderer font = Fonts.misans;
             float fontSize = 0.65F;
 
-            String fps = StringUtils.split(mc.fpsString, " ")[0];
+            String fps = StringUtils.split(mc.fpsDebugString, " ")[0];
             String clientName = Naven.CLIENT_DISPLAY_NAME;
             String firstLetter = clientName.substring(0, 1);
             String restLetters = clientName.substring(1);
@@ -138,7 +138,7 @@ public class WaterMark extends Module {
             font.render(e.getStack(), fpsText, xOffset, yOffset, Color.WHITE, true, fontSize);
         }
 
-        e.getStack().popPose();
+        e.getStack().pop();
     }
 
     private void prepareHudRenderState() {

@@ -6,10 +6,6 @@ import awa.qwq.ovo.Naven.modules.impl.visual.Interface;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.utils.StencilUtils;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.ChatComponent;
-import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,8 +16,12 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.awt.Color;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.hud.ChatHud;
+import net.minecraft.text.Text;
+import net.minecraft.util.math.MathHelper;
 
-@Mixin(value = ChatComponent.class, priority = 1000)
+@Mixin(value = ChatHud.class, priority = 1000)
 public abstract class MixinChatComponent {
 
     @Unique
@@ -34,22 +34,22 @@ public abstract class MixinChatComponent {
     private static int lastMessageCount = 0;
 
     @ModifyVariable(
-            method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;ILnet/minecraft/client/GuiMessageTag;Z)V",
+            method = "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;ILnet/minecraft/client/gui/hud/MessageIndicator;Z)V",
             at = @At("HEAD"),
             argsOnly = true,
             ordinal = 0
     )
-    private Component onAddInternalMessage(Component component) {
+    private Text onAddInternalMessage(Text component) {
         return ChatClient.decorateChatComponent(component);
     }
 
     @ModifyVariable(
-            method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/GuiMessageTag;)V",
+            method = "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;Lnet/minecraft/client/gui/hud/MessageIndicator;)V",
             at = @At("HEAD"),
             argsOnly = true,
             ordinal = 0
     )
-    private Component onAddPublicMessage(Component component) {
+    private Text onAddPublicMessage(Text component) {
         return ChatClient.decorateChatComponent(component);
     }
 
@@ -57,7 +57,7 @@ public abstract class MixinChatComponent {
             method = "render",
             at = @At("HEAD")
     )
-    private void onRenderHead(GuiGraphics guiGraphics, int p_283491_, int p_282406_, int p_283111_, CallbackInfo ci) {
+    private void onRenderHead(DrawContext guiGraphics, int p_283491_, int p_282406_, int p_283111_, CallbackInfo ci) {
         Interface interfaceModule = getInterfaceModule();
         if (interfaceModule == null || !interfaceModule.chatScreen.getCurrentValue()) {
             return;
@@ -79,10 +79,10 @@ public abstract class MixinChatComponent {
             method = "render",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/client/gui/GuiGraphics;fill(IIIII)V"
+                    target = "Lnet/minecraft/client/gui/DrawContext;fill(IIIII)V"
             )
     )
-    private void redirectChatFill(GuiGraphics instance, int x1, int y1, int x2, int y2, int color) {
+    private void redirectChatFill(DrawContext instance, int x1, int y1, int x2, int y2, int color) {
         // 检查是否启用聊天优化
         try {
             Interface interfaceModule = (Interface) Naven.getInstance().getModuleManager().getModule(Interface.class);
@@ -96,7 +96,7 @@ public abstract class MixinChatComponent {
                     // 绘制圆角矩形
                     int backgroundColor = new Color(0, 0, 0, (color >> 24) & 0xFF).getRGB();
                     RenderUtils.drawRoundedRect(
-                            instance.pose(),
+                            instance.getMatrices(),
                             x1,
                             y1,
                             width,
@@ -117,15 +117,15 @@ public abstract class MixinChatComponent {
     }
 
     @Unique
-    private void drawChatBackground(GuiGraphics guiGraphics, ChatComponent chat) {
+    private void drawChatBackground(DrawContext guiGraphics, ChatHud chat) {
         float alpha = Math.max(animation.value / 100.0f, 0.3f);
 
-        int screenWidth = guiGraphics.guiWidth();
-        int screenHeight = guiGraphics.guiHeight();
+        int screenWidth = guiGraphics.getScaledWindowWidth();
+        int screenHeight = guiGraphics.getScaledWindowHeight();
 
         // 计算聊天区域（根据源码中的计算）
-        int chatWidth = Mth.floor(chat.getWidth() * chat.getScale());
-        int chatHeight = Mth.floor(chat.getHeight() * chat.getScale());
+        int chatWidth = MathHelper.floor(chat.getWidth() * chat.getChatScale());
+        int chatHeight = MathHelper.floor(chat.getHeight() * chat.getChatScale());
 
         // 位置：源码中是屏幕底部，上方留40像素
         int chatX = 2;
@@ -137,7 +137,7 @@ public abstract class MixinChatComponent {
         // 绘制圆角矩形背景（类似Interface）
         int backgroundColor = new Color(0, 0, 0, (int)(160 * alpha)).getRGB();
         RenderUtils.drawRoundedRect(
-                guiGraphics.pose(),
+                guiGraphics.getMatrices(),
                 chatX,
                 chatY,
                 chatWidth,
@@ -149,7 +149,7 @@ public abstract class MixinChatComponent {
         // 顶部装饰条（类似Interface的header）
         int headerColor = new Color(150, 45, 45, (int)(255 * alpha)).getRGB();
         RenderUtils.fillBound(
-                guiGraphics.pose(),
+                guiGraphics.getMatrices(),
                 chatX,
                 chatY,
                 chatWidth,
@@ -160,7 +160,7 @@ public abstract class MixinChatComponent {
         // 模糊效果
         int blurColor = new Color(0, 0, 0, (int)(80 * alpha)).getRGB();
         RenderUtils.fillBound(
-                guiGraphics.pose(),
+                guiGraphics.getMatrices(),
                 chatX,
                 chatY,
                 chatWidth,
@@ -173,7 +173,7 @@ public abstract class MixinChatComponent {
         // 边框
         int borderColor = new Color(150, 45, 45, (int)(180 * alpha)).getRGB();
         RenderUtils.drawRoundedRect(
-                guiGraphics.pose(),
+                guiGraphics.getMatrices(),
                 chatX + 0.5f,
                 chatY + 0.5f,
                 chatWidth - 1,
@@ -190,7 +190,7 @@ public abstract class MixinChatComponent {
             int glowColor = new Color(150, 45, 45, (int)(120 * glowAlpha)).getRGB();
 
             RenderUtils.drawRoundedRect(
-                    guiGraphics.pose(),
+                    guiGraphics.getMatrices(),
                     chatX - 3,
                     chatY - 3,
                     chatWidth + 6,
@@ -208,7 +208,7 @@ public abstract class MixinChatComponent {
             method = "render",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/client/gui/GuiGraphics;fill(IIIII)V",
+                    target = "Lnet/minecraft/client/gui/DrawContext;fill(IIIII)V",
                     ordinal = 0
             ),
             index = 4

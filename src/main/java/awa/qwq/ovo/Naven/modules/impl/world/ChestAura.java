@@ -22,18 +22,18 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import java.util.Comparator;
 import java.util.Optional;
-import net.minecraft.client.gui.screens.inventory.ContainerScreen;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.ChestType;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.ChestBlock;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.block.entity.ChestBlockEntity;
+import net.minecraft.block.enums.ChestType;
+import net.minecraft.client.gui.screen.ingame.GenericContainerScreen;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(name = "ChestAura", description = "Automatically aims at and opens the nearest unopened chest.", category = Category.WORLD)
 public class ChestAura extends Module {
@@ -88,11 +88,11 @@ public class ChestAura extends Module {
 
     @EventTarget
     public void onRunTicks(EventRunTicks event) {
-        if (event.getType() != EventType.PRE || mc.player == null || mc.level == null || mc.gameMode == null) {
+        if (event.getType() != EventType.PRE || mc.player == null || mc.world == null || mc.interactionManager == null) {
             return;
         }
 
-        if (mc.screen instanceof ContainerScreen) {
+        if (mc.currentScreen instanceof GenericContainerScreen) {
             if (this.target != null) {
                 this.applyRotation();
                 this.startCooldown();
@@ -148,25 +148,25 @@ public class ChestAura extends Module {
         double maxDistanceSq = this.range.getCurrentValue() * this.range.getCurrentValue();
         return ChunkUtils.getLoadedBlockEntities()
                 .filter(blockEntity -> blockEntity instanceof ChestBlockEntity)
-                .map(BlockEntity::getBlockPos)
+                .map(BlockEntity::getPos)
                 .map(this::normalizeChestPos)
                 .distinct()
                 .filter(this::isClickableChest)
                 .filter(pos -> !this.isOpened(pos))
-                .filter(pos -> mc.player.distanceToSqr(center(pos)) <= maxDistanceSq)
+                .filter(pos -> mc.player.squaredDistanceTo(center(pos)) <= maxDistanceSq)
                 .map(pos -> new Target(pos, this.createHitResult(pos), this.getRotation(pos), Phase.ROTATING))
-                .min(Comparator.comparingDouble(target -> mc.player.distanceToSqr(center(target.pos))));
+                .min(Comparator.comparingDouble(target -> mc.player.squaredDistanceTo(center(target.pos))));
     }
 
     private void interact(Target target) {
         this.chestRotations = target.rotation;
-        NetworkUtils.sendPacketNoEvent(new ServerboundMovePlayerPacket.Rot(
+        NetworkUtils.sendPacketNoEvent(new PlayerMoveC2SPacket.LookAndOnGround(
                 target.rotation.x,
                 target.rotation.y,
-                mc.player.onGround()
+                mc.player.isOnGround()
         ));
-        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, target.hitResult);
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, target.hitResult);
+        mc.player.swingHand(Hand.MAIN_HAND);
     }
 
     private void applyRotation() {
@@ -181,32 +181,32 @@ public class ChestAura extends Module {
 
     private BlockHitResult createHitResult(BlockPos pos) {
         Direction face = this.getFacingFace(pos);
-        Vec3 hitVec = new Vec3(
-                pos.getX() + 0.5D + face.getStepX() * 0.5D,
-                pos.getY() + 0.5D + face.getStepY() * 0.5D,
-                pos.getZ() + 0.5D + face.getStepZ() * 0.5D
+        Vec3d hitVec = new Vec3d(
+                pos.getX() + 0.5D + face.getOffsetX() * 0.5D,
+                pos.getY() + 0.5D + face.getOffsetY() * 0.5D,
+                pos.getZ() + 0.5D + face.getOffsetZ() * 0.5D
         );
         return new BlockHitResult(hitVec, face, pos, false);
     }
 
     private Vector2f getRotation(BlockPos pos) {
-        return RotationUtils.getRotations(this.createHitResult(pos).getLocation());
+        return RotationUtils.getRotations(this.createHitResult(pos).getPos());
     }
 
     private Direction getFacingFace(BlockPos pos) {
-        Vec3 eye = mc.player.getEyePosition();
-        Vec3 blockCenter = center(pos);
-        return Direction.getNearest(eye.x - blockCenter.x, eye.y - blockCenter.y, eye.z - blockCenter.z);
+        Vec3d eye = mc.player.getEyePos();
+        Vec3d blockCenter = center(pos);
+        return Direction.getFacing(eye.x - blockCenter.x, eye.y - blockCenter.y, eye.z - blockCenter.z);
     }
 
     private boolean isClickableChest(BlockPos pos) {
-        if (pos == null || mc.level == null) {
+        if (pos == null || mc.world == null) {
             return false;
         }
-        BlockState state = mc.level.getBlockState(pos);
+        BlockState state = mc.world.getBlockState(pos);
         return state.getBlock() instanceof ChestBlock
-                && state.hasProperty(ChestBlock.TYPE)
-                && state.getValue(ChestBlock.TYPE) != ChestType.LEFT;
+                && state.contains(ChestBlock.CHEST_TYPE)
+                && state.get(ChestBlock.CHEST_TYPE) != ChestType.LEFT;
     }
 
     private boolean isOpened(BlockPos pos) {
@@ -215,15 +215,15 @@ public class ChestAura extends Module {
     }
 
     private BlockPos normalizeChestPos(BlockPos pos) {
-        if (pos == null || mc.level == null) {
+        if (pos == null || mc.world == null) {
             return pos;
         }
-        BlockState state = mc.level.getBlockState(pos);
-        if (!(state.getBlock() instanceof ChestBlock) || !state.hasProperty(ChestBlock.TYPE)) {
+        BlockState state = mc.world.getBlockState(pos);
+        if (!(state.getBlock() instanceof ChestBlock) || !state.contains(ChestBlock.CHEST_TYPE)) {
             return pos;
         }
-        return state.getValue(ChestBlock.TYPE) == ChestType.LEFT
-                ? pos.relative(ChestBlock.getConnectedDirection(state))
+        return state.get(ChestBlock.CHEST_TYPE) == ChestType.LEFT
+                ? pos.offset(ChestBlock.getFacing(state))
                 : pos;
     }
 
@@ -253,8 +253,8 @@ public class ChestAura extends Module {
         this.waitTicks = 0;
     }
 
-    private static Vec3 center(BlockPos pos) {
-        return new Vec3(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+    private static Vec3d center(BlockPos pos) {
+        return new Vec3d(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
     }
 
     private enum Phase {

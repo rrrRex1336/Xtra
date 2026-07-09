@@ -8,19 +8,19 @@ import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.utils.StencilUtils;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.multiplayer.ServerData;
 import org.apache.commons.lang3.StringUtils;
 
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.network.ServerInfo;
+import net.minecraft.client.util.math.MatrixStack;
 
 public class IslandManager {
-    protected static final Minecraft mc = Minecraft.getInstance();
+    protected static final MinecraftClient mc = MinecraftClient.getInstance();
 
     private static final Color CLIENT_NAME_COLOR = new Color(150, 45, 45, 255);
     private static final Color PING_COLOR = new Color(50, 200, 50, 255);
@@ -92,7 +92,7 @@ public class IslandManager {
                 }
             } catch (Exception ex) {
             }
-            String fpsText = StringUtils.split(mc.fpsString, " ")[0] + " FPS";
+            String fpsText = StringUtils.split(mc.fpsDebugString, " ")[0] + " FPS";
             String serverIP = getCurrentServerIP();
             String latencyText = getPingText();
 
@@ -127,18 +127,18 @@ public class IslandManager {
         }
     }
 
-    public void renderShader(GuiGraphics graphics) {
+    public void renderShader(DrawContext graphics) {
         IslandContent activeContent = getActiveContent();
         if (activeContent == null) {
-            RenderUtils.drawRoundedRect(graphics.pose(), posX.value, posY.value, animW.value, animH.value, 10, new Color(0, 0, 0, 160).getRGB()); // 从8增加到12
+            RenderUtils.drawRoundedRect(graphics.getMatrices(), posX.value, posY.value, animW.value, animH.value, 10, new Color(0, 0, 0, 160).getRGB()); // 从8增加到12
         } else {
-            RenderUtils.drawRoundedRect(graphics.pose(), posX.value, posY.value, animW.value, animH.value, 10, new Color(0, 0, 0, 160).getRGB()); // 从8增加到12
+            RenderUtils.drawRoundedRect(graphics.getMatrices(), posX.value, posY.value, animW.value, animH.value, 10, new Color(0, 0, 0, 160).getRGB()); // 从8增加到12
         }
     }
 
-    public void render(GuiGraphics graphics) {
-        int screenWidth = mc.getWindow().getGuiScaledWidth();
-        int screenHeight = mc.getWindow().getGuiScaledHeight();
+    public void render(DrawContext graphics) {
+        int screenWidth = mc.getWindow().getScaledWidth();
+        int screenHeight = mc.getWindow().getScaledHeight();
 
         float[] dimensions = getActiveDimensions();
         float targetWidth = dimensions[0];
@@ -173,36 +173,36 @@ public class IslandManager {
         IslandContent activeContent = getActiveContent();
 
         StencilUtils.write(false);
-        RenderUtils.drawRoundedRect(graphics.pose(), posX.value, posY.value, animW.value, animH.value, 10, 0xFFFFFFFF); // 从8增加到12
+        RenderUtils.drawRoundedRect(graphics.getMatrices(), posX.value, posY.value, animW.value, animH.value, 10, 0xFFFFFFFF); // 从8增加到12
         StencilUtils.erase(true);
-        RenderUtils.drawRoundedRect(graphics.pose(), posX.value, posY.value, animW.value, animH.value, 10, new Color(20, 20, 20, 160).getRGB()); // 从8增加到12
+        RenderUtils.drawRoundedRect(graphics.getMatrices(), posX.value, posY.value, animW.value, animH.value, 10, new Color(20, 20, 20, 160).getRGB()); // 从8增加到12
 
         if (activeContent != null) {
-            activeContent.render(graphics, graphics.pose(), posX.value, posY.value);
+            activeContent.render(graphics, graphics.getMatrices(), posX.value, posY.value);
         } else {
-            renderDefaultContent(graphics.pose());
+            renderDefaultContent(graphics.getMatrices());
         }
 
         StencilUtils.dispose();
     }
 
     public String getCurrentServerIP() {
-        ServerData serverData = Minecraft.getInstance().getCurrentServer();
+        ServerInfo serverData = MinecraftClient.getInstance().getCurrentServerEntry();
         if (serverData != null) {
-            return serverData.ip;
+            return serverData.address;
         }
         return "SinglePlayer";
     }
 
     private String getPingText() {
-        if (mc.player == null || mc.player.connection == null) {
+        if (mc.player == null || mc.player.networkHandler == null) {
             return "0ms";
         }
 
         try {
-            var playerList = mc.player.connection.getListedOnlinePlayers();
+            var playerList = mc.player.networkHandler.getListedPlayerListEntries();
             for (var playerInfo : playerList) {
-                if (playerInfo.getProfile().getId().equals(mc.player.getUUID())) {
+                if (playerInfo.getProfile().getId().equals(mc.player.getUuid())) {
                     int ping = playerInfo.getLatency();
                     if (ping < 0) {
                         return "0ms";
@@ -216,7 +216,7 @@ public class IslandManager {
         return "0ms";
     }
 
-    private void renderDefaultContent(PoseStack stack) {
+    private void renderDefaultContent(MatrixStack stack) {
         String username = "Shiroko";
         try {
             String verifiedName = VerifyClient.getUserName();
@@ -226,7 +226,7 @@ public class IslandManager {
         } catch (Exception e) {
         }
 
-        String fpsText = StringUtils.split(mc.fpsString, " ")[0] + " FPS";
+        String fpsText = StringUtils.split(mc.fpsDebugString, " ")[0] + " FPS";
         String serverIP = getCurrentServerIP();
         String latencyText = getPingText();
 

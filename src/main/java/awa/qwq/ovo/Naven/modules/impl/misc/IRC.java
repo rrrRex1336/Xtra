@@ -16,8 +16,8 @@ import awa.qwq.ovo.Naven.ui.notification.NotificationLevel;
 import awa.qwq.ovo.Naven.values.Value;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.text.Text;
 
 @ModuleInfo(
         name = "IRC",
@@ -104,12 +104,12 @@ public class IRC extends Module {
             return;
         }
 
-        event.setComponent(Component.literal(ircStatusPrefix(playerName) + playerName));
+        event.setComponent(Text.literal(ircStatusPrefix(playerName) + playerName));
     }
 
     @EventTarget
     public void onAttack(EventAttack event) {
-        if (event.isPost() || !(event.getTarget() instanceof Player player)) {
+        if (event.isPost() || !(event.getTarget() instanceof PlayerEntity player)) {
             return;
         }
 

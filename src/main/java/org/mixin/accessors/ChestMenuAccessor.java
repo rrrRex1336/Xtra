@@ -1,12 +1,12 @@
 package org.mixin.accessors;
 
-import net.minecraft.world.Container;
-import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.inventory.Inventory;
+import net.minecraft.screen.GenericContainerScreenHandler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(ChestMenu.class)
+@Mixin(GenericContainerScreenHandler.class)
 public interface ChestMenuAccessor {
-    @Accessor("container")
-    Container getContainer();
+    @Accessor("inventory")
+    Inventory getContainer();
 }

@@ -11,22 +11,29 @@ import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.AddonsValue;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
-import net.minecraft.client.Minecraft;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.decoration.ArmorStand;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.level.block.*;
-import net.minecraft.world.level.block.entity.*;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.ChestType;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.Vec3;
-
+import net.minecraft.block.BlockState;
+import net.minecraft.block.BrewingStandBlock;
+import net.minecraft.block.ChestBlock;
+import net.minecraft.block.DispenserBlock;
+import net.minecraft.block.EnderChestBlock;
+import net.minecraft.block.FurnaceBlock;
+import net.minecraft.block.HopperBlock;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.block.entity.ChestBlockEntity;
+import net.minecraft.block.enums.ChestType;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.passive.VillagerEntity;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.block.*;
+import net.minecraft.block.entity.*;
 import java.awt.*;
 import java.util.List;
 import java.util.Optional;
@@ -62,7 +69,7 @@ public class Piercing extends Module {
             .build()
             .getBooleanValue();
 
-    private final Minecraft mc = Minecraft.getInstance();
+    private final MinecraftClient mc = MinecraftClient.getInstance();
     private final List<RenderInfo> renderList = new CopyOnWriteArrayList<>();
     private boolean lastKeyUseState = false;
 
@@ -72,9 +79,9 @@ public class Piercing extends Module {
             return;
         }
 
-        boolean currentKeyUse = this.mc.options.keyUse.isDown();
+        boolean currentKeyUse = this.mc.options.useKey.isPressed();
 
-        if (this.mc.player == null || this.mc.level == null || this.mc.gameMode == null || this.mc.screen != null) {
+        if (this.mc.player == null || this.mc.world == null || this.mc.interactionManager == null || this.mc.currentScreen != null) {
             this.lastKeyUseState = currentKeyUse;
             return;
         }
@@ -85,10 +92,10 @@ public class Piercing extends Module {
         }
 
         if (currentKeyUse && !this.lastKeyUseState) {
-            double range = this.mc.gameMode.getPickRange();
-            Vec3 eyePos = this.mc.player.getEyePosition(1.0f);
-            Vec3 lookVec = this.mc.player.getLookAngle();
-            Vec3 reachEnd = eyePos.add(lookVec.scale(range));
+            double range = this.mc.interactionManager.getReachDistance();
+            Vec3d eyePos = this.mc.player.getCameraPosVec(1.0f);
+            Vec3d lookVec = this.mc.player.getRotationVector();
+            Vec3d reachEnd = eyePos.add(lookVec.multiply(range));
 
             if (this.findAndInteractWithTarget(eyePos, reachEnd)) {
                 event.setCancelled(true);
@@ -102,21 +109,21 @@ public class Piercing extends Module {
     public void onRender(EventRender event) {
         this.renderList.clear();
 
-        if (!this.renderTags.getCurrentValue() || this.mc.player == null || this.mc.level == null) {
+        if (!this.renderTags.getCurrentValue() || this.mc.player == null || this.mc.world == null) {
             return;
         }
 
         double blockRenderRange = 6.0;
         double entityRenderRange = 8.0;
         float partialTicks = event.getRenderPartialTicks();
-        Vec3 cameraPos = this.mc.gameRenderer.getMainCamera().getPosition();
-        BlockPos playerPos = this.mc.player.blockPosition();
-        for (Entity entity : this.mc.level.getEntities(this.mc.player,
-                this.mc.player.getBoundingBox().inflate(entityRenderRange))) {
+        Vec3d cameraPos = this.mc.gameRenderer.getCamera().getPos();
+        BlockPos playerPos = this.mc.player.getBlockPos();
+        for (Entity entity : this.mc.world.getOtherEntities(this.mc.player,
+                this.mc.player.getBoundingBox().expand(entityRenderRange))) {
             if (!this.isTargetEntity(entity)) continue;
 
-            Vec3 renderPos = this.getEntityRenderPosition(entity, partialTicks);
-            if (renderPos.distanceToSqr(cameraPos) > entityRenderRange * entityRenderRange) continue;
+            Vec3d renderPos = this.getEntityRenderPosition(entity, partialTicks);
+            if (renderPos.squaredDistanceTo(cameraPos) > entityRenderRange * entityRenderRange) continue;
 
             Vector2f screenPos = ProjectionUtils.project(renderPos.x, renderPos.y, renderPos.z, partialTicks);
             if (screenPos == null) continue;
@@ -125,13 +132,13 @@ public class Piercing extends Module {
         }
 
         int rangeInt = (int) Math.ceil(blockRenderRange);
-        for (BlockPos pos : BlockPos.betweenClosed(playerPos.offset(-rangeInt, -rangeInt, -rangeInt),
-                playerPos.offset(rangeInt, rangeInt, rangeInt))) {
-            BlockState state = this.mc.level.getBlockState(pos);
+        for (BlockPos pos : BlockPos.iterate(playerPos.add(-rangeInt, -rangeInt, -rangeInt),
+                playerPos.add(rangeInt, rangeInt, rangeInt))) {
+            BlockState state = this.mc.world.getBlockState(pos);
             if (!this.isTargetContainer(pos, state)) continue;
 
-            Vec3 topCenter = new Vec3(pos.getX() + 0.5, pos.getY() + 1.2, pos.getZ() + 0.5);
-            if (topCenter.distanceToSqr(cameraPos) > blockRenderRange * blockRenderRange) continue;
+            Vec3d topCenter = new Vec3d(pos.getX() + 0.5, pos.getY() + 1.2, pos.getZ() + 0.5);
+            if (topCenter.squaredDistanceTo(cameraPos) > blockRenderRange * blockRenderRange) continue;
 
             Vector2f screenPos = ProjectionUtils.project(topCenter.x, topCenter.y, topCenter.z, partialTicks);
             if (screenPos == null) continue;
@@ -167,26 +174,26 @@ public class Piercing extends Module {
         }
     }
 
-    private Vec3 getEntityRenderPosition(Entity entity, float partialTicks) {
-        double x = entity.xOld + (entity.getX() - entity.xOld) * partialTicks;
-        double y = entity.yOld + (entity.getY() - entity.yOld) * partialTicks;
-        double z = entity.zOld + (entity.getZ() - entity.zOld) * partialTicks;
-        return new Vec3(x, y + (entity.getBbHeight() / 2.0f), z);
+    private Vec3d getEntityRenderPosition(Entity entity, float partialTicks) {
+        double x = entity.lastRenderX + (entity.getX() - entity.lastRenderX) * partialTicks;
+        double y = entity.lastRenderY + (entity.getY() - entity.lastRenderY) * partialTicks;
+        double z = entity.lastRenderZ + (entity.getZ() - entity.lastRenderZ) * partialTicks;
+        return new Vec3d(x, y + (entity.getHeight() / 2.0f), z);
     }
 
-    private boolean findAndInteractWithTarget(Vec3 eyePos, Vec3 reachEnd) {
+    private boolean findAndInteractWithTarget(Vec3d eyePos, Vec3d reachEnd) {
         Entity closestEntity = null;
-        Vec3 closestEntityHit = null;
+        Vec3d closestEntityHit = null;
         BlockHitResult closestBlockHit = null;
         double closestDistSq = Double.MAX_VALUE;
-        for (Entity entity : this.mc.level.getEntities(this.mc.player,
-                this.mc.player.getBoundingBox().inflate(reachEnd.distanceTo(eyePos)))) {
+        for (Entity entity : this.mc.world.getOtherEntities(this.mc.player,
+                this.mc.player.getBoundingBox().expand(reachEnd.distanceTo(eyePos)))) {
             if (!this.isTargetEntity(entity)) continue;
 
-            Optional<Vec3> hitOpt = entity.getBoundingBox().inflate(0.1).clip(eyePos, reachEnd);
+            Optional<Vec3d> hitOpt = entity.getBoundingBox().expand(0.1).raycast(eyePos, reachEnd);
             if (!hitOpt.isPresent()) continue;
 
-            double distSq = eyePos.distanceToSqr(hitOpt.get());
+            double distSq = eyePos.squaredDistanceTo(hitOpt.get());
             if (!(distSq < closestDistSq)) continue;
 
             closestDistSq = distSq;
@@ -196,22 +203,22 @@ public class Piercing extends Module {
         }
 
         for (BlockEntity be : ChunkUtils.getLoadedBlockEntities().toList()) {
-            BlockState state = be.getBlockState();
-            BlockPos pos = be.getBlockPos();
+            BlockState state = be.getCachedState();
+            BlockPos pos = be.getPos();
 
             if (!this.isTargetContainer(pos, state)) continue;
 
-            AABB box = this.getBlockBoundingBox(be);
+            Box box = this.getBlockBoundingBox(be);
             if (box == null) continue;
 
-            Optional<Vec3> hitOpt = box.clip(eyePos, reachEnd);
+            Optional<Vec3d> hitOpt = box.raycast(eyePos, reachEnd);
             if (!hitOpt.isPresent()) continue;
 
-            double distSq = eyePos.distanceToSqr(hitOpt.get());
+            double distSq = eyePos.squaredDistanceTo(hitOpt.get());
             if (!(distSq < closestDistSq)) continue;
 
             closestDistSq = distSq;
-            closestBlockHit = this.getStableBlockHit(be.getBlockPos(), box, hitOpt.get(), eyePos);
+            closestBlockHit = this.getStableBlockHit(be.getPos(), box, hitOpt.get(), eyePos);
             closestEntity = null;
             closestEntityHit = null;
         }
@@ -256,49 +263,49 @@ public class Piercing extends Module {
 
     private boolean isDoubleChest(BlockState state) {
         if (!(state.getBlock() instanceof ChestBlock)) return false;
-        return state.hasProperty(ChestBlock.TYPE) && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE;
+        return state.contains(ChestBlock.CHEST_TYPE) && state.get(ChestBlock.CHEST_TYPE) != ChestType.SINGLE;
     }
 
-    private AABB getBlockBoundingBox(BlockEntity be) {
+    private Box getBlockBoundingBox(BlockEntity be) {
         if (be instanceof ChestBlockEntity) {
-            BlockState state = be.getBlockState();
-            if (!state.hasProperty(ChestBlock.TYPE) || state.getValue(ChestBlock.TYPE) == ChestType.LEFT) {
+            BlockState state = be.getCachedState();
+            if (!state.contains(ChestBlock.CHEST_TYPE) || state.get(ChestBlock.CHEST_TYPE) == ChestType.LEFT) {
                 return null;
             }
 
-            BlockPos pos = be.getBlockPos();
-            AABB box = new AABB(pos);
+            BlockPos pos = be.getPos();
+            Box box = new Box(pos);
 
-            if (state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
-                Direction connectedDir = ChestBlock.getConnectedDirection(state);
+            if (state.get(ChestBlock.CHEST_TYPE) != ChestType.SINGLE) {
+                Direction connectedDir = ChestBlock.getFacing(state);
                 if (connectedDir != null) {
-                    box = box.minmax(new AABB(pos.relative(connectedDir)));
+                    box = box.union(new Box(pos.offset(connectedDir)));
                 }
             }
             return box;
         }
-        return new AABB(be.getBlockPos());
+        return new Box(be.getPos());
     }
 
-    private Vec3 getStableEntityHit(Entity entity) {
-        return new Vec3(entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ());
+    private Vec3d getStableEntityHit(Entity entity) {
+        return new Vec3d(entity.getX(), entity.getY() + entity.getHeight() * 0.5, entity.getZ());
     }
 
-    private BlockHitResult getStableBlockHit(BlockPos pos, AABB box, Vec3 hitPos, Vec3 eyePos) {
+    private BlockHitResult getStableBlockHit(BlockPos pos, Box box, Vec3d hitPos, Vec3d eyePos) {
         Direction face = this.getHitFace(box, hitPos, eyePos);
-        Vec3 stableHit = switch (face) {
-            case DOWN -> new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
-            case UP -> new Vec3(pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5);
-            case NORTH -> new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ());
-            case SOUTH -> new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 1.0);
-            case WEST -> new Vec3(pos.getX(), pos.getY() + 0.5, pos.getZ() + 0.5);
-            case EAST -> new Vec3(pos.getX() + 1.0, pos.getY() + 0.5, pos.getZ() + 0.5);
+        Vec3d stableHit = switch (face) {
+            case DOWN -> new Vec3d(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+            case UP -> new Vec3d(pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5);
+            case NORTH -> new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ());
+            case SOUTH -> new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 1.0);
+            case WEST -> new Vec3d(pos.getX(), pos.getY() + 0.5, pos.getZ() + 0.5);
+            case EAST -> new Vec3d(pos.getX() + 1.0, pos.getY() + 0.5, pos.getZ() + 0.5);
         };
 
         return new BlockHitResult(stableHit, face, pos, false);
     }
 
-    private Direction getHitFace(AABB box, Vec3 hitPos, Vec3 eyePos) {
+    private Direction getHitFace(Box box, Vec3d hitPos, Vec3d eyePos) {
         double west = Math.abs(hitPos.x - box.minX);
         double east = Math.abs(hitPos.x - box.maxX);
         double down = Math.abs(hitPos.y - box.minY);
@@ -325,10 +332,10 @@ public class Piercing extends Module {
     private boolean isTargetEntity(Entity entity) {
         List<String> selected = this.entitySelect.getSelectedValues();
 
-        if (selected.contains("Villager") && entity instanceof Villager) {
+        if (selected.contains("Villager") && entity instanceof VillagerEntity) {
             return true;
         }
-        if (selected.contains("Armor Stand") && entity instanceof ArmorStand) {
+        if (selected.contains("Armor Stand") && entity instanceof ArmorStandEntity) {
             return true;
         }
         if (selected.contains("Named Entity") && entity.hasCustomName()) {
@@ -339,22 +346,22 @@ public class Piercing extends Module {
         return false;
     }
 
-    private void interactWithEntity(Entity entity, Vec3 hitPos) {
-        if (this.mc.gameMode == null || this.mc.player == null || hitPos == null) {
+    private void interactWithEntity(Entity entity, Vec3d hitPos) {
+        if (this.mc.interactionManager == null || this.mc.player == null || hitPos == null) {
             return;
         }
 
         EntityHitResult hitResult = new EntityHitResult(entity, hitPos);
-        this.mc.gameMode.interactAt(this.mc.player, entity, hitResult, InteractionHand.MAIN_HAND);
-        this.mc.gameMode.interact(this.mc.player, entity, InteractionHand.MAIN_HAND);
+        this.mc.interactionManager.interactEntityAtLocation(this.mc.player, entity, hitResult, Hand.MAIN_HAND);
+        this.mc.interactionManager.interactEntity(this.mc.player, entity, Hand.MAIN_HAND);
         ChatUtils.addChatMessage("Send InteractAt + Interact Packet");
-        this.mc.player.swing(InteractionHand.MAIN_HAND);
+        this.mc.player.swingHand(Hand.MAIN_HAND);
     }
 
     private void interactWithBlock(BlockHitResult hitResult) {
-        this.mc.gameMode.useItemOn(this.mc.player, InteractionHand.MAIN_HAND, hitResult);
+        this.mc.interactionManager.interactBlock(this.mc.player, Hand.MAIN_HAND, hitResult);
         ChatUtils.addChatMessage("Send UseItemOn Packet");
-        this.mc.player.swing(InteractionHand.MAIN_HAND);
+        this.mc.player.swingHand(Hand.MAIN_HAND);
     }
 
     private static class RenderInfo {

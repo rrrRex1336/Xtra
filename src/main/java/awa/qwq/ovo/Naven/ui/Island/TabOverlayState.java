@@ -1,27 +1,27 @@
 package awa.qwq.ovo.Naven.ui.Island;
 
-import net.minecraft.network.chat.Component;
+import net.minecraft.text.Text;
 
 public final class TabOverlayState {
-   private static volatile Component header;
-   private static volatile Component footer;
+   private static volatile Text header;
+   private static volatile Text footer;
 
    private TabOverlayState() {
    }
 
-   public static void setHeader(Component component) {
+   public static void setHeader(Text component) {
       header = component;
    }
 
-   public static void setFooter(Component component) {
+   public static void setFooter(Text component) {
       footer = component;
    }
 
-   public static Component getHeader() {
+   public static Text getHeader() {
       return header;
    }
 
-   public static Component getFooter() {
+   public static Text getFooter() {
       return footer;
    }
 }

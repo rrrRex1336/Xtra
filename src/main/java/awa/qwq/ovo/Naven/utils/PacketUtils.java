@@ -1,25 +1,24 @@
 package awa.qwq.ovo.Naven.utils;
 
 import org.mixin.accessors.ClientLevelAccessor;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.prediction.BlockStatePredictionHandler;
-import net.minecraft.client.multiplayer.prediction.PredictiveAction;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ServerGamePacketListener;
-
 import java.util.ArrayList;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.PendingUpdateManager;
+import net.minecraft.client.network.SequencedPacketCreator;
+import net.minecraft.network.listener.ServerPlayPacketListener;
+import net.minecraft.network.packet.Packet;
 
 public class PacketUtils {
-   private static final Minecraft mc = Minecraft.getInstance();
-   public static final ArrayList<Packet<ServerGamePacketListener>> queuedPackets = new ArrayList<>();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
+   public static final ArrayList<Packet<ServerPlayPacketListener>> queuedPackets = new ArrayList<>();
 
-   public static void sendSequencedPacket(PredictiveAction packetCreator) {
-      if (mc.getConnection() != null && mc.level != null) {
-         BlockStatePredictionHandler pendingUpdateManager = ((ClientLevelAccessor)mc.level).getBlockStatePredictionHandler().startPredicting();
+   public static void sendSequencedPacket(SequencedPacketCreator packetCreator) {
+      if (mc.getNetworkHandler() != null && mc.world != null) {
+         PendingUpdateManager pendingUpdateManager = ((ClientLevelAccessor)mc.world).getBlockStatePredictionHandler().incrementSequence();
 
          try {
-            int i = pendingUpdateManager.currentSequence();
-            mc.getConnection().send(packetCreator.predict(i));
+            int i = pendingUpdateManager.getSequence();
+            mc.getNetworkHandler().sendPacket(packetCreator.predict(i));
          } catch (Throwable var5) {
             if (pendingUpdateManager != null) {
                try {
@@ -38,22 +37,22 @@ public class PacketUtils {
       }
    }
 
-   public static void sendQueued(Packet<ServerGamePacketListener> packet) {
+   public static void sendQueued(Packet<ServerPlayPacketListener> packet) {
       if (mc.player == null) {
          return;
       }
       queuedPackets.add(packet);
-      mc.player.connection.send(packet);
+      mc.player.networkHandler.sendPacket(packet);
    }
 
-   public static void send(Packet<ServerGamePacketListener> packet) {
+   public static void send(Packet<ServerPlayPacketListener> packet) {
       if (mc.player == null) {
          return;
       }
-      mc.player.connection.send(packet);
+      mc.player.networkHandler.sendPacket(packet);
    }
 
-   public static void sendPacketNoEvent(Packet<ServerGamePacketListener> packet) {
+   public static void sendPacketNoEvent(Packet<ServerPlayPacketListener> packet) {
       if (mc.player == null) return;
       queuedPackets.add(packet);
       NetworkUtils.sendPacketNoEvent(packet);  // 用 NetworkUtils 的

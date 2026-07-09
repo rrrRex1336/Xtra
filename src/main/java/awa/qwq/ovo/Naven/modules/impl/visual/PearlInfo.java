@@ -17,21 +17,19 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.projectile.ThrownEnderpearl;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
-
-import java.awt.*;
-import java.util.List;
+import java.awt.Color;
 import java.util.*;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.projectile.thrown.EnderPearlEntity;
+import net.minecraft.item.Items;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 
 @ModuleInfo(
         name = "PearlInfo",
@@ -71,13 +69,13 @@ public class PearlInfo extends Module {
 
     private final Map<UUID, PredictedPearlInfo> predictedPearls = new HashMap<>();
     private final Set<UUID> processedPearls = new HashSet<>();
-    private Vec3 lastSafePosition = null;
+    private Vec3d lastSafePosition = null;
     private long lockedPositionExpireTime = 0;
     private Vector2f targetRotations = null;
     private boolean isAiming = false;
     private int aimingTicks = 0;
     private boolean triggerAction = false;
-    private static final List<Vec3> SAMPLE_POINTS = Arrays.asList(new Vec3(0.5, 0.5, 0.5), new Vec3(0.2, 0.5, 0.5), new Vec3(0.8, 0.5, 0.5), new Vec3(0.5, 0.5, 0.2), new Vec3(0.5, 0.5, 0.8));
+    private static final List<Vec3d> SAMPLE_POINTS = Arrays.asList(new Vec3d(0.5, 0.5, 0.5), new Vec3d(0.2, 0.5, 0.5), new Vec3d(0.8, 0.5, 0.5), new Vec3d(0.5, 0.5, 0.2), new Vec3d(0.5, 0.5, 0.8));
 
     @Override public void onEnable() { super.onEnable(); reset(); }
     @Override public void onDisable() {
@@ -106,7 +104,7 @@ public class PearlInfo extends Module {
 
     @EventTarget
     public void onMotion(EventRunTicks event) {
-        if (event.getType() != EventType.PRE || mc.player == null || mc.level == null) return;
+        if (event.getType() != EventType.PRE || mc.player == null || mc.world == null) return;
 
         updatePearlLogicStates();
         if (pearlCounter.getCurrentValue()) {
@@ -132,10 +130,10 @@ public class PearlInfo extends Module {
     private void updatePearlLogicStates() {
         Map<UUID, PredictedPearlInfo> updatedPearls = new HashMap<>();
         List<UUID> toRemove = new ArrayList<>();
-        for (Entity entity : mc.level.entitiesForRendering()) {
-            if (entity instanceof ThrownEnderpearl pearl) {
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity instanceof EnderPearlEntity pearl) {
                 if (hideMyOwnPearls.getCurrentValue() && Objects.equals(pearl.getOwner(), mc.player)) continue;
-                UUID uuid = pearl.getUUID();
+                UUID uuid = pearl.getUuid();
                 PredictedPearlInfo info = predictedPearls.computeIfAbsent(uuid, k -> new PredictedPearlInfo());
                 info.update(pearl);
                 updatedPearls.put(uuid, info);
@@ -178,19 +176,19 @@ public class PearlInfo extends Module {
     }
 
     private void updateLastKnownSafePosition() {
-        for (Entity entity : mc.level.entitiesForRendering()) {
-            if (entity instanceof ThrownEnderpearl pearl && !processedPearls.contains(pearl.getUUID())) {
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity instanceof EnderPearlEntity pearl && !processedPearls.contains(pearl.getUuid())) {
                 if (Objects.equals(pearl.getOwner(), mc.player)) continue;
-                Object[] data = PearlPhysicsUtil.predictPearlLandingWithTicks(pearl, mc.level);
-                Vec3 originalPos = (Vec3) data[0];
+                Object[] data = PearlPhysicsUtil.predictPearlLandingWithTicks(pearl, mc.world);
+                Vec3d originalPos = (Vec3d) data[0];
                 int ticksToLand = (int) data[1];
                 if (originalPos == null) continue;
-                processedPearls.add(pearl.getUUID());
-                if (!isEnemyPearlThreatening(originalPos) || !isInFov(originalPos) || !(mc.player.position().distanceTo(originalPos) >= minRange.getCurrentValue() && mc.player.position().distanceTo(originalPos) <= maxRange.getCurrentValue())) {
+                processedPearls.add(pearl.getUuid());
+                if (!isEnemyPearlThreatening(originalPos) || !isInFov(originalPos) || !(mc.player.getPos().distanceTo(originalPos) >= minRange.getCurrentValue() && mc.player.getPos().distanceTo(originalPos) <= maxRange.getCurrentValue())) {
                     if (debug.getCurrentValue() && !isEnemyPearlThreatening(originalPos)) ChatUtils.addChatMessage("§e[INFO]§7 Ignored non-threatening pearl.");
                     continue;
                 }
-                Vec3 safePos = findBestSafeLandingSpot(originalPos);
+                Vec3d safePos = findBestSafeLandingSpot(originalPos);
                 if (safePos != null) {
                     if (debug.getCurrentValue()) ChatUtils.addChatMessage(String.format("§a[LOCKED]§7 New safe spot: %.1f, %.1f, %.1f", safePos.x, safePos.y, safePos.z));
                     this.lastSafePosition = safePos;
@@ -203,7 +201,7 @@ public class PearlInfo extends Module {
     }
 
     private void startAiming() {
-        this.targetRotations = PearlPhysicsUtil.calculateOptimalRotations(mc.player.getEyePosition(), lastSafePosition);
+        this.targetRotations = PearlPhysicsUtil.calculateOptimalRotations(mc.player.getEyePos(), lastSafePosition);
         if (this.targetRotations != null) {
             this.isAiming = true;
             this.aimingTicks = 0;
@@ -221,10 +219,10 @@ public class PearlInfo extends Module {
             return;
         }
         if (debug.getCurrentValue()) ChatUtils.addChatMessage("§b[THROW]§7 Rotation synced. Firing pearl!");
-        int originalInvSlot = mc.player.getInventory().selected;
-        mc.player.getInventory().selected = pearlSlot;
-        mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-        mc.player.getInventory().selected = originalInvSlot;
+        int originalInvSlot = mc.player.getInventory().selectedSlot;
+        mc.player.getInventory().selectedSlot = pearlSlot;
+        mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+        mc.player.getInventory().selectedSlot = originalInvSlot;
     }
 
     private void reset() {
@@ -235,16 +233,16 @@ public class PearlInfo extends Module {
         if (processedPearls.size() > 50) processedPearls.clear();
     }
 
-    private Vec3 findBestSafeLandingSpot(Vec3 target) {
-        BlockPos originalPos = BlockPos.containing(target);
-        Vec3 viablePoint = findViablePointInBlock(originalPos);
+    private Vec3d findBestSafeLandingSpot(Vec3d target) {
+        BlockPos originalPos = BlockPos.ofFloored(target);
+        Vec3d viablePoint = findViablePointInBlock(originalPos);
         if (viablePoint != null) return viablePoint;
         int radius=8, x=0, z=0, dx=0, dz=-1;
         for (int i=0; i<Math.pow(radius*2+1,2); i++) {
             if ((-radius/2<=x && x<=radius/2) && (-radius/2<=z && z<=radius/2))
                 for (int yOff = 3; yOff >= -3; yOff--) {
-                    BlockPos finalPos = originalPos.offset(x, yOff, z);
-                    Vec3 finalViablePoint = findViablePointInBlock(finalPos);
+                    BlockPos finalPos = originalPos.add(x, yOff, z);
+                    Vec3d finalViablePoint = findViablePointInBlock(finalPos);
                     if (finalViablePoint != null) return finalViablePoint;
                 }
             if(x==z||(x<0&&x==-z)||(x>0&&x==1-z)){int tmp=dx;dx=-dz;dz=tmp;} x+=dx;z+=dz;
@@ -253,48 +251,48 @@ public class PearlInfo extends Module {
         return null;
     }
 
-    private Vec3 findViablePointInBlock(BlockPos pos) {
-        if (!isSafeFloor(pos.below()) || !hasHeadroom(pos)) return null;
-        for (Vec3 sampleOffset : SAMPLE_POINTS) {
-            Vec3 targetPoint = new Vec3(pos.getX() + sampleOffset.x, pos.getY() + sampleOffset.y, pos.getZ() + sampleOffset.z);
-            if (hasLineOfSight(targetPoint) && (!entityCheck.getCurrentValue() || PearlPhysicsUtil.isTrajectoryClear(mc.level, mc.player, targetPoint))) {
+    private Vec3d findViablePointInBlock(BlockPos pos) {
+        if (!isSafeFloor(pos.down()) || !hasHeadroom(pos)) return null;
+        for (Vec3d sampleOffset : SAMPLE_POINTS) {
+            Vec3d targetPoint = new Vec3d(pos.getX() + sampleOffset.x, pos.getY() + sampleOffset.y, pos.getZ() + sampleOffset.z);
+            if (hasLineOfSight(targetPoint) && (!entityCheck.getCurrentValue() || PearlPhysicsUtil.isTrajectoryClear(mc.world, mc.player, targetPoint))) {
                 return targetPoint;
             }
         }
         return null;
     }
 
-    private boolean isEnemyPearlThreatening(Vec3 pos) {
-        if (pos.y() < mc.level.getMinBuildHeight()) return false;
-        return mc.level.getBlockState(BlockPos.containing(pos).below()).isCollisionShapeFullBlock(mc.level, BlockPos.containing(pos).below());
+    private boolean isEnemyPearlThreatening(Vec3d pos) {
+        if (pos.getY() < mc.world.getBottomY()) return false;
+        return mc.world.getBlockState(BlockPos.ofFloored(pos).down()).isFullCube(mc.world, BlockPos.ofFloored(pos).down());
     }
 
-    private boolean isInFov(Vec3 point) {
-        float angleDiff = RotationUtils.getAngleDifference(mc.player.getYRot(), (float)(Math.toDegrees(Math.atan2(point.z - mc.player.getEyePosition().z, point.x - mc.player.getEyePosition().x)) - 90.0));
+    private boolean isInFov(Vec3d point) {
+        float angleDiff = RotationUtils.getAngleDifference(mc.player.getYaw(), (float)(Math.toDegrees(Math.atan2(point.z - mc.player.getEyePos().z, point.x - mc.player.getEyePos().x)) - 90.0));
         return Math.abs(angleDiff) <= fov.getCurrentValue() / 2.0;
     }
 
     private boolean isSafeFloor(BlockPos pos) {
-        BlockState state = mc.level.getBlockState(pos);
-        return state.isCollisionShapeFullBlock(mc.level, pos) && !state.is(Blocks.LAVA) && !state.is(Blocks.MAGMA_BLOCK) && !state.is(Blocks.CACTUS);
+        BlockState state = mc.world.getBlockState(pos);
+        return state.isFullCube(mc.world, pos) && !state.isOf(Blocks.LAVA) && !state.isOf(Blocks.MAGMA_BLOCK) && !state.isOf(Blocks.CACTUS);
     }
 
     private boolean hasHeadroom(BlockPos pos) {
-        return !mc.level.getBlockState(pos).isSolidRender(mc.level, pos) && !mc.level.getBlockState(pos.above()).isSolidRender(mc.level, pos.above());
+        return !mc.world.getBlockState(pos).isOpaqueFullCube(mc.world, pos) && !mc.world.getBlockState(pos.up()).isOpaqueFullCube(mc.world, pos.up());
     }
 
-    private boolean hasLineOfSight(Vec3 target) {
-        return mc.level.clip(new ClipContext(mc.player.getEyePosition(), target, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player)).getType() == HitResult.Type.MISS;
+    private boolean hasLineOfSight(Vec3d target) {
+        return mc.world.raycast(new RaycastContext(mc.player.getEyePos(), target, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player)).getType() == HitResult.Type.MISS;
     }
 
     private int findPearlSlot() {
-        for (int i=0;i<9;i++) if(mc.player.getInventory().getItem(i).getItem()==Items.ENDER_PEARL) return i; return -1;
+        for (int i=0;i<9;i++) if(mc.player.getInventory().getStack(i).getItem()==Items.ENDER_PEARL) return i; return -1;
     }
 
-    private void renderLandingMark(PoseStack matrix, PredictedPearlInfo info) {
+    private void renderLandingMark(MatrixStack matrix, PredictedPearlInfo info) {
         if (info.projectedPos == null) return;
 
-        matrix.pushPose();
+        matrix.push();
 
         if (renderBackGround.getCurrentValue()) {
             StencilUtils.write(false);
@@ -322,11 +320,11 @@ public class PearlInfo extends Module {
         if (renderBackGround.getCurrentValue()) {
             StencilUtils.dispose();
         }
-        matrix.popPose();
+        matrix.pop();
     }
 
     private class PredictedPearlInfo {
-        Vec3 pos; Vector2f projectedPos; int ticksToLand; String ownerName;
+        Vec3d pos; Vector2f projectedPos; int ticksToLand; String ownerName;
         List<String> lines = new ArrayList<>();
         float totalTextHeight, headerHeight = 3.0f;
         float finalWidth, finalHeight, currentWidth, currentHeight, finalX, finalY, animX, animY;
@@ -334,9 +332,9 @@ public class PearlInfo extends Module {
 
         public PredictedPearlInfo() { this.lastUpdateTime = System.currentTimeMillis(); }
 
-        public void update(ThrownEnderpearl pearl) {
-            Object[] data = PearlPhysicsUtil.predictPearlLandingWithTicks(pearl, mc.level);
-            this.pos = (Vec3) data[0];
+        public void update(EnderPearlEntity pearl) {
+            Object[] data = PearlPhysicsUtil.predictPearlLandingWithTicks(pearl, mc.world);
+            this.pos = (Vec3d) data[0];
             this.ticksToLand = (int) data[1];
             if (this.pos != null) {
                 Entity owner = pearl.getOwner();
@@ -352,12 +350,12 @@ public class PearlInfo extends Module {
                 return;
             }
 
-            this.projectedPos = ProjectionUtils.project(pos.x, pos.y, pos.z, mc.getFrameTime());
+            this.projectedPos = ProjectionUtils.project(pos.x, pos.y, pos.z, mc.getTickDelta());
             if (projectedPos == null) { this.finalWidth = 0; this.finalHeight = 0; } else {
                 lines.clear();
                 lines.add("Thrown by: "+this.ownerName);
                 lines.add(String.format("Lands in: %.1f s",this.ticksToLand/20.0));
-                lines.add(String.format("Distance: %.1f m", mc.player.position().distanceTo(pos)));
+                lines.add(String.format("Distance: %.1f m", mc.player.getPos().distanceTo(pos)));
 
                 float textHeight = (float)Fonts.harmony.getHeight(true, hudSize.getCurrentValue());
                 this.totalTextHeight = (textHeight * 0.875f) * (lines.size() - 1) + textHeight;

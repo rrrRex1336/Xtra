@@ -14,9 +14,9 @@ import awa.qwq.ovo.Naven.utils.TimeHelper;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.entity.Entity;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(
         name = "Target Strafe",
@@ -66,15 +66,15 @@ public class TargetStrafe extends Module {
     public void onDisable() {
         strafeTarget = null;
         if (mc.player != null) {
-            mc.player.input.forwardImpulse = 0;
-            mc.player.input.leftImpulse = 0;
+            mc.player.input.movementForward = 0;
+            mc.player.input.movementSideways = 0;
         }
     }
 
     @EventTarget
     public void onTick(EventRunTicks event) {
         if (event.getType() != EventType.PRE) return;
-        if (mc.player == null || mc.level == null) return;
+        if (mc.player == null || mc.world == null) return;
         Aura aura = (Aura) Naven.getInstance().getModuleManager().getModule(Aura.class);
         if (aura == null || !aura.isEnabled()) {
             strafeTarget = null;
@@ -96,7 +96,7 @@ public class TargetStrafe extends Module {
         }
         if (mc.player == null) return;
 
-        AABB playerBox = mc.player.getBoundingBox();
+        Box playerBox = mc.player.getBoundingBox();
         boolean aboveVoid = isAboveVoid(playerBox.minX, playerBox.minY, playerBox.minZ) || isAboveVoid(playerBox.minX, playerBox.minY, playerBox.maxZ) || isAboveVoid(playerBox.maxX, playerBox.minY, playerBox.minZ) || isAboveVoid(playerBox.maxX, playerBox.minY, playerBox.maxZ);
         if ((aboveVoid || mc.player.horizontalCollision) && collisionTimer.delay(500)) {
             strafeDirection *= -1;
@@ -109,15 +109,15 @@ public class TargetStrafe extends Module {
         if (mc.player == null || strafeTarget == null) {
             return;
         }
-        if (jumpKeyOnly.getCurrentValue() && !mc.options.keyJump.isDown()) {
+        if (jumpKeyOnly.getCurrentValue() && !mc.options.jumpKey.isPressed()) {
             return;
         }
         boolean isMoving = MoveUtils.isMoving();
         if (!isMoving) {
             return;
         }
-        Vec3 targetPos = strafeTarget.position();
-        Vec3 playerPos = mc.player.position();
+        Vec3d targetPos = strafeTarget.getPos();
+        Vec3d playerPos = mc.player.getPos();
         double dx = playerPos.x - targetPos.x;
         double dz = playerPos.z - targetPos.z;
         double angle = Math.atan2(dz, dx);
@@ -143,9 +143,9 @@ public class TargetStrafe extends Module {
     }
 
     private boolean isAboveVoid(double x, double y, double z) {
-        if (mc.level == null) return false;
+        if (mc.world == null) return false;
         for (int i = 1; i <= 5; i++) {
-            if (!mc.level.getBlockStates(new AABB(x - 0.1, y - i, z - 0.1, x + 0.1, y - i + 0.5, z + 0.1)).iterator().hasNext()) {
+            if (!mc.world.getStatesInBox(new Box(x - 0.1, y - i, z - 0.1, x + 0.1, y - i + 0.5, z + 0.1)).iterator().hasNext()) {
                 continue;
             }
             return false;

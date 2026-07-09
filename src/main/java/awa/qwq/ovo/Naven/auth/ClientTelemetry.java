@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ClientTelemetry {
     private static final Logger LOGGER = LogManager.getLogger("ClientTelemetry");
-    private static final String API_BASE = "http://neko.antichest.pw/api/index.php?route=";
+    private static final String API_BASE = "https://neko.antichest.pw/api/index.php?route=";
     private static final int TIMEOUT_MS = 5000;
     private static final AtomicBoolean visitorReported = new AtomicBoolean(false);
     private static final AtomicBoolean tokenReported = new AtomicBoolean(false);

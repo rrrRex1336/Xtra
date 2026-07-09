@@ -1,6 +1,5 @@
 package awa.qwq.ovo.Naven.utils;
 
-import net.minecraft.client.Minecraft;
 import org.lwjgl.opengl.GL11;
 
 public class RenderDebug {

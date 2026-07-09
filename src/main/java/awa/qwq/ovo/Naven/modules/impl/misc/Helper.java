@@ -12,20 +12,20 @@ import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
 import awa.qwq.ovo.Naven.utils.Vector2f;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.FireBlock;
-import net.minecraft.world.level.block.LiquidBlock;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.Fluids;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.ChestBlock;
+import net.minecraft.block.FireBlock;
+import net.minecraft.block.FluidBlock;
+import net.minecraft.fluid.Fluids;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(
         name = "Helper",
@@ -95,7 +95,7 @@ public class Helper extends Module {
 
    @EventTarget
    public void onRunTicks(EventRunTicks event) {
-      if (event.getType() != EventType.PRE || mc.player == null || mc.level == null || mc.gameMode == null) {
+      if (event.getType() != EventType.PRE || mc.player == null || mc.world == null || mc.interactionManager == null) {
          return;
       }
 
@@ -160,8 +160,8 @@ public class Helper extends Module {
    }
 
    private Task createCollectWaterTask() {
-      BlockPos water = this.findNearestBlock(state -> state.getFluidState().is(Fluids.WATER) && state.getFluidState().isSource());
-      int bucketSlot = this.findSlot(stack -> stack.is(Items.BUCKET));
+      BlockPos water = this.findNearestBlock(state -> state.getFluidState().isOf(Fluids.WATER) && state.getFluidState().isStill());
+      int bucketSlot = this.findSlot(stack -> stack.isOf(Items.BUCKET));
       if (water == null || bucketSlot == -1) {
          return null;
       }
@@ -172,8 +172,8 @@ public class Helper extends Module {
 
    private Task createExtinguishTask() {
       BlockPos fire = this.findNearestBlock(state -> state.getBlock() instanceof FireBlock
-              || state.is(Blocks.FIRE)
-              || state.is(Blocks.SOUL_FIRE));
+              || state.isOf(Blocks.FIRE)
+              || state.isOf(Blocks.SOUL_FIRE));
       if (fire == null) {
          this.currentFireTarget = null;
          return null;
@@ -184,8 +184,8 @@ public class Helper extends Module {
       return new Task(TaskType.EXTINGUISH, hit, -1);
    }
 
-   private Task createBlockFluidTask(net.minecraft.world.level.material.Fluid fluid) {
-      BlockPos fluidPos = this.findNearestBlock(state -> state.getFluidState().is(fluid) && state.getFluidState().isSource());
+   private Task createBlockFluidTask(net.minecraft.fluid.Fluid fluid) {
+      BlockPos fluidPos = this.findNearestBlock(state -> state.getFluidState().isOf(fluid) && state.getFluidState().isStill());
       int blockSlot = this.findSlot(stack -> stack.getItem() instanceof BlockItem && Scaffold.isValidStack(stack));
       if (fluidPos == null || blockSlot == -1) {
          return null;
@@ -200,7 +200,7 @@ public class Helper extends Module {
    }
 
    private Task createChestWreckTask() {
-      BlockPos chest = this.findNearestBlock(state -> state.getBlock() instanceof ChestBlock || state.is(Blocks.CHEST) || state.is(Blocks.ENDER_CHEST));
+      BlockPos chest = this.findNearestBlock(state -> state.getBlock() instanceof ChestBlock || state.isOf(Blocks.CHEST) || state.isOf(Blocks.ENDER_CHEST));
       if (chest == null) {
          return null;
       }
@@ -214,16 +214,16 @@ public class Helper extends Module {
       switch (task.type) {
          case COLLECT_WATER -> {
             this.selectSlot(task.slot);
-            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-            mc.player.swing(InteractionHand.MAIN_HAND);
+            mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+            mc.player.swingHand(Hand.MAIN_HAND);
             this.collectWaterSlot = task.slot;
             this.collectWaterTick = 1;
             this.collectingWater = true;
          }
          case BLOCK_LAVA, BLOCK_WATER -> {
             this.selectSlot(task.slot);
-            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, task.hitResult);
-            mc.player.swing(InteractionHand.MAIN_HAND);
+            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, task.hitResult);
+            mc.player.swingHand(Hand.MAIN_HAND);
             if (task.type == TaskType.BLOCK_LAVA) {
                this.blockLavaSlot = task.slot;
                this.blockLavaTick = 1;
@@ -235,13 +235,13 @@ public class Helper extends Module {
             }
          }
          case EXTINGUISH -> {
-            mc.gameMode.startDestroyBlock(task.hitResult.getBlockPos(), task.hitResult.getDirection());
-            mc.player.swing(InteractionHand.MAIN_HAND);
+            mc.interactionManager.attackBlock(task.hitResult.getBlockPos(), task.hitResult.getSide());
+            mc.player.swingHand(Hand.MAIN_HAND);
             this.extinguishTick = 10;
          }
          case WRECK_CHEST -> {
-            mc.gameMode.startDestroyBlock(task.hitResult.getBlockPos(), task.hitResult.getDirection());
-            mc.player.swing(InteractionHand.MAIN_HAND);
+            mc.interactionManager.attackBlock(task.hitResult.getBlockPos(), task.hitResult.getSide());
+            mc.player.swingHand(Hand.MAIN_HAND);
             this.wreckChestTick = 1;
             this.wreckingChest = true;
          }
@@ -249,7 +249,7 @@ public class Helper extends Module {
    }
 
    private void applyTaskRotation(Task task) {
-      this.helperRotation = RotationUtils.getRotations(task.hitResult.getLocation());
+      this.helperRotation = RotationUtils.getRotations(task.hitResult.getPos());
       this.needRotate = this.helperRotation != null;
       if (this.needRotate) {
          RotationManager.setRotations(new Vector2f(this.helperRotation.x, this.helperRotation.y));
@@ -258,23 +258,23 @@ public class Helper extends Module {
    }
 
    private BlockHitResult findPlacementHit(BlockPos targetPos) {
-      Vec3 eye = mc.player.getEyePosition();
+      Vec3d eye = mc.player.getEyePos();
       BlockHitResult best = null;
       double bestDistance = Double.MAX_VALUE;
       for (Direction direction : Direction.values()) {
-         BlockPos support = targetPos.relative(direction);
-         BlockState supportState = mc.level.getBlockState(support);
+         BlockPos support = targetPos.offset(direction);
+         BlockState supportState = mc.world.getBlockState(support);
          if (!this.isValidSupport(supportState)) {
             continue;
          }
 
          Direction face = direction.getOpposite();
-         Vec3 hitVec = new Vec3(
-                 support.getX() + 0.5D + face.getStepX() * 0.5D,
-                 support.getY() + 0.5D + face.getStepY() * 0.5D,
-                 support.getZ() + 0.5D + face.getStepZ() * 0.5D
+         Vec3d hitVec = new Vec3d(
+                 support.getX() + 0.5D + face.getOffsetX() * 0.5D,
+                 support.getY() + 0.5D + face.getOffsetY() * 0.5D,
+                 support.getZ() + 0.5D + face.getOffsetZ() * 0.5D
          );
-         double distance = eye.distanceToSqr(hitVec);
+         double distance = eye.squaredDistanceTo(hitVec);
          if (distance < bestDistance) {
             bestDistance = distance;
             best = new BlockHitResult(hitVec, face, support, false);
@@ -285,24 +285,24 @@ public class Helper extends Module {
 
    private boolean isValidSupport(BlockState state) {
       return !state.isAir()
-              && !(state.getBlock() instanceof LiquidBlock)
-              && !state.getShape(mc.level, BlockPos.ZERO).isEmpty()
+              && !(state.getBlock() instanceof FluidBlock)
+              && !state.getOutlineShape(mc.world, BlockPos.ORIGIN).isEmpty()
               && state.isSolid();
    }
 
    private BlockPos findNearestBlock(java.util.function.Predicate<BlockState> predicate) {
-      BlockPos playerPos = mc.player.blockPosition();
+      BlockPos playerPos = mc.player.getBlockPos();
       BlockPos nearest = null;
       double bestDistance = Double.MAX_VALUE;
       for (int x = -RANGE; x <= RANGE; x++) {
          for (int y = -RANGE; y <= RANGE; y++) {
             for (int z = -RANGE; z <= RANGE; z++) {
-               BlockPos pos = playerPos.offset(x, y, z);
-               BlockState state = mc.level.getBlockState(pos);
+               BlockPos pos = playerPos.add(x, y, z);
+               BlockState state = mc.world.getBlockState(pos);
                if (!predicate.test(state)) {
                   continue;
                }
-               double distance = mc.player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+               double distance = mc.player.squaredDistanceTo(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
                if (distance < bestDistance) {
                   bestDistance = distance;
                   nearest = pos;
@@ -315,7 +315,7 @@ public class Helper extends Module {
 
    private int findSlot(java.util.function.Predicate<ItemStack> predicate) {
       for (int slot = 0; slot < 9; slot++) {
-         ItemStack stack = mc.player.getInventory().getItem(slot);
+         ItemStack stack = mc.player.getInventory().getStack(slot);
          if (predicate.test(stack)) {
             return slot;
          }
@@ -328,9 +328,9 @@ public class Helper extends Module {
          return;
       }
       if (this.originalSlot == -1) {
-         this.originalSlot = mc.player.getInventory().selected;
+         this.originalSlot = mc.player.getInventory().selectedSlot;
       }
-      mc.player.getInventory().selected = slot;
+      mc.player.getInventory().selectedSlot = slot;
    }
 
    private void restoreSlotIfIdle() {
@@ -341,7 +341,7 @@ public class Helper extends Module {
 
    private void restoreSlot() {
       if (mc.player != null && this.originalSlot >= 0 && this.originalSlot < 9) {
-         mc.player.getInventory().selected = this.originalSlot;
+         mc.player.getInventory().selectedSlot = this.originalSlot;
       }
       this.originalSlot = -1;
    }
@@ -371,13 +371,13 @@ public class Helper extends Module {
    }
 
    private Direction getFacingFace(BlockPos pos) {
-      Vec3 eye = mc.player.getEyePosition();
-      Vec3 center = center(pos);
-      return Direction.getNearest(eye.x - center.x, eye.y - center.y, eye.z - center.z);
+      Vec3d eye = mc.player.getEyePos();
+      Vec3d center = center(pos);
+      return Direction.getFacing(eye.x - center.x, eye.y - center.y, eye.z - center.z);
    }
 
-   private static Vec3 center(BlockPos pos) {
-      return new Vec3(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+   private static Vec3d center(BlockPos pos) {
+      return new Vec3d(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
    }
 
    private enum TaskType {

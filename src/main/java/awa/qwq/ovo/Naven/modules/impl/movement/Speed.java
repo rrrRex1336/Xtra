@@ -15,10 +15,10 @@ import awa.qwq.ovo.Naven.events.impl.EventMoveInput;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import lombok.Getter;
-import net.minecraft.client.KeyMapping;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.math.Box;
 
 @ModuleInfo(
         name = "Speed",
@@ -82,8 +82,8 @@ public class Speed extends Module {
     @Override
     public void onDisable() {
         super.onDisable();
-        if (wasJumping && mc.options.keyJump != null) {
-            KeyMapping.set(mc.options.keyJump.getDefaultKey(), false);
+        if (wasJumping && mc.options.jumpKey != null) {
+            KeyBinding.setKeyPressed(mc.options.jumpKey.getDefaultKey(), false);
             wasJumping = false;
         }
     }
@@ -99,7 +99,7 @@ public class Speed extends Module {
             }
         }
         if (mc.player != null) {
-            if (mc.player.isInWater() || mc.player.isInLava()) {
+            if (mc.player.isTouchingWater() || mc.player.isInLava()) {
                 return true;
             }
         }
@@ -116,32 +116,32 @@ public class Speed extends Module {
             return;
         }
         if (mode.isCurrentMode("Collision")) {
-            if (mc.player == null || mc.level == null) return;
-            boolean isMoving = mc.options.keyUp.isDown() || mc.options.keyDown.isDown() ||
-                    mc.options.keyLeft.isDown() || mc.options.keyRight.isDown();
+            if (mc.player == null || mc.world == null) return;
+            boolean isMoving = mc.options.forwardKey.isPressed() || mc.options.backKey.isPressed() ||
+                    mc.options.leftKey.isPressed() || mc.options.rightKey.isPressed();
             if (!isMoving) return;
             int collisions = 0;
-            AABB playerBox = mc.player.getBoundingBox();
+            Box playerBox = mc.player.getBoundingBox();
             double shrinkValue = grimAddHitBoxes.getCurrentValue() / 10.0;
-            for (Entity entity : mc.level.entitiesForRendering()) {
+            for (Entity entity : mc.world.getEntities()) {
                 if (entity == null || entity == mc.player || !(entity instanceof LivingEntity)) continue;
-                AABB entityBox = entity.getBoundingBox().deflate(shrinkValue, 0.0, shrinkValue);
+                Box entityBox = entity.getBoundingBox().contract(shrinkValue, 0.0, shrinkValue);
                 if (playerBox.intersects(entityBox)) {
                     collisions++;
                 }
             }
             if (collisions > 0) {
-                float yaw = mc.player.getYRot();
+                float yaw = mc.player.getYaw();
                 double radYaw = Math.toRadians(yaw);
-                double moveX = -Math.sin(radYaw) * mc.player.zza + Math.cos(radYaw) * mc.player.xxa;
-                double moveZ = Math.cos(radYaw) * mc.player.zza + Math.sin(radYaw) * mc.player.xxa;
+                double moveX = -Math.sin(radYaw) * mc.player.forwardSpeed + Math.cos(radYaw) * mc.player.sidewaysSpeed;
+                double moveZ = Math.cos(radYaw) * mc.player.forwardSpeed + Math.sin(radYaw) * mc.player.sidewaysSpeed;
                 double angle = Math.atan2(moveX, moveZ);
                 float rotationYaw = (float) angle;
                 double boost = collisionBoost.getCurrentValue() * collisions;
-                mc.player.setDeltaMovement(
-                        mc.player.getDeltaMovement().x + Math.sin(rotationYaw) * boost,
-                        mc.player.getDeltaMovement().y,
-                        mc.player.getDeltaMovement().z + Math.cos(rotationYaw) * boost
+                mc.player.setVelocity(
+                        mc.player.getVelocity().x + Math.sin(rotationYaw) * boost,
+                        mc.player.getVelocity().y,
+                        mc.player.getVelocity().z + Math.cos(rotationYaw) * boost
                 );
             }
         }
@@ -177,7 +177,7 @@ public class Speed extends Module {
 
         if (autoJump.getCurrentValue())
             if (jump) {
-                if (mc.player != null && mc.player.onGround() && MoveUtils.isMoving()) event.setJump(true);
+                if (mc.player != null && mc.player.isOnGround() && MoveUtils.isMoving()) event.setJump(true);
             }
     }
 

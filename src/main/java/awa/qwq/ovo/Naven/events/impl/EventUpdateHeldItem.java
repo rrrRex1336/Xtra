@@ -1,19 +1,19 @@
 package awa.qwq.ovo.Naven.events.impl;
 
 import awa.qwq.ovo.Naven.events.api.events.Event;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.Hand;
 
 public class EventUpdateHeldItem implements Event {
-   private final InteractionHand hand;
+   private final Hand hand;
    private ItemStack item;
 
-   public EventUpdateHeldItem(InteractionHand hand, ItemStack item) {
+   public EventUpdateHeldItem(Hand hand, ItemStack item) {
       this.hand = hand;
       this.item = item;
    }
 
-   public InteractionHand getHand() {
+   public Hand getHand() {
       return this.hand;
    }
 

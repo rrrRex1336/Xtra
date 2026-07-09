@@ -1,7 +1,5 @@
 package awa.qwq.ovo.Naven.utils.renderer.text;
 
-import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.platform.NativeImage.Format;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.chars.Char2ObjectArrayMap;
 import java.awt.Color;
@@ -18,25 +16,27 @@ import java.lang.reflect.Field;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.texture.NativeImage;
+import net.minecraft.client.texture.NativeImage.Format;
+import net.minecraft.client.texture.NativeImageBackedTexture;
+import net.minecraft.util.Identifier;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.system.MemoryUtil;
 
 class GlyphMap {
-   private static final Minecraft mc = Minecraft.getInstance();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
    final char fromIncl;
    final char toExcl;
    final java.awt.Font font;
-   final ResourceLocation bindToTexture;
+   final Identifier bindToTexture;
    final int pixelPadding;
    private final Char2ObjectArrayMap<Glyph> glyphs = new Char2ObjectArrayMap();
    int width;
    int height;
    boolean generated = false;
 
-   public GlyphMap(char from, char to, java.awt.Font font, ResourceLocation identifier, int padding) {
+   public GlyphMap(char from, char to, java.awt.Font font, Identifier identifier, int padding) {
       this.fromIncl = from;
       this.toExcl = to;
       this.font = font;
@@ -53,7 +53,7 @@ class GlyphMap {
    }
 
    public void destroy() {
-      mc.getTextureManager().release(this.bindToTexture);
+      mc.getTextureManager().destroyTexture(this.bindToTexture);
       this.glyphs.clear();
       this.width = -1;
       this.height = -1;
@@ -147,7 +147,7 @@ class GlyphMap {
       }
    }
 
-   public static void registerBufferedImageTexture(ResourceLocation i, BufferedImage bi) {
+   public static void registerBufferedImageTexture(Identifier i, BufferedImage bi) {
       try {
          int ow = bi.getWidth();
          int oh = bi.getHeight();
@@ -188,15 +188,15 @@ class GlyphMap {
             }
          }
 
-         DynamicTexture tex = new DynamicTexture(image);
+         NativeImageBackedTexture tex = new NativeImageBackedTexture(image);
          tex.upload();
-         RenderSystem.bindTexture(tex.getId());
+         RenderSystem.bindTexture(tex.getGlId());
          GL11.glTexParameteri(3553, 10241, 9729);
          GL11.glTexParameteri(3553, 10240, 9729);
          if (RenderSystem.isOnRenderThread()) {
-            mc.getTextureManager().register(i, tex);
+            mc.getTextureManager().registerTexture(i, tex);
          } else {
-            RenderSystem.recordRenderCall(() -> mc.getTextureManager().register(i, tex));
+            RenderSystem.recordRenderCall(() -> mc.getTextureManager().registerTexture(i, tex));
          }
       } catch (Throwable var22) {
          var22.printStackTrace();

@@ -8,14 +8,14 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.HitResult;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.AxeItem;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.HitResult;
 
 @ModuleInfo(name = "ShieldBreaker", category = Category.COMBAT, description = "Automatically breaks shields by silently attacking them.")
 public class ShieldBreaker extends Module {
@@ -43,7 +43,7 @@ public class ShieldBreaker extends Module {
     @Override
     public void onDisable() {
         if (this.originalSlot != -1) {
-            ShieldBreaker.mc.player.getInventory().selected = this.originalSlot;
+            ShieldBreaker.mc.player.getInventory().selectedSlot = this.originalSlot;
         }
         this.originalSlot = -1;
         this.attackTick = -1L;
@@ -56,8 +56,8 @@ public class ShieldBreaker extends Module {
         }
 
         if (ShieldBreaker.mc.player == null ||
-                ShieldBreaker.mc.gameMode == null ||
-                ShieldBreaker.mc.level == null) {
+                ShieldBreaker.mc.interactionManager == null ||
+                ShieldBreaker.mc.world == null) {
             return;
         }
 
@@ -66,8 +66,8 @@ public class ShieldBreaker extends Module {
         }
 
         if (this.originalSlot != -1) {
-            if ((float) (ShieldBreaker.mc.player.tickCount - this.attackTick) >= this.switchBackDelay.getCurrentValue()) {
-                    ShieldBreaker.mc.player.getInventory().selected = this.originalSlot;
+            if ((float) (ShieldBreaker.mc.player.age - this.attackTick) >= this.switchBackDelay.getCurrentValue()) {
+                    ShieldBreaker.mc.player.getInventory().selectedSlot = this.originalSlot;
                 this.originalSlot = -1;
                 this.attackTick = -1L;
             }
@@ -80,22 +80,22 @@ public class ShieldBreaker extends Module {
             return;
         }
 
-        HitResult hitResult = ShieldBreaker.mc.hitResult;
+        HitResult hitResult = ShieldBreaker.mc.crosshairTarget;
         if (hitResult instanceof EntityHitResult) {
             EntityHitResult entityHitResult = (EntityHitResult) hitResult;
             Entity entity = entityHitResult.getEntity();
 
-            if (entity instanceof Player) {
-                Player target = (Player) entity;
+            if (entity instanceof PlayerEntity) {
+                PlayerEntity target = (PlayerEntity) entity;
 
                 if (this.isPlayerUsingShield(target)) {
                     int axeSlot = this.findAxeInHotbar();
                     if (axeSlot != -1) {
-                        this.originalSlot = ShieldBreaker.mc.player.getInventory().selected;
-                        ShieldBreaker.mc.player.getInventory().selected = axeSlot;
-                        ShieldBreaker.mc.gameMode.attack(ShieldBreaker.mc.player, target);
-                        ShieldBreaker.mc.player.swing(InteractionHand.MAIN_HAND);
-                        this.attackTick = ShieldBreaker.mc.player.tickCount;
+                        this.originalSlot = ShieldBreaker.mc.player.getInventory().selectedSlot;
+                        ShieldBreaker.mc.player.getInventory().selectedSlot = axeSlot;
+                        ShieldBreaker.mc.interactionManager.attackEntity(ShieldBreaker.mc.player, target);
+                        ShieldBreaker.mc.player.swingHand(Hand.MAIN_HAND);
+                        this.attackTick = ShieldBreaker.mc.player.age;
                         this.lastAttackTime = currentTime;
                     }
                 }
@@ -105,7 +105,7 @@ public class ShieldBreaker extends Module {
 
     private int findAxeInHotbar() {
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = ShieldBreaker.mc.player.getInventory().getItem(i);
+            ItemStack stack = ShieldBreaker.mc.player.getInventory().getStack(i);
             if (stack.getItem() instanceof AxeItem) {
                 return i;
             }
@@ -114,9 +114,9 @@ public class ShieldBreaker extends Module {
     }
 
     private boolean isPlayerUsingShield(Entity entity) {
-        if (entity instanceof Player) {
-            Player player = (Player) entity;
-            return player.isUsingItem() && player.getUseItem().is(Items.SHIELD);
+        if (entity instanceof PlayerEntity) {
+            PlayerEntity player = (PlayerEntity) entity;
+            return player.isUsingItem() && player.getActiveItem().isOf(Items.SHIELD);
         }
         return false;
     }

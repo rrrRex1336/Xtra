@@ -22,18 +22,18 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ambient.Bat;
-import net.minecraft.world.entity.animal.AbstractGolem;
-import net.minecraft.world.entity.animal.Animal;
-import net.minecraft.world.entity.animal.Squid;
-import net.minecraft.world.entity.decoration.ArmorStand;
-import net.minecraft.world.entity.monster.Slime;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.mob.SlimeEntity;
+import net.minecraft.entity.passive.AnimalEntity;
+import net.minecraft.entity.passive.BatEntity;
+import net.minecraft.entity.passive.GolemEntity;
+import net.minecraft.entity.passive.SquidEntity;
+import net.minecraft.entity.passive.VillagerEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(
    name = "AimAssist",
@@ -76,7 +76,7 @@ public class AimAssist extends Module {
    @EventTarget
    public void onMotion(EventRunTicks e) {
       if (e.getType() == EventType.PRE && mc.player != null) {
-         if (this.clickonly.currentValue && !mc.options.keyAttack.isDown()) {
+         if (this.clickonly.currentValue && !mc.options.attackKey.isPressed()) {
             this.working = false;
             return;
          }
@@ -86,12 +86,12 @@ public class AimAssist extends Module {
          float targetPitch;
          if (target != null) {
             Vector2f rotations = RotationUtils.getRotations(target);
-            targetYaw = mc.player.getYRot() + RotationUtils.getAngleDifference(rotations.getX(), mc.player.getYRot());
+            targetYaw = mc.player.getYaw() + RotationUtils.getAngleDifference(rotations.getX(), mc.player.getYaw());
             targetPitch = rotations.getY();
             this.working = true;
          } else {
-            targetYaw = mc.player.getYRot();
-            targetPitch = mc.player.getXRot();
+            targetYaw = mc.player.getYaw();
+            targetPitch = mc.player.getPitch();
             if (this.targetRotation.getX() % 360.0F == targetYaw % 360.0F) {
                this.working = false;
             }
@@ -120,22 +120,22 @@ public class AimAssist extends Module {
                   return false;
                } else if (FriendManager.isFriend(living)) {
                   return false;
-               } else if (living.isDeadOrDying() || living.getHealth() <= 0.0F) {
+               } else if (living.isDead() || living.getHealth() <= 0.0F) {
                   return false;
-               } else if (entity instanceof ArmorStand) {
+               } else if (entity instanceof ArmorStandEntity) {
                   return false;
                } else if (entity.isInvisible() && !this.attackInvisible.getCurrentValue()) {
                   return false;
-               } else if (entity instanceof Player && !this.attackPlayer.getCurrentValue()) {
+               } else if (entity instanceof PlayerEntity && !this.attackPlayer.getCurrentValue()) {
                   return false;
-               } else if (!(entity instanceof Player) || !((double)entity.getBbWidth() < 0.5) && !living.isSleeping()) {
-                  if ((entity instanceof Mob || entity instanceof Slime || entity instanceof Bat || entity instanceof AbstractGolem)
+               } else if (!(entity instanceof PlayerEntity) || !((double)entity.getWidth() < 0.5) && !living.isSleeping()) {
+                  if ((entity instanceof MobEntity || entity instanceof SlimeEntity || entity instanceof BatEntity || entity instanceof GolemEntity)
                      && !this.attackMobs.getCurrentValue()) {
                      return false;
-                  } else if ((entity instanceof Animal || entity instanceof Squid) && !this.attackAnimals.getCurrentValue()) {
+                  } else if ((entity instanceof AnimalEntity || entity instanceof SquidEntity) && !this.attackAnimals.getCurrentValue()) {
                      return false;
                   } else {
-                     return entity instanceof Villager && !this.attackAnimals.getCurrentValue() ? false : !(entity instanceof Player) || !entity.isSpectator();
+                     return entity instanceof VillagerEntity && !this.attackAnimals.getCurrentValue() ? false : !(entity instanceof PlayerEntity) || !entity.isSpectator();
                   }
                } else {
                   return false;
@@ -153,8 +153,8 @@ public class AimAssist extends Module {
       if (!this.isValidTarget(entity)) {
          return false;
       } else {
-         Vec3 closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePosition(), entity.getBoundingBox());
-         if (closestPoint.distanceTo(mc.player.getEyePosition()) > (double)this.aimRange.getCurrentValue()) {
+         Vec3d closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePos(), entity.getBoundingBox());
+         if (closestPoint.distanceTo(mc.player.getEyePos()) > (double)this.aimRange.getCurrentValue()) {
             return false;
          } else {
             boolean b = RotationUtils.inFoV(entity, this.fov.getCurrentValue() / 2.0F);
@@ -168,7 +168,7 @@ public class AimAssist extends Module {
    }
 
    private Entity getTarget() {
-      Stream<Entity> stream = StreamSupport.<Entity>stream(mc.level.entitiesForRendering().spliterator(), true)
+      Stream<Entity> stream = StreamSupport.<Entity>stream(mc.world.getEntities().spliterator(), true)
          .filter(entity -> entity instanceof Entity)
          .filter(this::isValidAttack);
       List<Entity> possibleTargets = stream.collect(Collectors.toList());

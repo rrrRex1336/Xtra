@@ -2,27 +2,27 @@ package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventUpdateHeldItem;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.ItemInHandRenderer;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.render.item.HeldItemRenderer;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.Hand;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-@Mixin({ItemInHandRenderer.class})
+@Mixin({HeldItemRenderer.class})
 public class MixinItemInHandRenderer {
    @Redirect(
-      method = {"tick"},
+      method = {"updateHeldItems"},
       at = @At(
          value = "INVOKE",
-         target = "Lnet/minecraft/client/player/LocalPlayer;getMainHandItem()Lnet/minecraft/world/item/ItemStack;"
+         target = "Lnet/minecraft/client/network/ClientPlayerEntity;getMainHandStack()Lnet/minecraft/item/ItemStack;"
       )
    )
-   public ItemStack hookMainHand(LocalPlayer player) {
-      EventUpdateHeldItem event = new EventUpdateHeldItem(InteractionHand.MAIN_HAND, player.getMainHandItem());
-      if (player == Minecraft.getInstance().player) {
+   public ItemStack hookMainHand(ClientPlayerEntity player) {
+      EventUpdateHeldItem event = new EventUpdateHeldItem(Hand.MAIN_HAND, player.getMainHandStack());
+      if (player == MinecraftClient.getInstance().player) {
          Naven.getInstance().getEventManager().call(event);
       }
 
@@ -30,15 +30,15 @@ public class MixinItemInHandRenderer {
    }
 
    @Redirect(
-      method = {"tick"},
+      method = {"updateHeldItems"},
       at = @At(
          value = "INVOKE",
-         target = "Lnet/minecraft/client/player/LocalPlayer;getOffhandItem()Lnet/minecraft/world/item/ItemStack;"
+         target = "Lnet/minecraft/client/network/ClientPlayerEntity;getOffHandStack()Lnet/minecraft/item/ItemStack;"
       )
    )
-   public ItemStack hookOffHand(LocalPlayer player) {
-      EventUpdateHeldItem event = new EventUpdateHeldItem(InteractionHand.OFF_HAND, player.getOffhandItem());
-      if (player == Minecraft.getInstance().player) {
+   public ItemStack hookOffHand(ClientPlayerEntity player) {
+      EventUpdateHeldItem event = new EventUpdateHeldItem(Hand.OFF_HAND, player.getOffHandStack());
+      if (player == MinecraftClient.getInstance().player) {
          Naven.getInstance().getEventManager().call(event);
       }
 

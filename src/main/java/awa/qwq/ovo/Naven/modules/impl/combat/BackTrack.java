@@ -11,22 +11,20 @@ import awa.qwq.ovo.Naven.utils.vector.Vector3d;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientGamePacketListener;
-import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
-import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
-
 import java.awt.*;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingDeque;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.network.listener.ClientPlayPacketListener;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityS2CPacket;
 
 @ModuleInfo(name = "BackTrack", description = "Delay!", category = Category.COMBAT)
 public class BackTrack extends Module {
@@ -62,14 +60,14 @@ public class BackTrack extends Module {
     private final Queue<Packet<?>> movePacketQueue = new ConcurrentLinkedQueue<>();
     private final Map<Entity, Vector3d> targets = new ConcurrentHashMap<>();
     private final Map<Entity, Vector3d> serverPositions = new ConcurrentHashMap<>();
-    private final LinkedBlockingDeque<Packet<ClientGamePacketListener>> interactInbound = new LinkedBlockingDeque<>();
+    private final LinkedBlockingDeque<Packet<ClientPlayPacketListener>> interactInbound = new LinkedBlockingDeque<>();
 
     @EventTarget
     public void onPacket(EventPacket e) {
-        if (mc.player == null || mc.level == null) return;
-        for (Entity entity : mc.level.entitiesForRendering()) {
-            if (entity instanceof Player && entity != mc.player) {
-                if (((Player) entity).hurtTime > 0) {
+        if (mc.player == null || mc.world == null) return;
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity instanceof PlayerEntity && entity != mc.player) {
+                if (((PlayerEntity) entity).hurtTime > 0) {
                     if (!targets.containsKey(entity)) {
                         Vector3d serverPos = new Vector3d(entity.getX(), entity.getY(), entity.getZ());
                         serverPositions.put(entity, serverPos);
@@ -82,17 +80,17 @@ public class BackTrack extends Module {
             }
         }
 
-        if (e.getPacket() instanceof ClientboundMoveEntityPacket movePacket) {
+        if (e.getPacket() instanceof EntityS2CPacket movePacket) {
             e.setCancelled(true);
-            Entity entity = movePacket.getEntity(mc.level);
+            Entity entity = movePacket.getEntity(mc.world);
             if (entity != null && targets.containsKey(entity)) {
                 Vector3d currentServerPos = serverPositions.getOrDefault(entity,
                         new Vector3d(entity.getX(), entity.getY(), entity.getZ()));
 
-                if (movePacket.hasPosition()) {
-                    double dx = movePacket.getXa() / 4096.0D;
-                    double dy = movePacket.getYa() / 4096.0D;
-                    double dz = movePacket.getZa() / 4096.0D;
+                if (movePacket.isPositionChanged()) {
+                    double dx = movePacket.getDeltaX() / 4096.0D;
+                    double dy = movePacket.getDeltaY() / 4096.0D;
+                    double dz = movePacket.getDeltaZ() / 4096.0D;
 
                     Vector3d newServerPos = new Vector3d(
                             currentServerPos.getX() + dx,
@@ -110,9 +108,9 @@ public class BackTrack extends Module {
             }
         }
 
-        if (e.getPacket() instanceof ClientboundTeleportEntityPacket teleportPacket) {
+        if (e.getPacket() instanceof EntityPositionS2CPacket teleportPacket) {
             e.setCancelled(true);
-            Entity entity = mc.level.getEntity(teleportPacket.getId());
+            Entity entity = mc.world.getEntityById(teleportPacket.getId());
             if (entity != null && targets.containsKey(entity)) {
                 Vector3d newServerPos = new Vector3d(
                         teleportPacket.getX(),
@@ -130,7 +128,7 @@ public class BackTrack extends Module {
             }
         }
         for (Entity entity : targets.keySet()) {
-            if (!(entity instanceof Player) || entity == mc.player || ((Player) entity).hurtTime == 0) {
+            if (!(entity instanceof PlayerEntity) || entity == mc.player || ((PlayerEntity) entity).hurtTime == 0) {
                 targets.remove(entity);
                 serverPositions.remove(entity);
             }
@@ -140,13 +138,13 @@ public class BackTrack extends Module {
     private void releasePacket() {
         while (!movePacketQueue.isEmpty()) {
             Packet<?> p = movePacketQueue.poll();
-            if (p != null && mc.getConnection() != null)
-                ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
+            if (p != null && mc.getNetworkHandler() != null)
+                ((Packet<ClientPlayNetworkHandler>) p).apply(mc.getNetworkHandler());
         }
         while (!packetQueue.isEmpty()) {
             Packet<?> p = packetQueue.poll();
-            if (p != null && mc.getConnection() != null)
-                ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
+            if (p != null && mc.getNetworkHandler() != null)
+                ((Packet<ClientPlayNetworkHandler>) p).apply(mc.getNetworkHandler());
         }
     }
 
@@ -154,10 +152,10 @@ public class BackTrack extends Module {
     public void onRender(EventRender event) {
         if (targets.isEmpty()) return;
 
-        PoseStack poseStack = event.getPMatrixStack();
+        MatrixStack poseStack = event.getPMatrixStack();
         for (Map.Entry<Entity, Vector3d> entry : targets.entrySet()) {
             Entity entity = entry.getKey();
-            if (!(entity instanceof Player)) continue;
+            if (!(entity instanceof PlayerEntity)) continue;
 
             Vector3d pos = entry.getValue();
             Vector3d serverPos = serverPositions.get(entity);
@@ -165,14 +163,14 @@ public class BackTrack extends Module {
                 double distance = pos.distance(serverPos);
                 if (distance >= releaseDistance.getCurrentValue()) {
                     RenderUtils.drawEntitySolidBox(poseStack, pos.getX(), pos.getY(), pos.getZ(),
-                            entity.getBbWidth(), entity.getBbHeight(), new Color(255, 0, 0, 80).getRGB());
+                            entity.getWidth(), entity.getHeight(), new Color(255, 0, 0, 80).getRGB());
                 } else {
                     RenderUtils.drawEntitySolidBox(poseStack, pos.getX(), pos.getY(), pos.getZ(),
-                            entity.getBbWidth(), entity.getBbHeight(), new Color(0, 200, 0, 60).getRGB());
+                            entity.getWidth(), entity.getHeight(), new Color(0, 200, 0, 60).getRGB());
                 }
             } else {
                 RenderUtils.drawEntitySolidBox(poseStack, pos.getX(), pos.getY(), pos.getZ(),
-                        entity.getBbWidth(), entity.getBbHeight(), new Color(0, 200, 0, 60).getRGB());
+                        entity.getWidth(), entity.getHeight(), new Color(0, 200, 0, 60).getRGB());
             }
         }
     }

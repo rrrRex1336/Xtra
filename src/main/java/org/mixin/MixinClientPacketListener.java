@@ -2,26 +2,25 @@ package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventServerSetPosition;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.network.ClientConnection;
+import net.minecraft.network.packet.Packet;
 
-import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.network.Connection;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.*;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-@Mixin({ClientPacketListener.class})
+@Mixin({ClientPlayNetworkHandler.class})
 public class MixinClientPacketListener {
    @Redirect(
-      method = {"handleMovePlayer"},
+      method = {"onPlayerPositionLook"},
       at = @At(
          value = "INVOKE",
-         target = "Lnet/minecraft/network/Connection;send(Lnet/minecraft/network/protocol/Packet;)V",
+         target = "Lnet/minecraft/network/ClientConnection;send(Lnet/minecraft/network/packet/Packet;)V",
          ordinal = 1
       )
    )
-   public void onSendPacket(Connection instance, Packet<?> pPacket) {
+   public void onSendPacket(ClientConnection instance, Packet<?> pPacket) {
       EventServerSetPosition event = new EventServerSetPosition(pPacket);
       Naven.getInstance().getEventManager().call(event);
       instance.send(event.getPacket());

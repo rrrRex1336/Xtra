@@ -1,15 +1,15 @@
 package org.mixin.accessors;
 
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.MinecraftClient;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(Minecraft.class)
+@Mixin(MinecraftClient.class)
 public interface MinecraftAccessor {
 
-   @Accessor("rightClickDelay")
+   @Accessor("itemUseCooldown")
    void setRightClickDelay(int var1);
 
-   @Accessor("missTime")
+   @Accessor("attackCooldown")
    void setMissTime(int var1);
 }

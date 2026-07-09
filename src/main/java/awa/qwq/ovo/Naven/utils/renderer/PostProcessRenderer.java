@@ -1,6 +1,6 @@
 package awa.qwq.ovo.Naven.utils.renderer;
 
-import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.util.math.MatrixStack;
 
 public class PostProcessRenderer {
    private static Mesh mesh;
@@ -12,11 +12,11 @@ public class PostProcessRenderer {
       mesh.end();
    }
 
-   public static void beginRender(PoseStack stack) {
+   public static void beginRender(MatrixStack stack) {
       mesh.beginRender(stack);
    }
 
-   public static void render(PoseStack stack) {
+   public static void render(MatrixStack stack) {
       mesh.render(stack);
    }
 

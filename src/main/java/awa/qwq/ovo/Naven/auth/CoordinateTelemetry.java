@@ -5,9 +5,6 @@ import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import com.google.gson.JsonObject;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ServerData;
-import net.minecraft.world.entity.player.Player;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -17,10 +14,13 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ServerInfo;
+import net.minecraft.entity.player.PlayerEntity;
 
 public final class CoordinateTelemetry {
     private static final Logger LOGGER = LogManager.getLogger("CoordinateTelemetry");
-    private static final String ENDPOINT = "http://neko.antichest.pw/api/index.php?route=/coordinate-log";
+    private static final String ENDPOINT = "https://neko.antichest.pw/api/index.php?route=/coordinate-log";
     private static final int TIMEOUT_MS = 5000;
     private static final AtomicBoolean initialized = new AtomicBoolean(false);
     private static volatile boolean enabledAfterLogin;
@@ -53,8 +53,8 @@ public final class CoordinateTelemetry {
         if (event.getType() != EventType.POST) {
             return;
         }
-        Minecraft mc = Minecraft.getInstance();
-        if (mc == null || mc.player == null || mc.level == null) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc == null || mc.player == null || mc.world == null) {
             return;
         }
         if (++ticks < 200) {
@@ -62,7 +62,7 @@ public final class CoordinateTelemetry {
         }
         ticks = 0;
 
-        Player player = mc.player;
+        PlayerEntity player = mc.player;
         if (!shouldReport(player)) {
             return;
         }
@@ -79,7 +79,7 @@ public final class CoordinateTelemetry {
         body.addProperty("token", token);
         body.addProperty("hwid", VerifyClient.getHwid());
         body.addProperty("server", serverName(mc));
-        String dimension = mc.level.dimension().location().toString();
+        String dimension = mc.world.getRegistryKey().getValue().toString();
         body.addProperty("dimension", dimension);
         body.addProperty("dimensionLabel", dimensionLabel(dimension));
         body.addProperty("x", Math.floor(player.getX()));
@@ -95,7 +95,7 @@ public final class CoordinateTelemetry {
         thread.start();
     }
 
-    private boolean shouldReport(Player player) {
+    private boolean shouldReport(PlayerEntity player) {
         if (Double.isNaN(lastX)) {
             return true;
         }
@@ -105,12 +105,12 @@ public final class CoordinateTelemetry {
         return dx * dx + dy * dy + dz * dz >= 64.0D;
     }
 
-    private static String serverName(Minecraft mc) {
-        if (mc.hasSingleplayerServer()) {
+    private static String serverName(MinecraftClient mc) {
+        if (mc.isIntegratedServerRunning()) {
             return "SinglePlayer";
         }
-        ServerData data = mc.getCurrentServer();
-        return data == null ? "Unknown" : data.ip;
+        ServerInfo data = mc.getCurrentServerEntry();
+        return data == null ? "Unknown" : data.address;
     }
 
     private static String dimensionLabel(String dimension) {

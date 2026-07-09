@@ -38,7 +38,7 @@ public class ModuleFile extends ClientFile {
                Module module = moduleManager.getModule(name);
                module.setKey(key);
                module.setHidden(hidden);
-               if (enabled && (Naven.mc == null || Naven.mc.player == null || Naven.mc.level == null)) {
+               if (enabled && (Naven.mc == null || Naven.mc.player == null || Naven.mc.world == null)) {
                   Naven.getInstance().queuePendingEnable(module);
                } else {
                   module.setEnabled(enabled);

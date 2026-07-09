@@ -9,7 +9,7 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.world.item.BlockItem;
+import net.minecraft.item.BlockItem;
 
 @ModuleInfo(
    name = "FastPlace",
@@ -30,7 +30,7 @@ public class FastPlace extends Module {
    public void onMotion(EventMotion e) {
       if (e.getType() == EventType.PRE) {
          MinecraftAccessor accessor = (MinecraftAccessor)mc;
-         if (mc.options.keyUse.isDown() && mc.player.getMainHandItem().getItem() instanceof BlockItem) {
+         if (mc.options.useKey.isPressed() && mc.player.getMainHandStack().getItem() instanceof BlockItem) {
             this.counter = this.counter + this.cps.getCurrentValue() / 20.0F;
             if (this.counter >= 1.0F / this.cps.getCurrentValue()) {
                accessor.setRightClickDelay(0);

@@ -11,18 +11,18 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
-import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.entity.Entity;
 import java.util.List;
+import net.minecraft.client.gui.screen.ingame.InventoryScreen;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
+import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.Box;
 
 @ModuleInfo(name = "AutoOffHand", description = "Smart switches the items in your OffHand based on combat state and health", category = Category.PLAYER)
 public class AutoOffHand extends Module {
@@ -72,26 +72,26 @@ public class AutoOffHand extends Module {
 
     @EventTarget
     public void onTick(EventRunTicks event) {
-        if (event.getType() != EventType.PRE || mc.player == null || mc.level == null) {
+        if (event.getType() != EventType.PRE || mc.player == null || mc.world == null) {
             return;
         }
         if (switchCooldown > 0) {
             switchCooldown--;
             return;
         }
-        if (mc.screen instanceof InventoryScreen) {
+        if (mc.currentScreen instanceof InventoryScreen) {
             return;
         }
-        Player player = mc.player;
-        ItemStack currentOffhand = player.getOffhandItem();
+        PlayerEntity player = mc.player;
+        ItemStack currentOffhand = player.getOffHandStack();
         float currentHealth = player.getHealth();
         boolean hasPlayerNearby = false;
         float switchRange = switchDistance.getCurrentValue();
-        AABB boundingBox = player.getBoundingBox().inflate(switchRange);
-        List<Entity> entities = mc.level.getEntities(player, boundingBox);
+        Box boundingBox = player.getBoundingBox().expand(switchRange);
+        List<Entity> entities = mc.world.getOtherEntities(player, boundingBox);
 
         for (Entity entity : entities) {
-            if (entity instanceof Player && entity != player) {
+            if (entity instanceof PlayerEntity && entity != player) {
                 float distance = player.distanceTo(entity);
                 if (distance <= switchRange) {
                     hasPlayerNearby = true;
@@ -148,7 +148,7 @@ public class AutoOffHand extends Module {
 
 
     private void switchToGoldenApple() {
-        ItemStack currentOffhand = mc.player.getOffhandItem();
+        ItemStack currentOffhand = mc.player.getOffHandStack();
         if (isGoldenApple(currentOffhand)) {
             return;
         }
@@ -157,7 +157,7 @@ public class AutoOffHand extends Module {
         int bestCount = 0;
 
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getItem(i);
+            ItemStack stack = mc.player.getInventory().getStack(i);
 
             if (!stack.isEmpty()) {
                 if (stack.getItem() == Items.ENCHANTED_GOLDEN_APPLE) {
@@ -190,31 +190,31 @@ public class AutoOffHand extends Module {
         Object packet = event.getPacket();
 
         //By L1ngG3
-        if (packet instanceof ServerboundPlayerCommandPacket) {
+        if (packet instanceof ClientCommandC2SPacket) {
             return;
         }
-        if ((packet instanceof ServerboundContainerClickPacket || packet instanceof ServerboundContainerClosePacket)
+        if ((packet instanceof ClickSlotC2SPacket || packet instanceof CloseHandledScreenC2SPacket)
                 && mc.player.isSprinting()) {
             if (processing) {
                 return;
             }
             processing = true;
             event.setCancelled(true);
-            mc.player.connection.send(new ServerboundPlayerCommandPacket(
+            mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(
                     mc.player,
-                    ServerboundPlayerCommandPacket.Action.STOP_SPRINTING
+                    ClientCommandC2SPacket.Mode.STOP_SPRINTING
             ));
-            mc.player.connection.send((net.minecraft.network.protocol.Packet<?>) packet);
-            mc.player.connection.send(new ServerboundPlayerCommandPacket(
+            mc.player.networkHandler.sendPacket((net.minecraft.network.packet.Packet<?>) packet);
+            mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(
                     mc.player,
-                    ServerboundPlayerCommandPacket.Action.START_SPRINTING
+                    ClientCommandC2SPacket.Mode.START_SPRINTING
             ));
             processing = false;
         }
     }
 
     private void switchToBestThrowable() {
-        ItemStack currentOffhand = mc.player.getOffhandItem();
+        ItemStack currentOffhand = mc.player.getOffHandStack();
         if (isThrowableItem(currentOffhand)) {
             return;
         }
@@ -222,7 +222,7 @@ public class AutoOffHand extends Module {
         int bestCount = 0;
 
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getItem(i);
+            ItemStack stack = mc.player.getInventory().getStack(i);
 
             if (!stack.isEmpty()) {
                 String itemName = stack.getItem().toString().toLowerCase();
@@ -262,27 +262,27 @@ public class AutoOffHand extends Module {
     }
 
     private void swapItems(int slot1, int slot2) {
-        if (mc.player == null || mc.getConnection() == null) return;
-        int containerId = mc.player.containerMenu.containerId;
-        int stateId = mc.player.containerMenu.getStateId();
+        if (mc.player == null || mc.getNetworkHandler() == null) return;
+        int containerId = mc.player.currentScreenHandler.syncId;
+        int stateId = mc.player.currentScreenHandler.getRevision();
         int networkSlot = convertToNetworkSlot(slot1);
         Int2ObjectOpenHashMap<ItemStack> changedSlots =
                 new Int2ObjectOpenHashMap<>();
-        ServerboundContainerClickPacket clickPacket = new ServerboundContainerClickPacket(
+        ClickSlotC2SPacket clickPacket = new ClickSlotC2SPacket(
                 containerId,
                 stateId,
                 networkSlot,
                 40,
-                ClickType.SWAP,
+                SlotActionType.SWAP,
                 ItemStack.EMPTY,
                 changedSlots
         );
 
-        mc.getConnection().send(clickPacket);
+        mc.getNetworkHandler().sendPacket(clickPacket);
 
         ItemStack itemToMove = getItemInSlot(slot1);
         if (slot2 == 40 && !itemToMove.isEmpty()) {
-            mc.player.setItemInHand(InteractionHand.OFF_HAND, itemToMove.copy());
+            mc.player.setStackInHand(Hand.OFF_HAND, itemToMove.copy());
         }
     }
 
@@ -301,9 +301,9 @@ public class AutoOffHand extends Module {
 
     private ItemStack getItemInSlot(int slot) {
         if (slot == 40) {
-            return mc.player.getOffhandItem();
+            return mc.player.getOffHandStack();
         } else if (slot >= 0 && slot < 36) {
-            return mc.player.getInventory().getItem(slot);
+            return mc.player.getInventory().getStack(slot);
         }
         return ItemStack.EMPTY;
     }
@@ -311,7 +311,7 @@ public class AutoOffHand extends Module {
     @Override
     public String getSuffix() {
         if (mc.player == null) return "";
-        ItemStack offhand = mc.player.getOffhandItem();
+        ItemStack offhand = mc.player.getOffHandStack();
 
         if (offhand.isEmpty()) {
             return "Empty";

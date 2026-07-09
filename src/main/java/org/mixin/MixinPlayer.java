@@ -5,12 +5,12 @@ import awa.qwq.ovo.Naven.events.impl.EventAttackSlowdown;
 import awa.qwq.ovo.Naven.events.impl.EventAttackYaw;
 import awa.qwq.ovo.Naven.events.impl.EventStayingOnGroundSurface;
 import awa.qwq.ovo.Naven.viaversionfix.items.spear.SpearLogic;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -18,17 +18,17 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin({Player.class})
+@Mixin({PlayerEntity.class})
 public abstract class MixinPlayer extends LivingEntity {
    private static final double ATTACK_SLOWDOWN_XZ = 0.6D;
 
-   protected MixinPlayer(EntityType<? extends LivingEntity> pEntityType, Level pLevel) {
+   protected MixinPlayer(EntityType<? extends LivingEntity> pEntityType, World pLevel) {
       super(pEntityType, pLevel);
    }
 
    @Inject(method = {"attack"}, at = {@At("HEAD")}, cancellable = true)
    private void attackWithSpear(Entity target, CallbackInfo ci) {
-      if (SpearLogic.piercingAttack((Player)(Object)this, target)) {
+      if (SpearLogic.piercingAttack((PlayerEntity)(Object)this, target)) {
          ci.cancel();
       }
    }
@@ -37,11 +37,11 @@ public abstract class MixinPlayer extends LivingEntity {
       method = {"attack"},
       at = @At(
          value = "INVOKE",
-         target = "Lnet/minecraft/world/entity/player/Player;getYRot()F"
+         target = "Lnet/minecraft/entity/player/PlayerEntity;getYaw()F"
       )
    )
-   private float hookFixRotation(Player instance) {
-      EventAttackYaw event = new EventAttackYaw(instance.getYRot());
+   private float hookFixRotation(PlayerEntity instance) {
+      EventAttackYaw event = new EventAttackYaw(instance.getYaw());
       Naven.getInstance().getEventManager().call(event);
       return event.getYaw();
    }
@@ -50,19 +50,19 @@ public abstract class MixinPlayer extends LivingEntity {
            method = {"attack"},
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/world/entity/player/Player;setDeltaMovement(Lnet/minecraft/world/phys/Vec3;)V"
+                   target = "Lnet/minecraft/entity/player/PlayerEntity;setVelocity(Lnet/minecraft/util/math/Vec3d;)V"
            )
    )
-   private void hookSetDeltaMovement(Player instance, Vec3 vec3) {
+   private void hookSetDeltaMovement(PlayerEntity instance, Vec3d vec3) {
       EventAttackSlowdown event = new EventAttackSlowdown(EventAttackSlowdown.Type.Delta_Movement, ATTACK_SLOWDOWN_XZ);
       Naven.getInstance().getEventManager().call(event);
       if (!event.isCancelled()) {
          double motionXZ = event.getMotionXZ();
          if (motionXZ != ATTACK_SLOWDOWN_XZ) {
             double scale = motionXZ / ATTACK_SLOWDOWN_XZ;
-            instance.setDeltaMovement(new Vec3(vec3.x * scale, vec3.y, vec3.z * scale));
+            instance.setVelocity(new Vec3d(vec3.x * scale, vec3.y, vec3.z * scale));
          } else {
-            instance.setDeltaMovement(vec3);
+            instance.setVelocity(vec3);
          }
       }
    }
@@ -71,10 +71,10 @@ public abstract class MixinPlayer extends LivingEntity {
            method = {"attack"},
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/world/entity/player/Player;setSprinting(Z)V"
+                   target = "Lnet/minecraft/entity/player/PlayerEntity;setSprinting(Z)V"
            )
    )
-   private void hookSetSprinting(Player instance, boolean sprinting) {
+   private void hookSetSprinting(PlayerEntity instance, boolean sprinting) {
       EventAttackSlowdown event = new EventAttackSlowdown(EventAttackSlowdown.Type.Sprinting);
       Naven.getInstance().getEventManager().call(event);
       if (!event.isCancelled()) {
@@ -83,7 +83,7 @@ public abstract class MixinPlayer extends LivingEntity {
    }
 
    @Inject(
-      method = {"isStayingOnGroundSurface"},
+      method = {"clipAtLedge"},
       at = {@At("RETURN")},
       cancellable = true
    )

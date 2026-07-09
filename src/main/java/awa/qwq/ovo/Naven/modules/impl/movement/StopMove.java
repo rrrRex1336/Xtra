@@ -8,30 +8,30 @@ import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(name = "StopMove", description = "Stops movement", category = Category.MOVEMENT)
 public class StopMove extends Module {
-    private Vec3 lockedVelocity = Vec3.ZERO;
+    private Vec3d lockedVelocity = Vec3d.ZERO;
 
     @Override
     public void onEnable() {
         if (mc.player != null) {
-            this.lockedVelocity = mc.player.getDeltaMovement();
+            this.lockedVelocity = mc.player.getVelocity();
         }
         super.onEnable();
     }
 
     @Override
     public void onDisable() {
-        this.lockedVelocity = Vec3.ZERO;
+        this.lockedVelocity = Vec3d.ZERO;
         super.onDisable();
     }
 
     @EventTarget
     public void onRunTicks(EventRunTicks event) {
         if (event.getType() == EventType.PRE && mc.player != null) {
-            mc.player.setDeltaMovement(this.lockedVelocity);
+            mc.player.setVelocity(this.lockedVelocity);
         }
     }
 

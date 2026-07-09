@@ -8,19 +8,22 @@ import awa.qwq.ovo.Naven.events.impl.EventRunTicks;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.utils.vector.Vector3d;
-import com.mojang.blaze3d.vertex.PoseStack;
 import lombok.Getter;
 import lombok.Setter;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
-import net.minecraft.network.protocol.game.*;
-import net.minecraft.util.Mth;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.s2c.common.DisconnectS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket;
+import net.minecraft.network.packet.s2c.play.LookAtS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerRespawnS2CPacket;
 
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
@@ -29,14 +32,14 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class AlinkManager {
 
-    private static final Minecraft mc = Minecraft.getInstance();
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
     private final SmoothAnimationTimer progress = new SmoothAnimationTimer(0.0F, 0.2F);
 
     @Getter
     private static boolean isActive = false;
     @Getter
-    private static Vec3 delayedVelocity = null;
-    private static final Queue<Packet<? super ClientPacketListener>> cachedPackets = new ConcurrentLinkedQueue<>();
+    private static Vec3d delayedVelocity = null;
+    private static final Queue<Packet<? super ClientPlayNetworkHandler>> cachedPackets = new ConcurrentLinkedQueue<>();
 
     @Getter @Setter
     private static long maxAlinkTime = 0;
@@ -46,26 +49,26 @@ public class AlinkManager {
     private static float progressPercent = 0.0F;
     private static final Map<Entity, Vector3d> trackedEntities = new HashMap<>();
     @Getter @Setter
-    private static Player attackTarget = null;
+    private static PlayerEntity attackTarget = null;
     @Getter @Setter
     private static boolean receivedVelocity = false;
     @Getter
-    private static Vec3 storedVelocity = null;
+    private static Vec3d storedVelocity = null;
 
     @EventTarget
     public void onRenderWorld(EventRender event) {
         if (!isActive) return;
-        PoseStack poseStack = event.getPMatrixStack();
+        MatrixStack poseStack = event.getPMatrixStack();
         for (Map.Entry<Entity, Vector3d> entry : trackedEntities.entrySet()) {
             Entity entity = entry.getKey();
-            if (!(entity instanceof Player)) continue;
+            if (!(entity instanceof PlayerEntity)) continue;
             Vector3d pos = entry.getValue();
             if (entity.equals(attackTarget)) {
                 RenderUtils.drawEntitySolidBox(poseStack, pos.getX(), pos.getY(), pos.getZ(),
-                        entity.getBbWidth(), entity.getBbHeight(), new Color(200, 0, 0, 60).getRGB());
+                        entity.getWidth(), entity.getHeight(), new Color(200, 0, 0, 60).getRGB());
             } else {
                 RenderUtils.drawEntitySolidBox(poseStack, pos.getX(), pos.getY(), pos.getZ(),
-                        entity.getBbWidth(), entity.getBbHeight(), new Color(0, 200, 0, 60).getRGB());
+                        entity.getWidth(), entity.getHeight(), new Color(0, 200, 0, 60).getRGB());
             }
         }
     }
@@ -119,7 +122,7 @@ public class AlinkManager {
             progressPercent = Math.min(0.95F, (float) elapsed / 5000.0F);
         }
         this.progress.update(true);
-        this.progress.target = Mth.clamp(progressPercent * 100.0F, 0.0F, 100.0F);
+        this.progress.target = MathHelper.clamp(progressPercent * 100.0F, 0.0F, 100.0F);
     }
 
     @EventTarget
@@ -128,13 +131,13 @@ public class AlinkManager {
         if (!isActive) return false;
 
         Packet<?> packet = event.getPacket();
-        if (packet instanceof ClientboundPlayerPositionPacket ||
-                packet instanceof ClientboundPlayerLookAtPacket) {
+        if (packet instanceof PlayerPositionLookS2CPacket ||
+                packet instanceof LookAtS2CPacket) {
             pendingRelease = true;
             return false;
         }
-        if (packet instanceof ClientboundDisconnectPacket ||
-                packet instanceof ClientboundRespawnPacket) {
+        if (packet instanceof DisconnectS2CPacket ||
+                packet instanceof PlayerRespawnS2CPacket) {
             cachedPackets.clear();
             isActive = false;
             delayedVelocity = null;
@@ -144,21 +147,21 @@ public class AlinkManager {
             return false;
         }
 
-        if (packet instanceof ClientboundTeleportEntityPacket teleportPacket) {
-            Entity entity = mc.level != null ? mc.level.getEntity(teleportPacket.getId()) : null;
+        if (packet instanceof EntityPositionS2CPacket teleportPacket) {
+            Entity entity = mc.world != null ? mc.world.getEntityById(teleportPacket.getId()) : null;
             if (entity != null) {
                 trackedEntities.put(entity, new Vector3d(
                         teleportPacket.getX(), teleportPacket.getY(), teleportPacket.getZ()));
             }
             @SuppressWarnings("unchecked")
-            Packet<? super ClientPacketListener> superPacket = (Packet<? super ClientPacketListener>) packet;
+            Packet<? super ClientPlayNetworkHandler> superPacket = (Packet<? super ClientPlayNetworkHandler>) packet;
             cachedPackets.add(superPacket);
             event.setCancelled(true);
             return true;
         }
 
         @SuppressWarnings("unchecked")
-        Packet<? super ClientPacketListener> superPacket = (Packet<? super ClientPacketListener>) packet;
+        Packet<? super ClientPlayNetworkHandler> superPacket = (Packet<? super ClientPlayNetworkHandler>) packet;
         cachedPackets.add(superPacket);
         event.setCancelled(true);
         return true;
@@ -166,9 +169,9 @@ public class AlinkManager {
 
     private static void releaseAllPackets() {
         while (!cachedPackets.isEmpty()) {
-            Packet<? super ClientPacketListener> packet = cachedPackets.poll();
-            if (packet != null && mc.getConnection() != null) {
-                packet.handle(mc.getConnection());
+            Packet<? super ClientPlayNetworkHandler> packet = cachedPackets.poll();
+            if (packet != null && mc.getNetworkHandler() != null) {
+                packet.apply(mc.getNetworkHandler());
             }
         }
     }

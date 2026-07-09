@@ -13,23 +13,23 @@ import awa.qwq.ovo.Naven.utils.BlockUtils;
 import awa.qwq.ovo.Naven.utils.ChunkUtils;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.Tesselator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.protocol.game.ClientboundBlockEventPacket;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.ChestType;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.ChestBlock;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.block.entity.ChestBlockEntity;
+import net.minecraft.block.enums.ChestType;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.network.packet.s2c.play.BlockEventS2CPacket;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 
 @ModuleInfo(
    name = "ChestESP",
@@ -40,7 +40,7 @@ public class ChestESP extends Module {
    private static final float[] chestColor = new float[]{0.0F, 1.0F, 0.0F};
    private static final float[] openedChestColor = new float[]{1.0F, 0.0F, 0.0F};
    public final List<BlockPos> openedChests = new CopyOnWriteArrayList<>();
-   private final List<AABB> renderBoundingBoxes = new CopyOnWriteArrayList<>();
+   private final List<Box> renderBoundingBoxes = new CopyOnWriteArrayList<>();
 
    @Override
    public void onDisable() {
@@ -53,9 +53,9 @@ public class ChestESP extends Module {
 
    @EventTarget
    public void onPacket(EventPacket e) {
-      if (e.getType() == EventType.RECEIVE && e.getPacket() instanceof ClientboundBlockEventPacket) {
-         ClientboundBlockEventPacket packet = (ClientboundBlockEventPacket)e.getPacket();
-         if ((packet.getBlock() == Blocks.CHEST || packet.getBlock() == Blocks.TRAPPED_CHEST) && packet.getB0() == 1 && packet.getB1() == 1) {
+      if (e.getType() == EventType.RECEIVE && e.getPacket() instanceof BlockEventS2CPacket) {
+         BlockEventS2CPacket packet = (BlockEventS2CPacket)e.getPacket();
+         if ((packet.getBlock() == Blocks.CHEST || packet.getBlock() == Blocks.TRAPPED_CHEST) && packet.getType() == 1 && packet.getData() == 1) {
             this.openedChests.add(packet.getPos());
          }
       }
@@ -70,7 +70,7 @@ public class ChestESP extends Module {
          for (BlockEntity blockEntity : blockEntities) {
             if (blockEntity instanceof ChestBlockEntity) {
                ChestBlockEntity chestBE = (ChestBlockEntity)blockEntity;
-               AABB box = this.getChestBox(chestBE);
+               Box box = this.getChestBox(chestBE);
                if (box != null) {
                   this.renderBoundingBoxes.add(box);
                }
@@ -79,22 +79,22 @@ public class ChestESP extends Module {
       }
    }
 
-   private AABB getChestBox(ChestBlockEntity chestBE) {
-      BlockState state = chestBE.getBlockState();
-      if (!state.hasProperty(ChestBlock.TYPE)) {
+   private Box getChestBox(ChestBlockEntity chestBE) {
+      BlockState state = chestBE.getCachedState();
+      if (!state.contains(ChestBlock.CHEST_TYPE)) {
          return null;
       } else {
-         ChestType chestType = (ChestType)state.getValue(ChestBlock.TYPE);
+         ChestType chestType = (ChestType)state.get(ChestBlock.CHEST_TYPE);
          if (chestType == ChestType.LEFT) {
             return null;
          } else {
-            BlockPos pos = chestBE.getBlockPos();
-            AABB box = BlockUtils.getBoundingBox(pos);
+            BlockPos pos = chestBE.getPos();
+            Box box = BlockUtils.getBoundingBox(pos);
             if (chestType != ChestType.SINGLE) {
-               BlockPos pos2 = pos.relative(ChestBlock.getConnectedDirection(state));
+               BlockPos pos2 = pos.offset(ChestBlock.getFacing(state));
                if (BlockUtils.canBeClicked(pos2)) {
-                  AABB box2 = BlockUtils.getBoundingBox(pos2);
-                  box = box.minmax(box2);
+                  Box box2 = BlockUtils.getBoundingBox(pos2);
+                  box = box.union(box2);
                }
             }
 
@@ -105,25 +105,25 @@ public class ChestESP extends Module {
 
    @EventTarget
    public void onRender(EventRender e) {
-      PoseStack stack = e.getPMatrixStack();
-      stack.pushPose();
+      MatrixStack stack = e.getPMatrixStack();
+      stack.push();
       RenderSystem.disableDepthTest();
       RenderSystem.enableBlend();
       RenderSystem.defaultBlendFunc();
-      RenderSystem.setShader(GameRenderer::getPositionShader);
-      Tesselator tessellator = RenderSystem.renderThreadTesselator();
-      BufferBuilder bufferBuilder = tessellator.getBuilder();
+      RenderSystem.setShader(GameRenderer::getPositionProgram);
+      Tessellator tessellator = RenderSystem.renderThreadTesselator();
+      BufferBuilder bufferBuilder = tessellator.getBuffer();
 
-      for (AABB box : this.renderBoundingBoxes) {
-         BlockPos pos = BlockPos.containing(box.minX, box.minY, box.minZ);
+      for (Box box : this.renderBoundingBoxes) {
+         BlockPos pos = BlockPos.ofFloored(box.minX, box.minY, box.minZ);
          float[] color = this.openedChests.contains(pos) ? openedChestColor : chestColor;
          RenderSystem.setShaderColor(color[0], color[1], color[2], 0.25F);
-         RenderUtils.drawBoxWithCameraOffset(bufferBuilder, stack.last().pose(), box);
+         RenderUtils.drawBoxWithCameraOffset(bufferBuilder, stack.peek().getPositionMatrix(), box);
       }
 
       RenderSystem.disableBlend();
       RenderSystem.enableDepthTest();
       RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-      stack.popPose();
+      stack.pop();
    }
 }

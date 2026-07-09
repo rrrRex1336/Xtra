@@ -4,18 +4,17 @@ import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.modules.impl.player.ContainerStealer;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
-import com.mojang.blaze3d.platform.Lighting;
-
 import java.awt.*;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.render.DiffuseLighting;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.item.ItemStack;
+import net.minecraft.screen.GenericContainerScreenHandler;
+import net.minecraft.screen.slot.Slot;
 
 public class ChestContent implements IslandContent {
-    private static final Minecraft mc = Minecraft.getInstance();
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
     
     @Override
     public int getPriority() {
@@ -29,23 +28,23 @@ public class ChestContent implements IslandContent {
         }
         ContainerStealer containerStealer = (ContainerStealer) Naven.getInstance().getModuleManager().getModule(ContainerStealer.class);
         if (containerStealer != null && containerStealer.isEnabled() && containerStealer.motionMode.isCurrentMode("Silent")) {
-            return mc.player.containerMenu instanceof ChestMenu;
+            return mc.player.currentScreenHandler instanceof GenericContainerScreenHandler;
         }
         return false;
     }
 
     @Override
-    public void render(GuiGraphics graphics, PoseStack stack, float x, float y) {
-        if (mc.player == null || !(mc.player.containerMenu instanceof ChestMenu menu)) {
+    public void render(DrawContext graphics, MatrixStack stack, float x, float y) {
+        if (mc.player == null || !(mc.player.currentScreenHandler instanceof GenericContainerScreenHandler menu)) {
             return;
         }
 
-        Lighting.setupForFlatItems();
-        graphics.pose().pushPose();
-        graphics.pose().translate(x + 8, y + 4, 0);
+        DiffuseLighting.disableGuiDepthLighting();
+        graphics.getMatrices().push();
+        graphics.getMatrices().translate(x + 8, y + 4, 0);
         
         boolean isEmpty = true;
-        int containerSlotCount = menu.getRowCount() * 9;
+        int containerSlotCount = menu.getRows() * 9;
 
         for (int i = 0; i < containerSlotCount; i++) {
             Slot slot = menu.getSlot(i);
@@ -56,29 +55,29 @@ public class ChestContent implements IslandContent {
             float slotRenderX = slotX * 18.0f + 3.0f;
             float slotRenderY = slotY * 18.0f + 3.0f;
             
-            ItemStack stack2 = slot.getItem();
+            ItemStack stack2 = slot.getStack();
 
             if (!stack2.isEmpty()) {
                 isEmpty = false;
                 RenderSystem.enableDepthTest();
-                graphics.renderItem(stack2, (int)(slotRenderX - 2), (int)(slotRenderY - 3));
-                graphics.renderItemDecorations(mc.font, stack2, (int)(slotRenderX - 2), (int)(slotRenderY - 3));
+                graphics.drawItem(stack2, (int)(slotRenderX - 2), (int)(slotRenderY - 3));
+                graphics.drawItemInSlot(mc.textRenderer, stack2, (int)(slotRenderX - 2), (int)(slotRenderY - 3));
                 RenderSystem.disableDepthTest();
             }
         }
         
-        graphics.pose().popPose();
+        graphics.getMatrices().pop();
 
         if (isEmpty) {
-            graphics.pose().pushPose();
-            graphics.pose().translate(x + getWidth() / 2.0f, y + getHeight() / 2.0f, 0);
+            graphics.getMatrices().push();
+            graphics.getMatrices().translate(x + getWidth() / 2.0f, y + getHeight() / 2.0f, 0);
             String emptyText = "Empty...";
             float textWidth = Fonts.harmony.getWidth(emptyText, 0.5f);
-            Fonts.harmony.render(graphics.pose(), emptyText, -textWidth / 2.0f, -Fonts.harmony.getHeight(false, 0.5f) / 2.0f, new Color(-1),true, 0.5f);
-            graphics.pose().popPose();
+            Fonts.harmony.render(graphics.getMatrices(), emptyText, -textWidth / 2.0f, -Fonts.harmony.getHeight(false, 0.5f) / 2.0f, new Color(-1),true, 0.5f);
+            graphics.getMatrices().pop();
         }
 
-        Lighting.setupFor3DItems();
+        DiffuseLighting.enableGuiDepthLighting();
     }
     
     @Override
@@ -88,11 +87,11 @@ public class ChestContent implements IslandContent {
     
     @Override
     public float getHeight() {
-        if (mc.player == null || !(mc.player.containerMenu instanceof ChestMenu menu)) {
+        if (mc.player == null || !(mc.player.currentScreenHandler instanceof GenericContainerScreenHandler menu)) {
             return 50.0f;
         }
 
-        int rows = menu.getRowCount();
+        int rows = menu.getRows();
         return rows * 18.0f + 6.0f;
     }
 }

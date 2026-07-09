@@ -11,9 +11,9 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import lombok.Getter;
-import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
 
 @ModuleInfo(name = "NoFall", category = Category.MOVEMENT, description = "Prevent fall damage")
 public class NoFall extends Module {
@@ -87,10 +87,10 @@ public class NoFall extends Module {
         }
 
         if (jump) {
-            mc.options.keyJump.setDown(false);
+            mc.options.jumpKey.setPressed(false);
         }
 
-        previousFallDistance = mc.player.onGround() ? 0.0 : mc.player.fallDistance;
+        previousFallDistance = mc.player.isOnGround() ? 0.0 : mc.player.fallDistance;
 
         if (isLagged && handleFall) {
             if (boostTick < (int) (float) lagTick.getCurrentValue()) {
@@ -107,14 +107,14 @@ public class NoFall extends Module {
     @EventTarget
     public void onLivingUpdate(EventUpdate event) {
         if (shouldBlockJump() && mc.options != null) {
-            mc.options.keyJump.setDown(false);
+            mc.options.jumpKey.setPressed(false);
         }
     }
 
     @EventTarget
     public void onStrafe(EventStrafe event) {
-        if (mc.player.onGround() && jump) {
-            mc.player.jumpFromGround();
+        if (mc.player.isOnGround() && jump) {
+            mc.player.jump();
             jump = false;
         }
     }
@@ -149,17 +149,17 @@ public class NoFall extends Module {
                 String currentMode = mode.getCurrentMode();
 
                 if (currentMode.equals("Elytra")) {
-                    PacketUtils.sendQueued(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
-                    PacketUtils.sendQueued(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING));
+                    PacketUtils.sendQueued(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+                    PacketUtils.sendQueued(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
                 } else if (currentMode.equals("LagPos")) {
                     double offset = lagOffset.getCurrentValue();
-                    PacketUtils.sendQueued(new ServerboundMovePlayerPacket.Pos(
+                    PacketUtils.sendQueued(new PlayerMoveC2SPacket.PositionAndOnGround(
                             originalX + offset,
                             originalY,
                             originalZ,
                             false
                     ));
-                    PacketUtils.sendQueued(new ServerboundMovePlayerPacket.Pos(
+                    PacketUtils.sendQueued(new PlayerMoveC2SPacket.PositionAndOnGround(
                             originalX,
                             originalY,
                             originalZ,
@@ -178,11 +178,11 @@ public class NoFall extends Module {
     @EventTarget
     public void onPacket(EventPacket event) {
         if (event.getType() == EventType.SEND) {
-            if (handleFall && sendLagPacket && isLagged && event.getPacket() instanceof ServerboundMovePlayerPacket) {
+            if (handleFall && sendLagPacket && isLagged && event.getPacket() instanceof PlayerMoveC2SPacket) {
                 event.setCancelled(true);
             }
         } else if (event.getType() == EventType.RECEIVE) {
-            if (handleFall && isLagged && event.getPacket() instanceof ClientboundPlayerPositionPacket) {
+            if (handleFall && isLagged && event.getPacket() instanceof PlayerPositionLookS2CPacket) {
                 if (boostTick < (int) lagTick.getCurrentValue()) {
                     boostTick = (int) lagTick.getCurrentValue();
                 }

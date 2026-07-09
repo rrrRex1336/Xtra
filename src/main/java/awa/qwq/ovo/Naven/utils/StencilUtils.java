@@ -1,14 +1,14 @@
 package awa.qwq.ovo.Naven.utils;
 
 import org.mixin.accessors.RenderTargetAccessor;
-import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gl.Framebuffer;
 import org.lwjgl.opengl.EXTFramebufferObject;
 import org.lwjgl.opengl.GL11;
 
 public class StencilUtils {
-   private static final Minecraft mc = Minecraft.getInstance();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
 
    public static void write(boolean renderClipLayer) {
       setupFBO();
@@ -32,17 +32,17 @@ public class StencilUtils {
    }
 
    public static void setupFBO() {
-      if (mc.getMainRenderTarget().getDepthTextureId() > -1) {
-         setupFBO(mc.getMainRenderTarget());
-         ((RenderTargetAccessor)mc.getMainRenderTarget()).setDepthBufferId(-1);
+      if (mc.getFramebuffer().getDepthAttachment() > -1) {
+         setupFBO(mc.getFramebuffer());
+         ((RenderTargetAccessor)mc.getFramebuffer()).setDepthBufferId(-1);
       }
    }
 
-   public static void setupFBO(RenderTarget fbo) {
-      EXTFramebufferObject.glDeleteRenderbuffersEXT(fbo.getDepthTextureId());
+   public static void setupFBO(Framebuffer fbo) {
+      EXTFramebufferObject.glDeleteRenderbuffersEXT(fbo.getDepthAttachment());
       int stencilDepthBufferID = EXTFramebufferObject.glGenRenderbuffersEXT();
       EXTFramebufferObject.glBindRenderbufferEXT(36161, stencilDepthBufferID);
-      EXTFramebufferObject.glRenderbufferStorageEXT(36161, 34041, mc.getWindow().getWidth(), mc.getWindow().getHeight());
+      EXTFramebufferObject.glRenderbufferStorageEXT(36161, 34041, mc.getWindow().getFramebufferWidth(), mc.getWindow().getFramebufferHeight());
       EXTFramebufferObject.glFramebufferRenderbufferEXT(36160, 36128, 36161, stencilDepthBufferID);
       EXTFramebufferObject.glFramebufferRenderbufferEXT(36160, 36096, 36161, stencilDepthBufferID);
    }

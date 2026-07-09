@@ -10,17 +10,17 @@ import awa.qwq.ovo.Naven.modules.impl.visual.MotionBlur;
 import awa.qwq.ovo.Naven.modules.impl.visual.NoHurtCam;
 import awa.qwq.ovo.Naven.modules.ModuleManager;
 import awa.qwq.ovo.Naven.viaversionfix.items.spear.SpearLogic;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.RenderBuffers;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.render.BufferBuilderStorage;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -33,51 +33,51 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class MixinGameRenderer {
    @Shadow
    @Final
-   private Minecraft minecraft;
+   private MinecraftClient client;
    @Shadow
    @Final
-   private RenderBuffers renderBuffers;
+   private BufferBuilderStorage buffers;
 
    private boolean skijaFrameStarted = false;
 
-   @Inject(method = {"pick"}, at = {@At("TAIL")})
+   @Inject(method = {"updateTargetedEntity"}, at = {@At("TAIL")})
    private void updateSpearPick(float partialTicks, CallbackInfo ci) {
-      SpearLogic.updateClientPick(this.minecraft, partialTicks);
-      if (this.minecraft.player == null) {
+      SpearLogic.updateClientPick(this.client, partialTicks);
+      if (this.client.player == null) {
          return;
       }
 
-      if (this.minecraft.hitResult instanceof EntityHitResult entityHitResult && ChatClient.isIrcPlayer(entityHitResult.getEntity())) {
-         Vec3 eye = this.minecraft.player.getEyePosition(partialTicks);
-         Vec3 view = this.minecraft.player.getViewVector(partialTicks);
-         this.minecraft.crosshairPickEntity = null;
-         this.minecraft.hitResult = BlockHitResult.miss(eye, Direction.getNearest(view.x, view.y, view.z), BlockPos.containing(eye));
+      if (this.client.crosshairTarget instanceof EntityHitResult entityHitResult && ChatClient.isIrcPlayer(entityHitResult.getEntity())) {
+         Vec3d eye = this.client.player.getCameraPosVec(partialTicks);
+         Vec3d view = this.client.player.getRotationVec(partialTicks);
+         this.client.targetedEntity = null;
+         this.client.crosshairTarget = BlockHitResult.createMissed(eye, Direction.getFacing(view.x, view.y, view.z), BlockPos.ofFloored(eye));
       }
    }
 
    @Inject(
-      method = {"renderLevel"},
+      method = {"renderWorld"},
       at = {@At(
          value = "FIELD",
-         target = "Lnet/minecraft/client/renderer/GameRenderer;renderHand:Z",
+         target = "Lnet/minecraft/client/render/GameRenderer;renderHand:Z",
          opcode = 180,
          ordinal = 0
       )}
    )
-   private void renderLevel(float pPartialTicks, long pFinishTimeNano, PoseStack pMatrixStack, CallbackInfo ci) {
+   private void renderLevel(float pPartialTicks, long pFinishTimeNano, MatrixStack pMatrixStack, CallbackInfo ci) {
       Naven.getInstance().getEventManager().call(new EventRender(pPartialTicks, pMatrixStack));
    }
 
    @Inject(
-      method = {"renderLevel"},
+      method = {"renderWorld"},
       at = {@At("TAIL")}
    )
-   private void onRenderWorldTail(CallbackInfo info) {
+   private void onRenderWorldTail(float pPartialTicks, long pFinishTimeNano, MatrixStack pMatrixStack, CallbackInfo info) {
       Naven.getInstance().getEventManager().call(new EventRenderAfterWorld());
    }
 
    @Inject(
-      method = {"getNightVisionScale"},
+      method = {"getNightVisionStrength"},
       at = {@At("HEAD")},
       cancellable = true
    )
@@ -97,8 +97,8 @@ public class MixinGameRenderer {
       }
 
       MotionBlur motionblur = MotionBlur.instance;
-      if (motionblur.isEnabled() && this.minecraft.player != null && motionblur.shader != null) {
-         motionblur.shader.process(tickDelta);
+      if (motionblur.isEnabled() && this.client.player != null && motionblur.shader != null) {
+         motionblur.shader.render(tickDelta);
       }
    }
 
@@ -106,23 +106,23 @@ public class MixinGameRenderer {
            method = {"render"},
            at = {@At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/client/gui/Gui;render(Lnet/minecraft/client/gui/GuiGraphics;F)V",
+                   target = "Lnet/minecraft/client/gui/hud/InGameHud;render(Lnet/minecraft/client/gui/DrawContext;F)V",
                    shift = At.Shift.AFTER
            )}
    )
    public void injectRender2DEvent(float p_109094_, long p_109095_, boolean p_109096_, CallbackInfo ci) {
-      GuiGraphics e = new GuiGraphics(this.minecraft, this.renderBuffers.bufferSource());
-      EventRender2D event = new EventRender2D(e.pose(), e);
+      DrawContext e = new DrawContext(this.client, this.buffers.getEntityVertexConsumers());
+      EventRender2D event = new EventRender2D(e.getMatrices(), e);
       Naven.getInstance().getEventManager().call(event);
    }
 
 
    @Inject(
-      method = {"bobHurt"},
+      method = {"tiltViewWhenHurt"},
       at = {@At("HEAD")},
       cancellable = true
    )
-   private void bobHurt(PoseStack pMatrixStack, float pPartialTicks, CallbackInfo ci) {
+   private void bobHurt(MatrixStack pMatrixStack, float pPartialTicks, CallbackInfo ci) {
       Naven naven = Naven.getInstance();
       ModuleManager moduleManager = naven == null ? null : naven.getModuleManager();
       if (moduleManager == null) {

@@ -24,8 +24,8 @@ public class Sprint extends Module {
         boolean shouldSprint = MoveUtils.isMoving()
                 && !InventoryMove.shouldStopSprintForSprintModule()
                 && !InventoryManager.shouldStopSprintForSprintModule();
-        mc.options.keySprint.setDown(shouldSprint);
-        mc.options.toggleSprint().set(false);
+        mc.options.sprintKey.setPressed(shouldSprint);
+        mc.options.getSprintToggled().setValue(false);
         if (!shouldSprint && mc.player != null && mc.player.isSprinting()) {
             mc.player.setSprinting(false);
         }
@@ -33,6 +33,6 @@ public class Sprint extends Module {
 
     @Override
     public void onDisable() {
-        mc.options.keySprint.setDown(false);
+        mc.options.sprintKey.setPressed(false);
     }
 }

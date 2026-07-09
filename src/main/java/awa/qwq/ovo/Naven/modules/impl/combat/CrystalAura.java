@@ -16,14 +16,14 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
-import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
-import net.minecraft.network.protocol.game.ServerboundInteractPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.PosRot;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.decoration.EndCrystalEntity;
+import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.Full;
+import net.minecraft.network.packet.s2c.play.EntitySpawnS2CPacket;
+import net.minecraft.util.Hand;
 
 @ModuleInfo(
    name = "CrystalAura",
@@ -37,24 +37,24 @@ public class CrystalAura extends Module {
 
    @EventTarget
    public void onPacket(EventPacket e) {
-      if (e.getType() == EventType.RECEIVE && e.getPacket() instanceof ClientboundAddEntityPacket && this.packet.getCurrentValue()) {
-         ClientboundAddEntityPacket packet = (ClientboundAddEntityPacket)e.getPacket();
-         if (packet.getType() == EntityType.END_CRYSTAL) {
-            EndCrystal pTarget = new EndCrystal(mc.level, packet.getX(), packet.getY(), packet.getZ());
+      if (e.getType() == EventType.RECEIVE && e.getPacket() instanceof EntitySpawnS2CPacket && this.packet.getCurrentValue()) {
+         EntitySpawnS2CPacket packet = (EntitySpawnS2CPacket)e.getPacket();
+         if (packet.getEntityType() == EntityType.END_CRYSTAL) {
+            EndCrystalEntity pTarget = new EndCrystalEntity(mc.world, packet.getX(), packet.getY(), packet.getZ());
             pTarget.setId(packet.getId());
             if (mc.player.distanceTo(pTarget) <= 4.0F) {
                Vector2f rotations = RotationUtils.getRotations(pTarget);
-               mc.getConnection()
-                  .send(new PosRot(mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotations.getX(), rotations.getY(), mc.player.onGround()));
-               PacketUtils.sendSequencedPacket(id -> new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, id));
-               float currentYaw = mc.player.getYRot();
-               float currentPitch = mc.player.getXRot();
-               mc.player.setYRot(RotationManager.rotations.x);
-               mc.player.setXRot(RotationManager.rotations.y);
-               mc.getConnection().send(ServerboundInteractPacket.createAttackPacket(pTarget, false));
-               mc.player.swing(InteractionHand.MAIN_HAND);
-               mc.player.setYRot(currentYaw);
-               mc.player.setXRot(currentPitch);
+               mc.getNetworkHandler()
+                  .sendPacket(new Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotations.getX(), rotations.getY(), mc.player.isOnGround()));
+               PacketUtils.sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, id));
+               float currentYaw = mc.player.getYaw();
+               float currentPitch = mc.player.getPitch();
+               mc.player.setYaw(RotationManager.rotations.x);
+               mc.player.setPitch(RotationManager.rotations.y);
+               mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(pTarget, false));
+               mc.player.swingHand(Hand.MAIN_HAND);
+               mc.player.setYaw(currentYaw);
+               mc.player.setPitch(currentPitch);
             }
          }
       }
@@ -62,9 +62,9 @@ public class CrystalAura extends Module {
 
    @EventTarget
    public void onEarlyTick(EventRunTicks e) {
-      if (e.getType() == EventType.PRE && mc.player != null && mc.level != null) {
-         Optional<Entity> any = StreamSupport.<Entity>stream(mc.level.entitiesForRendering().spliterator(), true)
-            .filter(entityx -> entityx instanceof EndCrystal)
+      if (e.getType() == EventType.PRE && mc.player != null && mc.world != null) {
+         Optional<Entity> any = StreamSupport.<Entity>stream(mc.world.getEntities().spliterator(), true)
+            .filter(entityx -> entityx instanceof EndCrystalEntity)
             .findAny();
          rotations = null;
          if (any.isPresent()) {
@@ -82,14 +82,14 @@ public class CrystalAura extends Module {
    @EventTarget
    public void onClick(EventClick e) {
       if (this.entity != null) {
-         float currentYaw = mc.player.getYRot();
-         float currentPitch = mc.player.getXRot();
-         mc.player.setYRot(rotations.x);
-         mc.player.setXRot(rotations.y);
-         mc.getConnection().send(ServerboundInteractPacket.createAttackPacket(this.entity, false));
-         mc.player.swing(InteractionHand.MAIN_HAND);
-         mc.player.setYRot(currentYaw);
-         mc.player.setXRot(currentPitch);
+         float currentYaw = mc.player.getYaw();
+         float currentPitch = mc.player.getPitch();
+         mc.player.setYaw(rotations.x);
+         mc.player.setPitch(rotations.y);
+         mc.getNetworkHandler().sendPacket(PlayerInteractEntityC2SPacket.attack(this.entity, false));
+         mc.player.swingHand(Hand.MAIN_HAND);
+         mc.player.setYaw(currentYaw);
+         mc.player.setPitch(currentPitch);
          this.entity = null;
       }
    }

@@ -19,8 +19,6 @@ import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -28,26 +26,27 @@ import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ambient.Bat;
-import net.minecraft.world.entity.animal.AbstractGolem;
-import net.minecraft.world.entity.animal.Animal;
-import net.minecraft.world.entity.animal.Squid;
-import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
-import net.minecraft.world.entity.decoration.ArmorStand;
-import net.minecraft.world.entity.monster.Slime;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.HitResult.Type;
+import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.decoration.EndCrystalEntity;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.mob.SlimeEntity;
+import net.minecraft.entity.passive.AnimalEntity;
+import net.minecraft.entity.passive.BatEntity;
+import net.minecraft.entity.passive.GolemEntity;
+import net.minecraft.entity.passive.SquidEntity;
+import net.minecraft.entity.passive.VillagerEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.hit.HitResult.Type;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec3d;
 import org.lwjgl.opengl.GL11;
 
 @ModuleInfo(
@@ -172,30 +171,30 @@ public class KillAura extends Module {
    @EventTarget
    public void onRender(EventRender e) {
       if (this.targetEsp.getCurrentValue()) {
-         PoseStack stack = e.getPMatrixStack();
+         MatrixStack stack = e.getPMatrixStack();
          float partialTicks = e.getRenderPartialTicks();
-         stack.pushPose();
+         stack.push();
          GL11.glEnable(3042);
          GL11.glBlendFunc(770, 771);
          GL11.glDisable(2929);
          GL11.glDepthMask(false);
          GL11.glEnable(2848);
-         RenderSystem.setShader(GameRenderer::getPositionShader);
+         RenderSystem.setShader(GameRenderer::getPositionProgram);
          RenderUtils.applyRegionalRenderOffset(stack);
 
          for (Entity entity : targets) {
             if (entity instanceof LivingEntity living) {
                float[] color = target == living ? targetColorRed : targetColorGreen;
-               stack.pushPose();
+               stack.push();
                RenderSystem.setShaderColor(color[0], color[1], color[2], color[3]);
-               double motionX = entity.getX() - entity.xo;
-               double motionY = entity.getY() - entity.yo;
-               double motionZ = entity.getZ() - entity.zo;
-               AABB boundingBox = entity.getBoundingBox()
-                       .move(-motionX, -motionY, -motionZ)
-                       .move(partialTicks * motionX, partialTicks * motionY, partialTicks * motionZ);
+               double motionX = entity.getX() - entity.prevX;
+               double motionY = entity.getY() - entity.prevY;
+               double motionZ = entity.getZ() - entity.prevZ;
+               Box boundingBox = entity.getBoundingBox()
+                       .offset(-motionX, -motionY, -motionZ)
+                       .offset(partialTicks * motionX, partialTicks * motionY, partialTicks * motionZ);
                RenderUtils.drawSolidBox(boundingBox, stack);
-               stack.popPose();
+               stack.pop();
             }
          }
 
@@ -204,7 +203,7 @@ public class KillAura extends Module {
          GL11.glEnable(2929);
          GL11.glDepthMask(true);
          GL11.glDisable(2848);
-         stack.popPose();
+         stack.pop();
       }
    }
 
@@ -234,7 +233,7 @@ public class KillAura extends Module {
    @EventTarget
    public void onMotion(EventRunTicks event) {
       if (event.getType() == EventType.PRE && mc.player != null) {
-         if (mc.screen instanceof AbstractContainerScreen
+         if (mc.currentScreen instanceof HandledScreen
                  || Naven.getInstance().getModuleManager().getModule(Stuck.class).isEnabled()
                  || InventoryUtils.shouldDisableFeatures()) {
             target = null;
@@ -300,8 +299,8 @@ public class KillAura extends Module {
 
    @EventTarget
    public void onClick(EventClick e) {
-      if (mc.player.getUseItem().isEmpty()
-              && mc.screen == null
+      if (mc.player.getActiveItem().isEmpty()
+              && mc.currentScreen == null
               && !NetworkUtils.isServerLag()
               && !Naven.getInstance().getModuleManager().getModule(Blink.class).isEnabled()) {
          while (this.attacks >= 1.0F) {
@@ -325,7 +324,7 @@ public class KillAura extends Module {
 
    public void doAttack() {
       if (!targets.isEmpty()) {
-         HitResult hitResult = mc.hitResult;
+         HitResult hitResult = mc.crosshairTarget;
          if (hitResult.getType() == Type.ENTITY) {
             EntityHitResult result = (EntityHitResult)hitResult;
             if (AntiBots.isBot(result.getEntity())) {
@@ -338,7 +337,7 @@ public class KillAura extends Module {
             int attacked = 0;
 
             for (Entity entity : targets) {
-               if (RotationUtils.getDistance(entity, mc.player.getEyePosition(), RotationManager.rotations) < 3.0) {
+               if (RotationUtils.getDistance(entity, mc.player.getEyePos(), RotationManager.rotations) < 3.0) {
                   this.attackEntity(entity);
                   if (++attacked >= 2) {
                      break;
@@ -369,22 +368,22 @@ public class KillAura extends Module {
                   return false;
                } else if (FriendManager.isFriend(living)) {
                   return false;
-               } else if (living.isDeadOrDying() || living.getHealth() <= 0.0F) {
+               } else if (living.isDead() || living.getHealth() <= 0.0F) {
                   return false;
-               } else if (entity instanceof ArmorStand) {
+               } else if (entity instanceof ArmorStandEntity) {
                   return false;
                } else if (entity.isInvisible() && !this.attackInvisible.getCurrentValue()) {
                   return false;
-               } else if (entity instanceof Player && !this.attackPlayer.getCurrentValue()) {
+               } else if (entity instanceof PlayerEntity && !this.attackPlayer.getCurrentValue()) {
                   return false;
-               } else if (!(entity instanceof Player) || !(entity.getBbWidth() < 0.5) && !living.isSleeping()) {
-                  if ((entity instanceof Mob || entity instanceof Slime || entity instanceof Bat || entity instanceof AbstractGolem)
+               } else if (!(entity instanceof PlayerEntity) || !(entity.getWidth() < 0.5) && !living.isSleeping()) {
+                  if ((entity instanceof MobEntity || entity instanceof SlimeEntity || entity instanceof BatEntity || entity instanceof GolemEntity)
                           && !this.attackMobs.getCurrentValue()) {
                      return false;
-                  } else if ((entity instanceof Animal || entity instanceof Squid) && !this.attackAnimals.getCurrentValue()) {
+                  } else if ((entity instanceof AnimalEntity || entity instanceof SquidEntity) && !this.attackAnimals.getCurrentValue()) {
                      return false;
                   } else {
-                     return entity instanceof Villager && !this.attackAnimals.getCurrentValue() ? false : !(entity instanceof Player) || !entity.isSpectator();
+                     return entity instanceof VillagerEntity && !this.attackAnimals.getCurrentValue() ? false : !(entity instanceof PlayerEntity) || !entity.isSpectator();
                   }
                } else {
                   return false;
@@ -404,8 +403,8 @@ public class KillAura extends Module {
       } else if (entity instanceof LivingEntity && ((LivingEntity)entity).hurtTime > this.hurtTime.getCurrentValue()) {
          return false;
       } else {
-         Vec3 closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePosition(), entity.getBoundingBox());
-         return closestPoint.distanceTo(mc.player.getEyePosition()) > this.aimRange.getCurrentValue()
+         Vec3d closestPoint = RotationUtils.getClosestPoint(mc.player.getEyePos(), entity.getBoundingBox());
+         return closestPoint.distanceTo(mc.player.getEyePos()) > this.aimRange.getCurrentValue()
                  ? false
                  : RotationUtils.inFoV(entity, this.fov.getCurrentValue() / 2.0F);
       }
@@ -413,19 +412,19 @@ public class KillAura extends Module {
 
    public void attackEntity(Entity entity) {
       this.attackTimes++;
-      float currentYaw = mc.player.getYRot();
-      float currentPitch = mc.player.getXRot();
-      mc.player.setYRot(RotationManager.rotations.x);
-      mc.player.setXRot(RotationManager.rotations.y);
-      mc.gameMode.attack(mc.player, entity);
-      mc.player.swing(InteractionHand.MAIN_HAND);
+      float currentYaw = mc.player.getYaw();
+      float currentPitch = mc.player.getPitch();
+      mc.player.setYaw(RotationManager.rotations.x);
+      mc.player.setPitch(RotationManager.rotations.y);
+      mc.interactionManager.attackEntity(mc.player, entity);
+      mc.player.swingHand(Hand.MAIN_HAND);
       if (this.moreParticles.getCurrentValue()) {
-         mc.player.magicCrit(entity);
-         mc.player.crit(entity);
+         mc.player.addEnchantedHitParticles(entity);
+         mc.player.addCritParticles(entity);
       }
 
-      mc.player.setYRot(currentYaw);
-      mc.player.setXRot(currentPitch);
+      mc.player.setYaw(currentYaw);
+      mc.player.setPitch(currentPitch);
    }
 
    public static Entity getTarget() {
@@ -437,7 +436,7 @@ public class KillAura extends Module {
    }
 
    private List<Entity> getTargets() {
-      Stream<Entity> stream = StreamSupport.<Entity>stream(mc.level.entitiesForRendering().spliterator(), true)
+      Stream<Entity> stream = StreamSupport.<Entity>stream(mc.world.getEntities().spliterator(), true)
               .filter(entity -> entity instanceof Entity)
               .filter(this::isValidAttack);
       List<Entity> possibleTargets = stream.collect(Collectors.toList());
@@ -455,7 +454,7 @@ public class KillAura extends Module {
          possibleTargets.removeIf(entity -> !(entity instanceof LivingEntity) || !((LivingEntity)entity).isBaby());
       }
 
-      possibleTargets.sort(Comparator.comparing(o -> o instanceof EndCrystal ? 0 : 1));
+      possibleTargets.sort(Comparator.comparing(o -> o instanceof EndCrystalEntity ? 0 : 1));
       return this.infSwitch.getCurrentValue()
               ? possibleTargets
               : possibleTargets.subList(0, (int)Math.min((float)possibleTargets.size(), this.switchSize.getCurrentValue()));

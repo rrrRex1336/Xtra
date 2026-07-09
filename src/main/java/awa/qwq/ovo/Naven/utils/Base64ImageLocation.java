@@ -1,6 +1,6 @@
 package awa.qwq.ovo.Naven.utils;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Identifier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -8,7 +8,7 @@ public class Base64ImageLocation {
    private static final Logger log = LogManager.getLogger(Base64ImageLocation.class);
    private static int seed = 0;
    private final String base64;
-   private ResourceLocation resourceLocation;
+   private Identifier resourceLocation;
    public boolean failed = false;
 
    public Base64ImageLocation(String base64) {

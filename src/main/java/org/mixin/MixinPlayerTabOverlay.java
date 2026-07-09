@@ -5,14 +5,13 @@ import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventRenderTabOverlay;
 import awa.qwq.ovo.Naven.ui.Island.TabOverlayState;
 import java.util.List;
-
+import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.hud.PlayerListHud;
+import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.text.OrderedText;
+import net.minecraft.text.StringVisitable;
+import net.minecraft.text.Text;
 import awa.qwq.ovo.Naven.modules.impl.visual.Island;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.components.PlayerTabOverlay;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.FormattedText;
-import net.minecraft.util.FormattedCharSequence;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,10 +19,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin({PlayerTabOverlay.class})
+@Mixin({PlayerListHud.class})
 public abstract class MixinPlayerTabOverlay {
    @Shadow
-   public abstract Component getNameForDisplay(PlayerInfo var1);
+   public abstract Text getPlayerName(PlayerListEntry var1);
 
    @Inject(
            method = "render",
@@ -47,21 +46,21 @@ public abstract class MixinPlayerTabOverlay {
            method = "render",
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/client/gui/Font;split(Lnet/minecraft/network/chat/FormattedText;I)Ljava/util/List;",
+                   target = "Lnet/minecraft/client/font/TextRenderer;wrapLines(Lnet/minecraft/text/StringVisitable;I)Ljava/util/List;",
                    ordinal = 0
            ),
            remap = true
    )
-   private List<FormattedCharSequence> hookHeader(Font instance, FormattedText pText, int pMaxWidth) {
+   private List<OrderedText> hookHeader(TextRenderer instance, StringVisitable pText, int pMaxWidth) {
       try {
-         Component component = (Component)pText;
+         Text component = (Text)pText;
          EventRenderTabOverlay event = new EventRenderTabOverlay(EventType.HEADER, component, null);
          Naven.getInstance().getEventManager().call(event);
          TabOverlayState.setHeader(event.getComponent());
-         return instance.split(event.getComponent(), pMaxWidth);
+         return instance.wrapLines(event.getComponent(), pMaxWidth);
       } catch (Exception e) {
-         TabOverlayState.setHeader((Component)pText);
-         return instance.split(pText, pMaxWidth);
+         TabOverlayState.setHeader((Text)pText);
+         return instance.wrapLines(pText, pMaxWidth);
       }
    }
 
@@ -69,22 +68,22 @@ public abstract class MixinPlayerTabOverlay {
            method = "render",
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/client/gui/Font;split(Lnet/minecraft/network/chat/FormattedText;I)Ljava/util/List;",
+                   target = "Lnet/minecraft/client/font/TextRenderer;wrapLines(Lnet/minecraft/text/StringVisitable;I)Ljava/util/List;",
                    ordinal = 1
            ),
            remap = true
    )
-   private List<FormattedCharSequence> hookFooter(Font instance, FormattedText pText, int pMaxWidth) {
+   private List<OrderedText> hookFooter(TextRenderer instance, StringVisitable pText, int pMaxWidth) {
       try {
-         Component component = (Component)pText;
+         Text component = (Text)pText;
          EventRenderTabOverlay event = new EventRenderTabOverlay(EventType.FOOTER, component, null);
 
          Naven.getInstance().getEventManager().call(event);
          TabOverlayState.setFooter(event.getComponent());
-         return instance.split(event.getComponent(), pMaxWidth);
+         return instance.wrapLines(event.getComponent(), pMaxWidth);
       } catch (Exception e) {
-         TabOverlayState.setFooter((Component)pText);
-         return instance.split(pText, pMaxWidth);
+         TabOverlayState.setFooter((Text)pText);
+         return instance.wrapLines(pText, pMaxWidth);
       }
    }
 
@@ -92,18 +91,18 @@ public abstract class MixinPlayerTabOverlay {
            method = "render",
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/client/gui/components/PlayerTabOverlay;getNameForDisplay(Lnet/minecraft/client/multiplayer/PlayerInfo;)Lnet/minecraft/network/chat/Component;"
+                   target = "Lnet/minecraft/client/gui/hud/PlayerListHud;getPlayerName(Lnet/minecraft/client/network/PlayerListEntry;)Lnet/minecraft/text/Text;"
            ),
            remap = true
    )
-   private Component hookName(PlayerTabOverlay instance, PlayerInfo pPlayerInfo) {
+   private Text hookName(PlayerListHud instance, PlayerListEntry pPlayerInfo) {
       try {
-         Component nameForDisplay = this.getNameForDisplay(pPlayerInfo);
+         Text nameForDisplay = this.getPlayerName(pPlayerInfo);
          EventRenderTabOverlay event = new EventRenderTabOverlay(EventType.NAME, nameForDisplay, pPlayerInfo);
          Naven.getInstance().getEventManager().call(event);
          return event.getComponent();
       } catch (Exception e) {
-         return this.getNameForDisplay(pPlayerInfo);
+         return this.getPlayerName(pPlayerInfo);
       }
    }
 }

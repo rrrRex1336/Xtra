@@ -10,11 +10,11 @@ import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.client.KeyMapping;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.SwordItem;
-import net.minecraft.world.phys.HitResult.Type;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.item.AxeItem;
+import net.minecraft.item.Item;
+import net.minecraft.item.SwordItem;
+import net.minecraft.util.hit.HitResult.Type;
 
 @ModuleInfo(
    name = "AutoClicker",
@@ -36,14 +36,14 @@ public class AutoClicker extends Module {
    public void onMotion(EventMotion e) {
       if (e.getType() == EventType.PRE) {
          MinecraftAccessor accessor = (MinecraftAccessor)mc;
-         Item item = mc.player.getMainHandItem().getItem();
-         if (mc.options.keyAttack.isDown()
+         Item item = mc.player.getMainHandStack().getItem();
+         if (mc.options.attackKey.isPressed()
             && (item instanceof SwordItem || item instanceof AxeItem || !this.itemCheck.getCurrentValue())
-            && mc.hitResult.getType() != Type.BLOCK) {
+            && mc.crosshairTarget.getType() != Type.BLOCK) {
             this.counter = this.counter + this.cps.getCurrentValue() / 20.0F;
             if (this.counter >= 1.0F / this.cps.getCurrentValue()) {
                accessor.setMissTime(0);
-               KeyMapping.click(mc.options.keyAttack.getDefaultKey());
+               KeyBinding.onKeyPressed(mc.options.attackKey.getDefaultKey());
                this.counter--;
             }
          } else {

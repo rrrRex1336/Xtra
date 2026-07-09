@@ -1,11 +1,11 @@
 package awa.qwq.ovo.Naven.utils;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 
 public class SkipTicks {
 
-    private static final Minecraft mc = Minecraft.getInstance();
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
     public static boolean positionUpdate = false;
     private static boolean active = false;
     private static int skipTickCounter = 0;
@@ -25,12 +25,12 @@ public class SkipTicks {
 
             positionUpdate = true;
 
-            if (mc.player != null && mc.getConnection() != null) {
+            if (mc.player != null && mc.getNetworkHandler() != null) {
                 isSendingStuckPacket.set(true);  // 设置标志
                 try {
-                    mc.getConnection().send(new ServerboundMovePlayerPacket.PosRot(
+                    mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.Full(
                             mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                            mc.player.getYRot(), mc.player.getXRot(), mc.player.onGround()
+                            mc.player.getYaw(), mc.player.getPitch(), mc.player.isOnGround()
                     ));
                 } finally {
                     isSendingStuckPacket.set(false);  // 清除标志

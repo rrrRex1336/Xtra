@@ -21,25 +21,54 @@ import awa.qwq.ovo.Naven.values.impl.AddonsValue;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.gui.screens.DeathScreen;
-import net.minecraft.client.gui.screens.ProgressScreen;
-import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
-import net.minecraft.network.protocol.game.*;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Rot;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.EnderpearlItem;
-import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.level.block.*;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.block.AnvilBlock;
+import net.minecraft.block.BarrelBlock;
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.ChestBlock;
+import net.minecraft.block.CraftingTableBlock;
+import net.minecraft.block.EnchantingTableBlock;
+import net.minecraft.block.FurnaceBlock;
+import net.minecraft.block.ShulkerBoxBlock;
+import net.minecraft.client.gui.screen.DeathScreen;
+import net.minecraft.client.gui.screen.ProgressScreen;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.EnderPearlItem;
+import net.minecraft.network.listener.ClientPlayPacketListener;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.LookAndOnGround;
+import net.minecraft.network.packet.s2c.common.DisconnectS2CPacket;
+import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
+import net.minecraft.network.packet.s2c.play.ChatMessageS2CPacket;
+import net.minecraft.network.packet.s2c.play.CloseScreenS2CPacket;
+import net.minecraft.network.packet.s2c.play.DamageTiltS2CPacket;
+import net.minecraft.network.packet.s2c.play.DeathMessageS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityAnimationS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
+import net.minecraft.network.packet.s2c.play.GameJoinS2CPacket;
+import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
+import net.minecraft.network.packet.s2c.play.HealthUpdateS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
+import net.minecraft.network.packet.s2c.play.TeamS2CPacket;
+import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
+import net.minecraft.network.packet.s2c.play.WorldTimeUpdateS2CPacket;
+
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.block.*;
 import org.mixin.accessors.ClientboundMoveEntityPacketAccessor;
 import org.mixin.accessors.LocalPlayerAccessor;
 
@@ -173,11 +202,11 @@ public class Velocity extends Module {
     private final Queue<PendingEntityMove> pendingEntityMoves = new ConcurrentLinkedQueue<>();
     private final Queue<PendingEntityTeleport> pendingEntityTeleports = new ConcurrentLinkedQueue<>();
     private final Map<Entity, Vector3d> targets = new HashMap<>();
-    private final LinkedBlockingDeque<Packet<ClientGamePacketListener>> interactInbound = new LinkedBlockingDeque<>();
+    private final LinkedBlockingDeque<Packet<ClientPlayPacketListener>> interactInbound = new LinkedBlockingDeque<>();
 
     private boolean isSuspending = false;
     private int suspendTicks = 0;
-    private ClientboundSetEntityMotionPacket clientboundSetEntityMotionPacket = null;
+    private EntityVelocityUpdateS2CPacket clientboundSetEntityMotionPacket = null;
     private boolean isFlushing = false;
     private boolean shouldFlushMotion = false;
     private volatile boolean pendingScheduledReset = false;
@@ -206,13 +235,13 @@ public class Velocity extends Module {
 
     private int calculateSmartAttacks() {
         if (clientboundSetEntityMotionPacket == null) return (int) attack.getCurrentValue();
-        double kbX = -clientboundSetEntityMotionPacket.getXa() / 8000.0;
-        double kbZ = -clientboundSetEntityMotionPacket.getZa() / 8000.0;
+        double kbX = -clientboundSetEntityMotionPacket.getVelocityX() / 8000.0;
+        double kbZ = -clientboundSetEntityMotionPacket.getVelocityZ() / 8000.0;
         double kbStrength = Math.sqrt(kbX * kbX + kbZ * kbZ);
         if (mode19Plus.getCurrentValue()) {
             return kbStrength > targetMotion.getCurrentValue() ? 1 : 0;
         }
-        int knockbackLevel = EnchantmentHelper.getKnockbackBonus(mc.player);
+        int knockbackLevel = EnchantmentHelper.getKnockback(mc.player);
         boolean hasKnockback = knockbackLevel > 0;
         boolean isSprinting = mc.player.isSprinting();
         double decay = 0.6D;
@@ -253,8 +282,8 @@ public class Velocity extends Module {
         isFlushing = true;
         targets.clear();
         releasePacket();
-        if (clientboundSetEntityMotionPacket != null && mc.getConnection() != null) {
-            clientboundSetEntityMotionPacket.handle(mc.getConnection());
+        if (clientboundSetEntityMotionPacket != null && mc.getNetworkHandler() != null) {
+            clientboundSetEntityMotionPacket.apply(mc.getNetworkHandler());
             clientboundSetEntityMotionPacket = null;
         }
 
@@ -287,10 +316,10 @@ public class Velocity extends Module {
     }
 
     private boolean shouldIgnore() {
-        if (mc.player == null || mc.level == null) {
+        if (mc.player == null || mc.world == null) {
             return true;
         }
-        if (mc.player.isDeadOrDying() || !mc.player.isAlive() || mc.player.getHealth() <= 0) {
+        if (mc.player.isDead() || !mc.player.isAlive() || mc.player.getHealth() <= 0) {
             return true;
         }
         if (mc.player.isSpectator() || mc.player.getAbilities().flying) {
@@ -299,7 +328,7 @@ public class Velocity extends Module {
         if (ignoreState.isSelected("In Lava") && mc.player.isInLava()) {
             return true;
         }
-        if (ignoreState.isSelected("In Water") && mc.player.isInWater()) {
+        if (ignoreState.isSelected("In Water") && mc.player.isTouchingWater()) {
             return true;
         }
         if (ignoreState.isSelected("On Fire") && mc.player.isOnFire()) {
@@ -311,26 +340,26 @@ public class Velocity extends Module {
         if (ignoreState.isSelected("S08 Cooldown") && s08Cooldown > 0) {
             return true;
         }
-        if (mc.player.onClimbable() || mc.player.isSleeping()) {
+        if (mc.player.isClimbing() || mc.player.isSleeping()) {
             return true;
         }
-        return mc.level.getBlockState(mc.player.blockPosition()).is(Blocks.COBWEB);
+        return mc.world.getBlockState(mc.player.getBlockPos()).isOf(Blocks.COBWEB);
     }
 
     private boolean shouldIgnorePacketThread() {
         return mc.player == null
-                || mc.getConnection() == null
-                || mc.gameMode == null
+                || mc.getNetworkHandler() == null
+                || mc.interactionManager == null
                 || mc.player.isUsingItem()
-                || mc.player.tickCount < 20
-                || mc.player.isDeadOrDying()
+                || mc.player.age < 20
+                || mc.player.isDead()
                 || !mc.player.isAlive()
                 || mc.player.getHealth() <= 0.0F
                 || mc.player.isSpectator()
                 || mc.player.getAbilities().flying
                 || (ignoreState.isSelected("No Sprinting") && !mc.player.isSprinting())
-                || mc.screen instanceof ProgressScreen
-                || mc.screen instanceof DeathScreen
+                || mc.currentScreen instanceof ProgressScreen
+                || mc.currentScreen instanceof DeathScreen
                 || Naven.getInstance().getModuleManager().getModule(LongJump.class).isEnabled();
     }
 
@@ -366,7 +395,7 @@ public class Velocity extends Module {
     }
 
     private void processPendingEntityUpdates() {
-        if (mc.level == null) {
+        if (mc.world == null) {
             pendingEntityMoves.clear();
             pendingEntityTeleports.clear();
             return;
@@ -374,7 +403,7 @@ public class Velocity extends Module {
 
         PendingEntityMove move;
         while ((move = pendingEntityMoves.poll()) != null) {
-            Entity entity = mc.level.getEntity(move.entityId);
+            Entity entity = mc.world.getEntityById(move.entityId);
             if (entity == null) continue;
             Vector3d currentPos = targets.getOrDefault(entity, new Vector3d(entity.getX(), entity.getY(), entity.getZ()));
             targets.put(entity, new Vector3d(currentPos.getX() + move.dx, currentPos.getY() + move.dy, currentPos.getZ() + move.dz));
@@ -382,7 +411,7 @@ public class Velocity extends Module {
 
         PendingEntityTeleport teleport;
         while ((teleport = pendingEntityTeleports.poll()) != null) {
-            Entity entity = mc.level.getEntity(teleport.entityId);
+            Entity entity = mc.world.getEntityById(teleport.entityId);
             if (entity != null) {
                 targets.put(entity, new Vector3d(teleport.x, teleport.y, teleport.z));
             }
@@ -410,7 +439,7 @@ public class Velocity extends Module {
     }
 
     private Entity getLookTarget() {
-        if (!(mc.hitResult instanceof EntityHitResult hit)) return null;
+        if (!(mc.crosshairTarget instanceof EntityHitResult hit)) return null;
 
         Entity entity = hit.getEntity();
         if (entity instanceof LivingEntity && entity != mc.player && entity.isAlive() && !entity.isSpectator()) {
@@ -422,7 +451,7 @@ public class Velocity extends Module {
     private boolean isValidTarget(Entity target) {
         if (target == null || !target.isAlive()) return false;
         if (target == mc.player) return false;
-        if (target instanceof LivingEntity living && (living.isDeadOrDying() || living.getHealth() <= 0)) return false;
+        if (target instanceof LivingEntity living && (living.isDead() || living.getHealth() <= 0)) return false;
         Entity combatTarget = getCombatModuleTarget();
         if (combatTarget != null && combatTarget.equals(target)) return true;
         double distance = getDistanceToEntity(target);
@@ -449,70 +478,70 @@ public class Velocity extends Module {
     private double getDistanceToEntity(Entity entity) {
         if (mc.player == null || entity == null) return Double.MAX_VALUE;
 
-        Vec3 eyePos = mc.player.getEyePosition(1f);
-        AABB aabb = entity.getBoundingBox();
+        Vec3d eyePos = mc.player.getCameraPosVec(1f);
+        Box aabb = entity.getBoundingBox();
 
         double x = Math.max(aabb.minX, Math.min(eyePos.x, aabb.maxX));
         double y = Math.max(aabb.minY, Math.min(eyePos.y, aabb.maxY));
         double z = Math.max(aabb.minZ, Math.min(eyePos.z, aabb.maxZ));
 
-        return eyePos.distanceTo(new Vec3(x, y, z));
+        return eyePos.distanceTo(new Vec3d(x, y, z));
     }
 
     private void doAttack(Entity target) {
-        if (target == null || mc.player == null || mc.gameMode == null) return;
+        if (target == null || mc.player == null || mc.interactionManager == null) return;
         if (ignoreState.isSelected("No Sprinting") && !mc.player.isSprinting()) {
             log("not sprinting");
             return;
         }
         if (mode19Plus.getCurrentValue()) {
-            if (mc.player.getAttackStrengthScale(0.5F) < 1.0F) return;
+            if (mc.player.getAttackCooldownProgress(0.5F) < 1.0F) return;
         }
 
         boolean wasSprinting = mc.player.isSprinting();
 
         if (wasSprinting) mc.player.setSprinting(false);
-        mc.gameMode.attack(mc.player, target);
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        mc.interactionManager.attackEntity(mc.player, target);
+        mc.player.swingHand(Hand.MAIN_HAND);
 
         if (!mode19Plus.getCurrentValue() && wasSprinting) {
-            Vec3 vel = mc.player.getDeltaMovement();
-            if (EnchantmentHelper.getKnockbackBonus(mc.player) > 0) {
-                mc.player.setDeltaMovement(vel.x, vel.y, vel.z);
+            Vec3d vel = mc.player.getVelocity();
+            if (EnchantmentHelper.getKnockback(mc.player) > 0) {
+                mc.player.setVelocity(vel.x, vel.y, vel.z);
             } else {
-                mc.player.setDeltaMovement(vel.x * 0.6D, vel.y, vel.z * 0.6D);
+                mc.player.setVelocity(vel.x * 0.6D, vel.y, vel.z * 0.6D);
             }
         }
     }
 
     private boolean isAllowedPacket(Packet<?> packet) {
-        return packet instanceof ClientboundSetEntityMotionPacket
-                || packet instanceof ClientboundSetHealthPacket
-                || packet instanceof ClientboundPlayerPositionPacket
-                || packet instanceof ClientboundSoundPacket
-                || packet instanceof ClientboundPlayerChatPacket
-                || packet instanceof ClientboundPlayerCombatKillPacket
-                || packet instanceof ClientboundContainerClosePacket
-                || packet instanceof ClientboundHurtAnimationPacket
-                || packet instanceof ClientboundSetTitleTextPacket
-                || packet instanceof ClientboundSetPlayerTeamPacket
-                || packet instanceof ClientboundSystemChatPacket
-                || packet instanceof ClientboundDisconnectPacket
-                || (packet instanceof ClientboundAnimatePacket
-                && ((ClientboundAnimatePacket) packet).getId() != mc.player.getId());
+        return packet instanceof EntityVelocityUpdateS2CPacket
+                || packet instanceof HealthUpdateS2CPacket
+                || packet instanceof PlayerPositionLookS2CPacket
+                || packet instanceof PlaySoundS2CPacket
+                || packet instanceof ChatMessageS2CPacket
+                || packet instanceof DeathMessageS2CPacket
+                || packet instanceof CloseScreenS2CPacket
+                || packet instanceof DamageTiltS2CPacket
+                || packet instanceof TitleS2CPacket
+                || packet instanceof TeamS2CPacket
+                || packet instanceof GameMessageS2CPacket
+                || packet instanceof DisconnectS2CPacket
+                || (packet instanceof EntityAnimationS2CPacket
+                && ((EntityAnimationS2CPacket) packet).getId() != mc.player.getId());
     }
 
     private void processInteractPackets() {
-        ClientPacketListener connection = mc.getConnection();
+        ClientPlayNetworkHandler connection = mc.getNetworkHandler();
         if (connection == null) {
             this.interactInbound.clear();
             return;
         }
 
-        Packet<ClientGamePacketListener> packet;
+        Packet<ClientPlayPacketListener> packet;
         while ((packet = this.interactInbound.poll()) != null) {
             try {
-                packet.handle(connection);
+                packet.apply(connection);
             } catch (Exception exception) {
                 exception.printStackTrace();
                 this.interactInbound.clear();
@@ -532,14 +561,14 @@ public class Velocity extends Module {
 
     private boolean isInteractBlockInvalid() {
         return mc.player == null
-                || mc.getConnection() == null
-                || mc.gameMode == null
-                || mc.player.tickCount < 20
-                || mc.player.isDeadOrDying()
+                || mc.getNetworkHandler() == null
+                || mc.interactionManager == null
+                || mc.player.age < 20
+                || mc.player.isDead()
                 || !mc.player.isAlive()
                 || mc.player.getHealth() <= 0.0F
-                || mc.screen instanceof ProgressScreen
-                || mc.screen instanceof DeathScreen
+                || mc.currentScreen instanceof ProgressScreen
+                || mc.currentScreen instanceof DeathScreen
                 || Naven.getInstance().getModuleManager().getModule(LongJump.class).isEnabled();
     }
 
@@ -565,13 +594,13 @@ public class Velocity extends Module {
 
         packet = e.getPacket();
 
-        if (isSuspending && packet instanceof ServerboundMovePlayerPacket) {
+        if (isSuspending && packet instanceof PlayerMoveC2SPacket) {
             movePacketQueue.add(packet);
             e.setCancelled(true);
             return;
         }
 
-        if (packet instanceof ClientboundPlayerPositionPacket) {
+        if (packet instanceof PlayerPositionLookS2CPacket) {
             if (ignoreState.isSelected("S08 Cooldown") && s08Cooldown > 0) {
                 e.setCancelled(true);
                 return;
@@ -600,7 +629,7 @@ public class Velocity extends Module {
             return;
         }
 
-        if (isSuspending && packet instanceof ClientboundMoveEntityPacket movePacket) {
+        if (isSuspending && packet instanceof EntityS2CPacket movePacket) {
             e.setCancelled(true);
             ClientboundMoveEntityPacketAccessor accessor = (ClientboundMoveEntityPacketAccessor) movePacket;
             if (accessor.getHasPos()) {
@@ -613,7 +642,7 @@ public class Velocity extends Module {
             }
         }
 
-        if (isSuspending && packet instanceof ClientboundTeleportEntityPacket teleportPacket) {
+        if (isSuspending && packet instanceof EntityPositionS2CPacket teleportPacket) {
             e.setCancelled(true);
             pendingEntityTeleports.offer(new PendingEntityTeleport(
                     teleportPacket.getId(),
@@ -623,13 +652,13 @@ public class Velocity extends Module {
             ));
         }
 
-        if (packet instanceof ClientboundSetEntityMotionPacket motion && motion.getId() == mc.player.getId()) {
+        if (packet instanceof EntityVelocityUpdateS2CPacket motion && motion.getId() == mc.player.getId()) {
             if (attackCooldown > 0 && mode19Plus.getCurrentValue() && attacksRemaining > 0) {
                 return;
             }
             e.setCancelled(true);
-            double velX = -motion.getXa() / 8000.0;
-            double velZ = -motion.getZa() / 8000.0;
+            double velX = -motion.getVelocityX() / 8000.0;
+            double velZ = -motion.getVelocityZ() / 8000.0;
             if (Math.abs(velX) <= 0.01 && Math.abs(velZ) <= 0.01) return;
 
             attackTarget = null;
@@ -686,7 +715,7 @@ public class Velocity extends Module {
     public void onHandlePacket(EventHandlePacket e) {
         if (!isInteractBlockMode()) return;
 
-        if (mc.player == null || mc.getConnection() == null || mc.gameMode == null || mc.player.isUsingItem()) {
+        if (mc.player == null || mc.getNetworkHandler() == null || mc.interactionManager == null || mc.player.isUsingItem()) {
             return;
         }
 
@@ -694,24 +723,24 @@ public class Velocity extends Module {
             return;
         }
 
-        if (mc.player.tickCount < 20) {
+        if (mc.player.age < 20) {
             resetInteractBlock();
             return;
         }
 
-        if (mc.player.isDeadOrDying() || !mc.player.isAlive() || mc.player.getHealth() <= 0.0F || mc.screen instanceof ProgressScreen || mc.screen instanceof DeathScreen) {
+        if (mc.player.isDead() || !mc.player.isAlive() || mc.player.getHealth() <= 0.0F || mc.currentScreen instanceof ProgressScreen || mc.currentScreen instanceof DeathScreen) {
             resetInteractBlock();
             return;
         }
 
         Packet<?> packet = e.getPacket();
-        if (packet instanceof ClientboundLoginPacket) {
+        if (packet instanceof GameJoinS2CPacket) {
             resetInteractBlock();
             return;
         }
 
-        if (this.interactDebugTick > 0 && mc.player.tickCount > 20) {
-            if (this.interactStage == InteractStage.BLOCK && packet instanceof ClientboundBlockUpdatePacket blockUpdate && this.interactResult != null && this.interactResult.getBlockPos().equals(blockUpdate.getPos())) {
+        if (this.interactDebugTick > 0 && mc.player.age > 20) {
+            if (this.interactStage == InteractStage.BLOCK && packet instanceof BlockUpdateS2CPacket blockUpdate && this.interactResult != null && this.interactResult.getBlockPos().equals(blockUpdate.getPos())) {
                 processInteractPackets();
                 Naven.skipTasks.clear();
                 this.interactDebugTick = 0;
@@ -719,26 +748,26 @@ public class Velocity extends Module {
                 return;
             }
 
-            if (!(packet instanceof ClientboundSystemChatPacket) && !(packet instanceof ClientboundSetTimePacket)) {
+            if (!(packet instanceof GameMessageS2CPacket) && !(packet instanceof WorldTimeUpdateS2CPacket)) {
                 e.setCancelled(true);
-                this.interactInbound.add((Packet<ClientGamePacketListener>) packet);
+                this.interactInbound.add((Packet<ClientPlayPacketListener>) packet);
                 return;
             }
         }
 
-        if (packet instanceof ClientboundSetEntityMotionPacket motionPacket) {
+        if (packet instanceof EntityVelocityUpdateS2CPacket motionPacket) {
             if (motionPacket.getId() != mc.player.getId()) {
                 return;
             }
 
-            if (motionPacket.getYa() < 0 || mc.player.getMainHandItem().getItem() instanceof EnderpearlItem) {
+            if (motionPacket.getVelocityY() < 0 || mc.player.getMainHandStack().getItem() instanceof EnderPearlItem) {
                 e.setCancelled(false);
                 return;
             }
 
-            this.interactGrimTick = mc.player.onGround() ? 2 : 0;
+            this.interactGrimTick = mc.player.isOnGround() ? 2 : 0;
             this.interactDebugTick = (int) packetHoldTime.getCurrentValue();
-            this.interactStage = mc.player.onGround() ? InteractStage.TRANSACTION : InteractStage.DELAY_GROUND;
+            this.interactStage = mc.player.isOnGround() ? InteractStage.TRANSACTION : InteractStage.DELAY_GROUND;
             e.setCancelled(true);
         }
     }
@@ -758,7 +787,7 @@ public class Velocity extends Module {
             if (this.interactStage == InteractStage.DELAY_GROUND) {
                 this.interactDebugTick = Math.max(this.interactDebugTick, 5);
                 this.interactAirTicks++;
-                if (!mc.player.onGround()) {
+                if (!mc.player.isOnGround()) {
                     return;
                 }
                 if (this.interactAirTicks < 2) {
@@ -788,26 +817,26 @@ public class Velocity extends Module {
             BlockHitResult blockRayTraceResult = (BlockHitResult) PlayerUtils.pickCustom(3.7F, yaw, pitch);
             if (this.interactStage == InteractStage.TRANSACTION
                     && this.interactGrimTick == 0) {
-                if (!mc.player.onGround()) {
+                if (!mc.player.isOnGround()) {
                     this.interactStage = InteractStage.DELAY_GROUND;
                     this.interactAirTicks = 0;
                     return;
                 }
                 if (blockRayTraceResult != null
                         && !BlockUtils.isAirBlock(blockRayTraceResult.getBlockPos())
-                        && mc.player.getBoundingBox().intersects(new AABB(blockRayTraceResult.getBlockPos().above()))) {
-                Block targetBlock = mc.level.getBlockState(blockRayTraceResult.getBlockPos()).getBlock();
+                        && mc.player.getBoundingBox().intersects(new Box(blockRayTraceResult.getBlockPos().up()))) {
+                Block targetBlock = mc.world.getBlockState(blockRayTraceResult.getBlockPos()).getBlock();
                 if (targetBlock instanceof ChestBlock
                         || targetBlock instanceof CraftingTableBlock
                         || targetBlock instanceof FurnaceBlock
-                        || targetBlock instanceof EnchantmentTableBlock
+                        || targetBlock instanceof EnchantingTableBlock
                         || targetBlock instanceof AnvilBlock
                         || targetBlock instanceof BarrelBlock
                         || targetBlock instanceof ShulkerBoxBlock) {
                     return;
                 }
 
-                this.interactResult = new BlockHitResult(blockRayTraceResult.getLocation(), blockRayTraceResult.getDirection(), blockRayTraceResult.getBlockPos(), false);
+                this.interactResult = new BlockHitResult(blockRayTraceResult.getPos(), blockRayTraceResult.getSide(), blockRayTraceResult.getBlockPos(), false);
                 ((LocalPlayerAccessor) mc.player).setYRotLast(yaw);
                 ((LocalPlayerAccessor) mc.player).setXRotLast(pitch);
                 RotationManager.setRotations(new Rotation(yaw, pitch).toVec2f());
@@ -816,17 +845,17 @@ public class Velocity extends Module {
                 }
 
                 processInteractPackets();
-                mc.player.connection.send(new Rot(yaw, pitch, mc.player.onGround()));
-                mc.player.connection.send(new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, this.interactResult, 0));
+                mc.player.networkHandler.sendPacket(new LookAndOnGround(yaw, pitch, mc.player.isOnGround()));
+                mc.player.networkHandler.sendPacket(new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, this.interactResult, 0));
                 Naven.skipTasks.add(() -> {
                 });
 
                 for (int i = 2; i <= 40; i++) {
                     Naven.skipTasks.add(() -> {
-                        EventMotion event = new EventMotion(EventType.PRE, mc.player.position().x, mc.player.position().y, mc.player.position().z, yaw, pitch, mc.player.onGround());
+                        EventMotion event = new EventMotion(EventType.PRE, mc.player.getPos().x, mc.player.getPos().y, mc.player.getPos().z, yaw, pitch, mc.player.isOnGround());
                         Naven.getInstance().getRotationManager().onPre(event);
                         if (event.getYaw() != yaw || event.getPitch() != pitch) {
-                            mc.player.connection.send(new Rot(event.getYaw(), event.getPitch(), mc.player.onGround()));
+                            mc.player.networkHandler.sendPacket(new LookAndOnGround(event.getYaw(), event.getPitch(), mc.player.isOnGround()));
                         }
                     });
                 }
@@ -920,9 +949,9 @@ public class Velocity extends Module {
                 }
             }
 
-            boolean onGround = mc.player.onGround();
-            boolean movingUp = mc.player.getDeltaMovement().y > 0;
-            boolean falling = mc.player.getDeltaMovement().y < 0;
+            boolean onGround = mc.player.isOnGround();
+            boolean movingUp = mc.player.getVelocity().y > 0;
+            boolean falling = mc.player.getVelocity().y < 0;
             boolean timeout = suspendTicks >= 20;
             boolean canRelease = delayTillGround.getCurrentValue() ? onGround : onGround || movingUp || falling;
             boolean shouldRelease = canRelease && isValidTarget(attackTarget) && mc.player.isSprinting();
@@ -966,7 +995,7 @@ public class Velocity extends Module {
                 targets.clear();
                 Entity rotateTarget = isValidTarget(velocityTarget) ? velocityTarget : attackTarget;
                 if (reduceAddons.isSelected("Rotate") && onGround && isValidTarget(rotateTarget)) {
-                    velocityRotation = RotationUtils.getRotations(mc.player.getEyePosition(1.0F), rotateTarget.getBoundingBox().getCenter()).toVec2f();
+                    velocityRotation = RotationUtils.getRotations(mc.player.getCameraPosVec(1.0F), rotateTarget.getBoundingBox().getCenter()).toVec2f();
                     rotateActive = true;
                     releaseRotateTicks = 1;
                 }
@@ -994,12 +1023,12 @@ public class Velocity extends Module {
             }
 
             if (reduceAddons.isSelected("Auto sprint") && !mc.player.isSprinting()) {
-                mc.options.keySprint.setDown(true);
-                mc.options.toggleSprint().set(false);
+                mc.options.sprintKey.setPressed(true);
+                mc.options.getSprintToggled().setValue(false);
                 mc.player.setSprinting(true);
             }
 
-            if (mode19Plus.getCurrentValue() && mc.player.getAttackStrengthScale(0.5F) < 1.0F) {
+            if (mode19Plus.getCurrentValue() && mc.player.getAttackCooldownProgress(0.5F) < 1.0F) {
                 log("Hit complete");
                 attackTarget = null;
                 velocityTarget = null;
@@ -1032,7 +1061,7 @@ public class Velocity extends Module {
                 return;
             }
 
-            if (attackTarget instanceof Player targetPlayer) {
+            if (attackTarget instanceof PlayerEntity targetPlayer) {
                 if (AntiBots.isBot(targetPlayer)) {
                     log("Hit complete");
                     attackTarget = null;
@@ -1047,7 +1076,7 @@ public class Velocity extends Module {
 
             doAttack(attackTarget);
             attacksRemaining--;
-            attackCooldown = mode19Plus.getCurrentValue() ? Math.max(1, (int) (20 / mc.player.getCurrentItemAttackStrengthDelay())) : 1;
+            attackCooldown = mode19Plus.getCurrentValue() ? Math.max(1, (int) (20 / mc.player.getAttackCooldownProgressPerTick())) : 1;
             log("Reduce(Info: Attack Reduce)");
 
             if (attacksRemaining <= 0) {
@@ -1070,13 +1099,13 @@ public class Velocity extends Module {
     private void releasePacket() {
         while (!movePacketQueue.isEmpty()) {
             Packet<?> p = movePacketQueue.poll();
-            if (p != null && mc.getConnection() != null)
-                ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
+            if (p != null && mc.getNetworkHandler() != null)
+                ((Packet<ClientPlayNetworkHandler>) p).apply(mc.getNetworkHandler());
         }
         while (!packetQueue.isEmpty()) {
             Packet<?> p = packetQueue.poll();
-            if (p != null && mc.getConnection() != null)
-                ((Packet<ClientPacketListener>) p).handle(mc.getConnection());
+            if (p != null && mc.getNetworkHandler() != null)
+                ((Packet<ClientPlayNetworkHandler>) p).apply(mc.getNetworkHandler());
         }
     }
 
@@ -1100,8 +1129,8 @@ public class Velocity extends Module {
         boolean hasMoveTarget = isValidTarget(moveTarget);
         if (!isSuspending && attacksRemaining > 0 && hasMoveTarget) {
             if (reduceAddons.isSelected("Auto sprint") && !mc.player.isSprinting() && MoveUtils.isMoving()) {
-                mc.options.keySprint.setDown(true);
-                mc.options.toggleSprint().set(false);
+                mc.options.sprintKey.setPressed(true);
+                mc.options.getSprintToggled().setValue(false);
                 mc.player.setSprinting(true);
             }
         }
@@ -1109,7 +1138,7 @@ public class Velocity extends Module {
         if (reduceAddons.isSelected("Movement override") && hasMoveTarget && (isSuspending || attacksRemaining > 0)) {
             e.setForward(1.0F);
             e.setStrafe(0.0F);
-            Vector2f rotations = RotationUtils.getRotations(mc.player.getEyePosition(1.0F), moveTarget.getBoundingBox().getCenter()).toVec2f();
+            Vector2f rotations = RotationUtils.getRotations(mc.player.getCameraPosVec(1.0F), moveTarget.getBoundingBox().getCenter()).toVec2f();
             MoveUtils.correctionMovement(e, rotations.x);
         }
     }
@@ -1130,8 +1159,8 @@ public class Velocity extends Module {
         if (alpha <= 0.01F && this.progressAnimation.value <= 0.01F && !preview) return;
 
         CustomTextRenderer font = Fonts.misans;
-        float baseX = mc.getWindow().getGuiScaledWidth() / 2.0F - PROGRESS_WIDTH / 2.0F;
-        float baseY = mc.getWindow().getGuiScaledHeight() / 2.0F + 15.0F;
+        float baseX = mc.getWindow().getScaledWidth() / 2.0F - PROGRESS_WIDTH / 2.0F;
+        float baseY = mc.getWindow().getScaledHeight() / 2.0F + 15.0F;
         int ticks = preview ? 20 : suspendTicks;
         String text = isSuspending ? "Delaying SPacket Ticks : " + ticks : "Velocity Progress";
         double textWidth = font.getWidth(text, true, 0.65);
@@ -1148,12 +1177,12 @@ public class Velocity extends Module {
     }
 
     private boolean hasNearbyPlayerForProgress() {
-        if (mc.player == null || mc.level == null) return false;
+        if (mc.player == null || mc.world == null) return false;
         double rangeSq = PROGRESS_PLAYER_RANGE * PROGRESS_PLAYER_RANGE;
-        for (Entity entity : mc.level.entitiesForRendering()) {
-            if (!(entity instanceof Player player) || player == mc.player) continue;
+        for (Entity entity : mc.world.getEntities()) {
+            if (!(entity instanceof PlayerEntity player) || player == mc.player) continue;
             if (!player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
-            if (mc.player.distanceToSqr(player) <= rangeSq) return true;
+            if (mc.player.squaredDistanceTo(player) <= rangeSq) return true;
         }
         return false;
     }
@@ -1168,13 +1197,13 @@ public class Velocity extends Module {
     public void onRender(EventRender event) {
         if (!isBufferMode()) return;
         if (!renderServerPos.getCurrentValue() || targets.isEmpty()) return;
-        PoseStack poseStack = event.getPMatrixStack();
+        MatrixStack poseStack = event.getPMatrixStack();
         for (Map.Entry<Entity, Vector3d> entry : targets.entrySet()) {
             Entity entity = entry.getKey();
-            if (!(entity instanceof Player)) continue;
+            if (!(entity instanceof PlayerEntity)) continue;
             Vector3d pos = entry.getValue();
             RenderUtils.drawEntitySolidBox(poseStack, pos.getX(), pos.getY(), pos.getZ(),
-                    entity.getBbWidth(), entity.getBbHeight(), new Color(0, 200, 0, 60).getRGB());
+                    entity.getWidth(), entity.getHeight(), new Color(0, 200, 0, 60).getRGB());
         }
     }
 

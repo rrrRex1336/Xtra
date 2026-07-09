@@ -4,8 +4,8 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import java.io.IOException;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import net.minecraft.client.renderer.texture.AbstractTexture;
-import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.client.texture.AbstractTexture;
+import net.minecraft.resource.ResourceManager;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL30C;
 
@@ -36,7 +36,7 @@ public class BufferedTexture extends AbstractTexture {
    private void upload(
       int width, int height, ByteBuffer buffer, BufferedTexture.Format format, BufferedTexture.Filter filterMin, BufferedTexture.Filter filterMag
    ) {
-      this.bind();
+      this.bindTexture();
       GL30C.glPixelStorei(3312, 0);
       GL30C.glPixelStorei(3313, 0);
       GL30C.glPixelStorei(3314, 0);

@@ -3,37 +3,37 @@ package awa.qwq.ovo.Naven.viaversionfix.items.spear;
 import awa.qwq.ovo.Naven.viaversionfix.items.ModSounds;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
-import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResultHolder;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ai.attributes.Attribute;
-import net.minecraft.world.entity.ai.attributes.AttributeModifier;
-import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.TieredItem;
-import net.minecraft.world.item.UseAnim;
-import net.minecraft.world.level.Level;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.attribute.EntityAttribute;
+import net.minecraft.entity.attribute.EntityAttributeModifier;
+import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.ToolItem;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvent;
+import net.minecraft.util.Hand;
+import net.minecraft.util.TypedActionResult;
+import net.minecraft.util.UseAction;
+import net.minecraft.world.World;
 
-public class SpearItem extends TieredItem {
+public class SpearItem extends ToolItem {
    private final SpearMaterial material;
-   private final Multimap<Attribute, AttributeModifier> defaultModifiers;
+   private final Multimap<EntityAttribute, EntityAttributeModifier> defaultModifiers;
 
-   public SpearItem(SpearMaterial material, Properties properties) {
+   public SpearItem(SpearMaterial material, Settings properties) {
       super(material.tier(), properties);
       this.material = material;
 
-      ImmutableMultimap.Builder<Attribute, AttributeModifier> builder = ImmutableMultimap.builder();
+      ImmutableMultimap.Builder<EntityAttribute, EntityAttributeModifier> builder = ImmutableMultimap.builder();
       builder.put(
-         Attributes.ATTACK_DAMAGE,
-         new AttributeModifier(BASE_ATTACK_DAMAGE_UUID, "Tool modifier", material.attackDamageBonus(), AttributeModifier.Operation.ADDITION)
+         EntityAttributes.GENERIC_ATTACK_DAMAGE,
+         new EntityAttributeModifier(ATTACK_DAMAGE_MODIFIER_ID, "Tool modifier", material.attackDamageBonus(), EntityAttributeModifier.Operation.ADDITION)
       );
       builder.put(
-         Attributes.ATTACK_SPEED,
-         new AttributeModifier(BASE_ATTACK_SPEED_UUID, "Tool modifier", material.attackSpeedModifier(), AttributeModifier.Operation.ADDITION)
+         EntityAttributes.GENERIC_ATTACK_SPEED,
+         new EntityAttributeModifier(ATTACK_SPEED_MODIFIER_ID, "Tool modifier", material.attackSpeedModifier(), EntityAttributeModifier.Operation.ADDITION)
       );
       this.defaultModifiers = builder.build();
    }
@@ -43,54 +43,54 @@ public class SpearItem extends TieredItem {
    }
 
    @Override
-   public Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers(EquipmentSlot slot) {
-      return slot == EquipmentSlot.MAINHAND ? this.defaultModifiers : super.getDefaultAttributeModifiers(slot);
+   public Multimap<EntityAttribute, EntityAttributeModifier> getAttributeModifiers(EquipmentSlot slot) {
+      return slot == EquipmentSlot.MAINHAND ? this.defaultModifiers : super.getAttributeModifiers(slot);
    }
 
    @Override
-   public UseAnim getUseAnimation(ItemStack stack) {
-      return UseAnim.SPEAR;
+   public UseAction getUseAction(ItemStack stack) {
+      return UseAction.SPEAR;
    }
 
    @Override
-   public int getUseDuration(ItemStack stack) {
+   public int getMaxUseTime(ItemStack stack) {
       return 72000;
    }
 
    @Override
-   public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
-      ItemStack stack = player.getItemInHand(hand);
-      player.startUsingItem(hand);
+   public TypedActionResult<ItemStack> use(World level, PlayerEntity player, Hand hand) {
+      ItemStack stack = player.getStackInHand(hand);
+      player.setCurrentHand(hand);
       playSound(level, player, this.material.isWood() ? ModSounds.SPEAR_WOOD_USE : ModSounds.SPEAR_USE, 0.8F, 1.0F);
-      return InteractionResultHolder.consume(stack);
+      return TypedActionResult.consume(stack);
    }
 
    @Override
-   public void onUseTick(Level level, LivingEntity entity, ItemStack stack, int remainingUseDuration) {
-      int usedTicks = this.getUseDuration(stack) - remainingUseDuration;
+   public void usageTick(World level, LivingEntity entity, ItemStack stack, int remainingUseDuration) {
+      int usedTicks = this.getMaxUseTime(stack) - remainingUseDuration;
       SpearLogic.tickKinetic(level, entity, stack, this.material, usedTicks);
    }
 
    @Override
-   public void releaseUsing(ItemStack stack, Level level, LivingEntity entity, int timeLeft) {
+   public void onStoppedUsing(ItemStack stack, World level, LivingEntity entity, int timeLeft) {
       SpearLogic.release(entity);
    }
 
    @Override
-   public boolean hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-      if (!attacker.level().isClientSide) {
-         stack.hurtAndBreak(1, attacker, living -> living.broadcastBreakEvent(EquipmentSlot.MAINHAND));
+   public boolean postHit(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+      if (!attacker.getWorld().isClient) {
+         stack.damage(1, attacker, living -> living.sendEquipmentBreakStatus(EquipmentSlot.MAINHAND));
       }
 
-      SpearLogic.playHitSound(attacker.level(), attacker, this.material);
+      SpearLogic.playHitSound(attacker.getWorld(), attacker, this.material);
       return true;
    }
 
-   private static void playSound(Level level, LivingEntity entity, SoundEvent sound, float volume, float pitch) {
-      if (level.isClientSide) {
-         level.playLocalSound(entity.getX(), entity.getY(), entity.getZ(), sound, SoundSource.PLAYERS, volume, pitch, false);
+   private static void playSound(World level, LivingEntity entity, SoundEvent sound, float volume, float pitch) {
+      if (level.isClient) {
+         level.playSound(entity.getX(), entity.getY(), entity.getZ(), sound, SoundCategory.PLAYERS, volume, pitch, false);
       } else {
-         level.playSound(null, entity.getX(), entity.getY(), entity.getZ(), sound, SoundSource.PLAYERS, volume, pitch);
+         level.playSound(null, entity.getX(), entity.getY(), entity.getZ(), sound, SoundCategory.PLAYERS, volume, pitch);
       }
    }
 }

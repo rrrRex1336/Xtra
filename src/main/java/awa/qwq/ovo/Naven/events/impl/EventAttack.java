@@ -4,7 +4,7 @@ import awa.qwq.ovo.Naven.events.api.events.Event;
 import awa.qwq.ovo.Naven.events.api.events.callables.EventCancellable;
 import lombok.Getter;
 import lombok.Setter;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.entity.Entity;
 
 @Setter
 @Getter

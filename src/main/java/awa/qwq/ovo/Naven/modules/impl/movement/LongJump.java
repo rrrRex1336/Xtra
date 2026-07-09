@@ -15,11 +15,11 @@ import awa.qwq.ovo.Naven.managers.rotation.utils.Rotation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
 import org.lwjgl.glfw.GLFW;
 
 @ModuleInfo(
@@ -50,8 +50,8 @@ public class LongJump extends Module {
       while (!this.packets.isEmpty()) {
          try {
             Packet<?> packet = this.packets.poll();
-            if (packet != null && mc.getConnection() != null) {
-               ((Packet)packet).handle(mc.getConnection());
+            if (packet != null && mc.getNetworkHandler() != null) {
+               ((Packet)packet).apply(mc.getNetworkHandler());
             }
          } catch (Exception var3) {
             var3.printStackTrace();
@@ -67,8 +67,8 @@ public class LongJump extends Module {
          while (!this.packets.isEmpty() && releasedCount <= targetPosition) {
             try {
                Packet<?> packet = this.packets.poll();
-               if (packet != null && mc.getConnection() != null) {
-                  ((Packet)packet).handle(mc.getConnection());
+               if (packet != null && mc.getNetworkHandler() != null) {
+                  ((Packet)packet).apply(mc.getNetworkHandler());
                }
 
                releasedCount++;
@@ -85,7 +85,7 @@ public class LongJump extends Module {
 
    private int getFireballSlot() {
       for (int i = 0; i < 9; i++) {
-         ItemStack stack = mc.player.getInventory().getItem(i);
+         ItemStack stack = mc.player.getInventory().getStack(i);
          if (!stack.isEmpty() && stack.getItem() == Items.FIRE_CHARGE) {
             return i;
          }
@@ -98,7 +98,7 @@ public class LongJump extends Module {
       int count = 0;
 
       for (int i = 0; i < 9; i++) {
-         ItemStack itemStack = mc.player.getInventory().getItem(i);
+         ItemStack itemStack = mc.player.getInventory().getStack(i);
          if (itemStack.getItem() == Items.FIRE_CHARGE) {
             count += itemStack.getCount();
          }
@@ -146,11 +146,11 @@ public class LongJump extends Module {
    public void onDisable() {
       this.releaseAll();
       if (this.lastSlot != -1 && mc.player != null) {
-         mc.player.getInventory().selected = this.lastSlot;
+         mc.player.getInventory().selectedSlot = this.lastSlot;
       }
 
-      mc.options.keyUse.setDown(false);
-      mc.options.keyJump.setDown(false);
+      mc.options.useKey.setPressed(false);
+      mc.options.jumpKey.setPressed(false);
       rotation = null;
       this.isUsingItem = false;
       this.shouldDisableAndRelease = false;
@@ -179,14 +179,14 @@ public class LongJump extends Module {
                this.enabled = false;
             }
 
-            boolean currentMouse4 = GLFW.glfwGetMouseButton(mc.getWindow().getWindow(), 3) == 1;
+            boolean currentMouse4 = GLFW.glfwGetMouseButton(mc.getWindow().getHandle(), 3) == 1;
             if (currentMouse4 && !this.mouse4Pressed) {
                this.mouse4Pressed = true;
                if (!this.isUsingItem && this.rotateTick == 0) {
                   int fireballSlot = this.setupFireballSlot();
                   if (fireballSlot != -1) {
-                     this.lastSlot = mc.player.getInventory().selected;
-                     mc.player.getInventory().selected = fireballSlot;
+                     this.lastSlot = mc.player.getInventory().selectedSlot;
+                     mc.player.getInventory().selectedSlot = fireballSlot;
                      this.rotateTick = 1;
                      ChatUtils.addChatMessage("§eStarting fireball usage #" + (this.usedFireballCount + 1));
                   }
@@ -195,7 +195,7 @@ public class LongJump extends Module {
                this.mouse4Pressed = false;
             }
 
-            boolean currentMouse5 = GLFW.glfwGetMouseButton(mc.getWindow().getWindow(), 4) == 1;
+            boolean currentMouse5 = GLFW.glfwGetMouseButton(mc.getWindow().getHandle(), 4) == 1;
             if (currentMouse5 && !this.mouse5Pressed) {
                this.mouse5Pressed = true;
                if (this.delayed && this.releasedKnockbacks < this.receivedKnockbacks) {
@@ -223,8 +223,8 @@ public class LongJump extends Module {
    @EventTarget
    public void onRender2D(EventRender2D event) {
       if (this.isEnabled()) {
-         int screenWidth = mc.getWindow().getGuiScaledWidth();
-         int screenHeight = mc.getWindow().getGuiScaledHeight();
+         int screenWidth = mc.getWindow().getScaledWidth();
+         int screenHeight = mc.getWindow().getScaledHeight();
          String statusText;
          if (this.delayed) {
             int packetCount = this.packets.size();
@@ -243,22 +243,22 @@ public class LongJump extends Module {
             statusText = "§bWaiting for input | Mouse4: Jump & use fireball | Mouse5: Release";
          }
 
-         float textX = (float)screenWidth / 2.0F - (float)mc.font.width(statusText) / 2.0F;
+         float textX = (float)screenWidth / 2.0F - (float)mc.textRenderer.getWidth(statusText) / 2.0F;
          float textY = (float)screenHeight / 2.0F + 20.0F;
-         event.getGuiGraphics().drawString(mc.font, statusText, (int)textX, (int)textY, -1);
+         event.getGuiGraphics().drawTextWithShadow(mc.textRenderer, statusText, (int)textX, (int)textY, -1);
       }
    }
 
    @EventTarget
    public void onPacket(EventPacket event) {
-      if (this.isEnabled() && mc.level != null) {
+      if (this.isEnabled() && mc.world != null) {
          if (this.delayed && event.getType() == EventType.RECEIVE) {
             Packet<?> packet = event.getPacket();
-            if (packet instanceof ClientboundPlayerPositionPacket) {
+            if (packet instanceof PlayerPositionLookS2CPacket) {
                this.shouldDisableAndRelease = true;
                event.setCancelled(true);
             } else {
-               if (packet instanceof ClientboundSetEntityMotionPacket motionPacket && motionPacket.getId() == mc.player.getId()) {
+               if (packet instanceof EntityVelocityUpdateS2CPacket motionPacket && motionPacket.getId() == mc.player.getId()) {
                   this.receivedKnockbacks++;
                   this.knockbackPositions.add(this.packets.size());
                   mc.execute(() -> ChatUtils.addChatMessage("§e" + this.receivedKnockbacks + " received"));
@@ -268,7 +268,7 @@ public class LongJump extends Module {
                this.packets.add(packet);
             }
          } else {
-            if (event.getPacket() instanceof ClientboundSetEntityMotionPacket packet
+            if (event.getPacket() instanceof EntityVelocityUpdateS2CPacket packet
                && event.getType() == EventType.RECEIVE
                && packet.getId() == mc.player.getId()
                && this.usedFireballCount > 0
@@ -301,14 +301,14 @@ public class LongJump extends Module {
                if (this.rotateTick == 1) {
                   this.usedFireballCount++;
                   ChatUtils.addChatMessage("§aJumping for fireball #" + this.usedFireballCount);
-                  mc.options.keyJump.setDown(true);
+                  mc.options.jumpKey.setPressed(true);
                   float yaw;
                   float pitch;
                   if (!this.notMoving) {
-                     yaw = mc.player.getYRot() - 180.0F;
+                     yaw = mc.player.getYaw() - 180.0F;
                      pitch = 88.0F;
                   } else {
-                     yaw = mc.player.getYRot();
+                     yaw = mc.player.getYaw();
                      pitch = 90.0F;
                   }
 
@@ -319,9 +319,9 @@ public class LongJump extends Module {
                   this.rotateTick = 0;
                   int fireballSlot = this.setupFireballSlot();
                   if (fireballSlot != -1) {
-                     mc.player.getInventory().selected = fireballSlot;
+                     mc.player.getInventory().selectedSlot = fireballSlot;
                      this.initialFireballCount = this.getFireballCount();
-                     mc.options.keyUse.setDown(true);
+                     mc.options.useKey.setPressed(true);
                      this.isUsingItem = true;
                      ChatUtils.addChatMessage("§eFireball #" + this.usedFireballCount + " started, initial count: " + this.initialFireballCount);
                   } else {
@@ -336,8 +336,8 @@ public class LongJump extends Module {
          } else if (this.isUsingItem) {
             int currentFireballCount = this.getFireballCount();
             if (currentFireballCount < this.initialFireballCount) {
-               mc.options.keyUse.setDown(false);
-               mc.options.keyJump.setDown(false);
+               mc.options.useKey.setPressed(false);
+               mc.options.jumpKey.setPressed(false);
                rotation = null;
                this.isUsingItem = false;
                ChatUtils.addChatMessage(
@@ -350,8 +350,8 @@ public class LongJump extends Module {
                      + ", waiting for next input"
                );
             } else if (this.getFireballSlot() == -1) {
-               mc.options.keyUse.setDown(false);
-               mc.options.keyJump.setDown(false);
+               mc.options.useKey.setPressed(false);
+               mc.options.jumpKey.setPressed(false);
                rotation = null;
                this.isUsingItem = false;
                ChatUtils.addChatMessage("§cNo more fireballs available!");

@@ -1,15 +1,15 @@
 package org.mixin;
 
-import net.minecraft.client.gui.components.PlayerTabOverlay;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.hud.PlayerListHud;
+import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(PlayerTabOverlay.class)
+@Mixin(PlayerListHud.class)
 public interface PlayerTabOverlayAccessor {
    @Accessor("header")
-   Component getHeader();
+   Text getHeader();
 
    @Accessor("footer")
-   Component getFooter();
+   Text getFooter();
 }

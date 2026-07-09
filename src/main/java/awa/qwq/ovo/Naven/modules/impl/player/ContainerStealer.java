@@ -24,31 +24,30 @@ import java.util.stream.Collectors;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
-import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.AbstractFurnaceMenu;
-import net.minecraft.world.inventory.BrewingStandMenu;
-import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.item.ArmorItem;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.CrossbowItem;
-import net.minecraft.world.item.FishingRodItem;
-import net.minecraft.world.item.ItemNameBlockItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.PickaxeItem;
-import net.minecraft.world.item.ShovelItem;
-import net.minecraft.world.item.SwordItem;
-
 import java.util.stream.IntStream;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.item.AliasedBlockItem;
+import net.minecraft.item.ArmorItem;
+import net.minecraft.item.AxeItem;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.BowItem;
+import net.minecraft.item.CrossbowItem;
+import net.minecraft.item.FishingRodItem;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.item.PickaxeItem;
+import net.minecraft.item.ShovelItem;
+import net.minecraft.item.SwordItem;
+import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
+import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
+import net.minecraft.screen.AbstractFurnaceScreenHandler;
+import net.minecraft.screen.BrewingStandScreenHandler;
+import net.minecraft.screen.GenericContainerScreenHandler;
+import net.minecraft.screen.ScreenHandler;
+import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.text.Text;
 
 @ModuleInfo(
         name = "ContainerStealer",
@@ -157,16 +156,16 @@ public class ContainerStealer extends Module {
    public void onMotion(EventMotion e) {
       if (e.getType() == EventType.PRE) return;
       if (mc.player == null) return;
-      Screen currentScreen = mc.screen;
-      AbstractContainerMenu menu = mc.player.containerMenu;
+      Screen currentScreen = mc.currentScreen;
+      ScreenHandler menu = mc.player.currentScreenHandler;
 
-      if (menu == null || menu == mc.player.inventoryMenu) {
+      if (menu == null || menu == mc.player.playerScreenHandler) {
          this.lastTickScreen = currentScreen;
          this.lastContainerId = -1;
          resetContainerState();
          return;
       }
-      if (currentScreen != this.lastTickScreen || menu.containerId != this.lastContainerId) {
+      if (currentScreen != this.lastTickScreen || menu.syncId != this.lastContainerId) {
          resetContainerState();
       }
       String title;
@@ -174,7 +173,7 @@ public class ContainerStealer extends Module {
 
       if (isSilent) {
          title = "";
-      } else if (currentScreen instanceof AbstractContainerScreen<?> screen) {
+      } else if (currentScreen instanceof HandledScreen<?> screen) {
          title = screen.getTitle().getString();
       } else {
          remember(currentScreen, menu);
@@ -196,10 +195,10 @@ public class ContainerStealer extends Module {
 
          if (this.closeTimer.delay(this.closeDelay.getCurrentValue())) {
             if (isSilent) {
-               mc.player.connection.send(new ServerboundContainerClosePacket(menu.containerId));
-               mc.player.clientSideCloseContainer();
+               mc.player.networkHandler.sendPacket(new CloseHandledScreenC2SPacket(menu.syncId));
+               mc.player.closeScreen();
             } else {
-               mc.player.closeContainer();
+               mc.player.closeHandledScreen();
             }
             workingTimer.reset();
             resetContainerState();
@@ -222,13 +221,13 @@ public class ContainerStealer extends Module {
       if (instant.getCurrentValue()) {
          List<Integer> usefulSlots = new ArrayList<>();
          for (int i = 0; i < containerInfo.size(); i++) {
-            ItemStack stack = menu.getSlot(i).getItem();
+            ItemStack stack = menu.getSlot(i).getStack();
             if (!stack.isEmpty() && shouldSteal(menu, containerInfo, stack)) {
                usefulSlots.add(i);
             }
          }
          for (int slotId : usefulSlots) {
-            if (isSilent) sendClickPacket(menu.containerId, slotId);
+            if (isSilent) sendClickPacket(menu.syncId, slotId);
             else clickSlot(menu, slotId);
          }
          if (!usefulSlots.isEmpty()) {
@@ -239,11 +238,11 @@ public class ContainerStealer extends Module {
          List<Integer> slots = IntStream.range(0, containerInfo.size()).boxed().collect(Collectors.toList());
          Collections.shuffle(slots);
          for (int slotId : slots) {
-            ItemStack stack = menu.getSlot(slotId).getItem();
+            ItemStack stack = menu.getSlot(slotId).getStack();
             boolean clickReady = !this.startedStealing || this.clickTimer.delay(getDelay());
             if (!stack.isEmpty() && shouldSteal(menu, containerInfo, stack)
                     && clickReady) {
-               if (isSilent) sendClickPacket(menu.containerId, slotId);
+               if (isSilent) sendClickPacket(menu.syncId, slotId);
                else clickSlot(menu, slotId);
                this.startedStealing = true;
                workingTimer.reset();
@@ -257,76 +256,76 @@ public class ContainerStealer extends Module {
    }
 
    private void sendClickPacket(int containerId, int slotId) {
-      int stateId = mc.player.containerMenu != null ? mc.player.containerMenu.getStateId() : 0;
-      ItemStack carriedItem = mc.player.containerMenu != null ? mc.player.containerMenu.getCarried().copy() : ItemStack.EMPTY;
+      int stateId = mc.player.currentScreenHandler != null ? mc.player.currentScreenHandler.getRevision() : 0;
+      ItemStack carriedItem = mc.player.currentScreenHandler != null ? mc.player.currentScreenHandler.getCursorStack().copy() : ItemStack.EMPTY;
       Int2ObjectMap<ItemStack> changedSlots = new Int2ObjectOpenHashMap<>();
-      mc.player.connection.send(new ServerboundContainerClickPacket(containerId, stateId, slotId, 0, ClickType.QUICK_MOVE, carriedItem, changedSlots));
+      mc.player.networkHandler.sendPacket(new ClickSlotC2SPacket(containerId, stateId, slotId, 0, SlotActionType.QUICK_MOVE, carriedItem, changedSlots));
    }
 
-   private void clickSlot(AbstractContainerMenu menu, int slotId) {
+   private void clickSlot(ScreenHandler menu, int slotId) {
       if (clickMode.getCurrentMode().equals("Packet")) {
-         sendClickPacket(menu.containerId, slotId);
+         sendClickPacket(menu.syncId, slotId);
       } else {
          if (swap.getCurrentValue()) {
             int slot = getFirstEmptySlot();
             if (slot != -1 && slot + 18 < 54) {
                if (slot < 9) {
-                  mc.gameMode.handleInventoryMouseClick(menu.containerId, slotId, slot, ClickType.SWAP, mc.player);
+                  mc.interactionManager.clickSlot(menu.syncId, slotId, slot, SlotActionType.SWAP, mc.player);
                } else {
-                  mc.gameMode.handleInventoryMouseClick(menu.containerId, slot + 18, 8, ClickType.SWAP, mc.player);
-                  mc.gameMode.handleInventoryMouseClick(menu.containerId, slotId, 8, ClickType.SWAP, mc.player);
+                  mc.interactionManager.clickSlot(menu.syncId, slot + 18, 8, SlotActionType.SWAP, mc.player);
+                  mc.interactionManager.clickSlot(menu.syncId, slotId, 8, SlotActionType.SWAP, mc.player);
                }
             } else {
-               mc.player.closeContainer();
+               mc.player.closeHandledScreen();
             }
          } else {
-            mc.gameMode.handleInventoryMouseClick(menu.containerId, slotId, 0, ClickType.QUICK_MOVE, mc.player);
+            mc.interactionManager.clickSlot(menu.syncId, slotId, 0, SlotActionType.QUICK_MOVE, mc.player);
          }
       }
    }
 
-   private boolean shouldSteal(AbstractContainerMenu menu, ContainerInfo info, ItemStack stack) {
+   private boolean shouldSteal(ScreenHandler menu, ContainerInfo info, ItemStack stack) {
       if (pickTrash.getCurrentValue()) {
          return true;
       }
       if (!isItemUseful(stack)) {
          return false;
       }
-      return !info.chestLike() || !(menu instanceof ChestMenu chestMenu) || isBestItemInChest(chestMenu, stack);
+      return !info.chestLike() || !(menu instanceof GenericContainerScreenHandler chestMenu) || isBestItemInChest(chestMenu, stack);
    }
 
-   private boolean isContainerEmpty(AbstractContainerMenu menu, ContainerInfo info) {
+   private boolean isContainerEmpty(ScreenHandler menu, ContainerInfo info) {
       for (int i = 0; i < info.size(); i++) {
-         ItemStack item = menu.getSlot(i).getItem();
+         ItemStack item = menu.getSlot(i).getStack();
          if (!item.isEmpty()) {
             if (pickTrash.getCurrentValue()) return false;
-            if (isItemUseful(item) && (!info.chestLike() || !(menu instanceof ChestMenu chestMenu) || isBestItemInChest(chestMenu, item))) return false;
+            if (isItemUseful(item) && (!info.chestLike() || !(menu instanceof GenericContainerScreenHandler chestMenu) || isBestItemInChest(chestMenu, item))) return false;
          }
       }
       return true;
    }
 
    public static int getFirstEmptySlot() {
-      Inventory inventory = ContainerStealer.mc.player.getInventory();
-      for (int i = 0; i < inventory.items.size(); ++i) {
-         if (i == 8 || !inventory.getItem(i).isEmpty()) continue;
+      PlayerInventory inventory = ContainerStealer.mc.player.getInventory();
+      for (int i = 0; i < inventory.main.size(); ++i) {
+         if (i == 8 || !inventory.getStack(i).isEmpty()) continue;
          return i;
       }
       return -1;
    }
 
-   private boolean isBestItemInChest(ChestMenu menu, ItemStack stack) {
+   private boolean isBestItemInChest(GenericContainerScreenHandler menu, ItemStack stack) {
       if (InventoryUtils.isMace(stack) || InventoryUtils.isWindCharge(stack) || InventoryUtils.isSpear(stack)) {
          return true;
       }
 
       if (!InventoryUtils.isGodItem(stack) && !InventoryUtils.isSharpnessAxe(stack)) {
-         for (int i = 0; i < menu.getRowCount() * 9; i++) {
-            ItemStack checkStack = menu.getSlot(i).getItem();
+         for (int i = 0; i < menu.getRows() * 9; i++) {
+            ItemStack checkStack = menu.getSlot(i).getStack();
             if (stack.getItem() instanceof ArmorItem && checkStack.getItem() instanceof ArmorItem) {
                ArmorItem item = (ArmorItem) stack.getItem();
                ArmorItem checkItem = (ArmorItem) checkStack.getItem();
-               if (item.getEquipmentSlot() == checkItem.getEquipmentSlot() && InventoryUtils.getProtection(checkStack) > InventoryUtils.getProtection(stack)) {
+               if (item.getSlotType() == checkItem.getSlotType() && InventoryUtils.getProtection(checkStack) > InventoryUtils.getProtection(stack)) {
                   return false;
                }
             } else if (stack.getItem() instanceof SwordItem && checkStack.getItem() instanceof SwordItem) {
@@ -359,7 +358,7 @@ public class ContainerStealer extends Module {
       } else if (stack.getItem() instanceof ArmorItem) {
          ArmorItem item = (ArmorItem) stack.getItem();
          float protection = InventoryUtils.getProtection(stack);
-         float bestArmor = InventoryUtils.getBestArmorScore(item.getEquipmentSlot());
+         float bestArmor = InventoryUtils.getBestArmorScore(item.getSlotType());
          return !(protection <= bestArmor);
       } else if (stack.getItem() instanceof SwordItem) {
          float damage = InventoryUtils.getSwordDamage(stack);
@@ -407,7 +406,7 @@ public class ContainerStealer extends Module {
               || stack.getItem() != Items.SNOWBALL && stack.getItem() != Items.EGG
               || InventoryUtils.getItemCount(Items.SNOWBALL) + InventoryUtils.getItemCount(Items.EGG) + stack.getCount() < InventoryManager.getMaxProjectileSize()
               && InventoryManager.shouldKeepProjectile()) {
-         return stack.getItem() instanceof ItemNameBlockItem ? false : InventoryUtils.isCommonItemUseful(stack);
+         return stack.getItem() instanceof AliasedBlockItem ? false : InventoryUtils.isCommonItemUseful(stack);
       } else {
          return false;
       }
@@ -417,16 +416,16 @@ public class ContainerStealer extends Module {
       return MathUtils.getRandomIntInRange((int) minDelay.getCurrentValue(), (int) maxDelay.getCurrentValue() + 1);
    }
 
-   private ContainerInfo getContainerInfo(AbstractContainerMenu menu, String title, boolean silent) {
-      if (menu instanceof ChestMenu chestMenu) {
-         int rows = chestMenu.getRowCount();
+   private ContainerInfo getContainerInfo(ScreenHandler menu, String title, boolean silent) {
+      if (menu instanceof GenericContainerScreenHandler chestMenu) {
+         int rows = chestMenu.getRows();
          boolean doubleChest = rows >= 6;
          boolean titleKnown = title != null && !title.isEmpty();
-         boolean titleChest = titleKnown && (title.equals(Component.translatable("container.chest").getString()) || title.equals("Chest"));
-         boolean titleDoubleChest = titleKnown && title.equals(Component.translatable("container.chestDouble").getString());
-         boolean titleEnderChest = titleKnown && title.equals(Component.translatable("container.enderchest").getString());
-         boolean titleBarrel = titleKnown && title.equals(Component.translatable("container.barrel").getString());
-         boolean titleShulker = titleKnown && title.equals(Component.translatable("container.shulkerBox").getString());
+         boolean titleChest = titleKnown && (title.equals(Text.translatable("container.chest").getString()) || title.equals("Chest"));
+         boolean titleDoubleChest = titleKnown && title.equals(Text.translatable("container.chestDouble").getString());
+         boolean titleEnderChest = titleKnown && title.equals(Text.translatable("container.enderchest").getString());
+         boolean titleBarrel = titleKnown && title.equals(Text.translatable("container.barrel").getString());
+         boolean titleShulker = titleKnown && title.equals(Text.translatable("container.shulkerBox").getString());
 
          boolean allowed;
          if (silent || !titleKnown) {
@@ -446,26 +445,26 @@ public class ContainerStealer extends Module {
          return new ContainerInfo(allowed, rows * 9, true);
       }
 
-      if (menu instanceof BrewingStandMenu) {
-         String brewingStand = Component.translatable("container.brewing").getString();
+      if (menu instanceof BrewingStandScreenHandler) {
+         String brewingStand = Text.translatable("container.brewing").getString();
          boolean allowed = containerSelect.isSelected("Brewing Stand") && (silent || title == null || title.isEmpty() || title.equals(brewingStand));
          return new ContainerInfo(allowed, 5, false);
       }
 
-      if (menu instanceof AbstractFurnaceMenu) {
-         String furnace = Component.translatable("container.furnace").getString();
-         String blastFurnace = Component.translatable("container.blast_furnace").getString();
-         String smoker = Component.translatable("container.smoker").getString();
+      if (menu instanceof AbstractFurnaceScreenHandler) {
+         String furnace = Text.translatable("container.furnace").getString();
+         String blastFurnace = Text.translatable("container.blast_furnace").getString();
+         String smoker = Text.translatable("container.smoker").getString();
          boolean allowed = containerSelect.isSelected("Furnace")
                  && (silent || title == null || title.isEmpty() || title.equals(furnace) || title.equals(blastFurnace) || title.equals(smoker));
          return new ContainerInfo(allowed, 3, false);
       }
 
-      int containerSlots = Math.max(0, menu.slots.size() - Inventory.INVENTORY_SIZE);
-      boolean titleBarrel = title != null && title.equals(Component.translatable("container.barrel").getString());
-      boolean titleShulker = title != null && title.equals(Component.translatable("container.shulkerBox").getString());
-      boolean titleDispenser = title != null && (title.equals(Component.translatable("container.dispenser").getString()) || title.equals(Component.translatable("container.dropper").getString()));
-      boolean titleHopper = title != null && title.equals(Component.translatable("container.hopper").getString());
+      int containerSlots = Math.max(0, menu.slots.size() - PlayerInventory.MAIN_SIZE);
+      boolean titleBarrel = title != null && title.equals(Text.translatable("container.barrel").getString());
+      boolean titleShulker = title != null && title.equals(Text.translatable("container.shulkerBox").getString());
+      boolean titleDispenser = title != null && (title.equals(Text.translatable("container.dispenser").getString()) || title.equals(Text.translatable("container.dropper").getString()));
+      boolean titleHopper = title != null && title.equals(Text.translatable("container.hopper").getString());
       boolean allowed = (containerSelect.isSelected("Barrel") && (silent || titleBarrel) && containerSlots == 27)
               || (containerSelect.isSelected("Shulker Box") && (silent || titleShulker) && containerSlots == 27)
               || (containerSelect.isSelected("Dispenser") && (silent || titleDispenser) && containerSlots == 9)
@@ -475,9 +474,9 @@ public class ContainerStealer extends Module {
       return new ContainerInfo(allowed, containerSlots, chestLike);
    }
 
-   private void remember(Screen screen, AbstractContainerMenu menu) {
+   private void remember(Screen screen, ScreenHandler menu) {
       this.lastTickScreen = screen;
-      this.lastContainerId = menu == null ? -1 : menu.containerId;
+      this.lastContainerId = menu == null ? -1 : menu.syncId;
    }
 
    private void resetContainerState() {

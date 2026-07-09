@@ -8,11 +8,11 @@ import awa.qwq.ovo.Naven.ui.notification.Notification;
 import awa.qwq.ovo.Naven.ui.notification.NotificationLevel;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.values.HasValue;
-import net.minecraft.client.Minecraft;
-import net.minecraft.sounds.SoundEvents;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.sound.SoundEvents;
 
 public class Module extends HasValue {
-   protected static Minecraft mc = Minecraft.getInstance();
+   protected static MinecraftClient mc = MinecraftClient.getInstance();
    public static boolean update = true;
    private final SmoothAnimationTimer animation = new SmoothAnimationTimer(100.0F);
    private String name;
@@ -34,7 +34,7 @@ public class Module extends HasValue {
    }
 
    public static void refreshMinecraft() {
-      mc = Minecraft.getInstance();
+      mc = MinecraftClient.getInstance();
    }
 
    public void setSuffix(String suffix) {
@@ -91,7 +91,7 @@ public class Module extends HasValue {
             if (!(this instanceof ClickGUIModule)) {
                Interface module = (Interface)Naven.getInstance().getModuleManager().getModule(Interface.class);
                if (module.moduleToggleSound.getCurrentValue()) {
-                  mc.player.playSound(SoundEvents.WOODEN_BUTTON_CLICK_ON, 0.5F, 1.3F);
+                  mc.player.playSound(SoundEvents.BLOCK_WOODEN_BUTTON_CLICK_ON, 0.5F, 1.3F);
                }
 
                Notification notification = new Notification(NotificationLevel.SUCCESS, this.name + " Enabled!", 3000L);
@@ -105,7 +105,7 @@ public class Module extends HasValue {
             if (!(this instanceof ClickGUIModule)) {
                Interface module = (Interface)Naven.getInstance().getModuleManager().getModule(Interface.class);
                if (module.moduleToggleSound.getCurrentValue()) {
-                  mc.player.playSound(SoundEvents.WOODEN_BUTTON_CLICK_OFF, 0.5F, 0.8F);
+                  mc.player.playSound(SoundEvents.BLOCK_WOODEN_BUTTON_CLICK_OFF, 0.5F, 0.8F);
                }
 
                Notification notification = new Notification(NotificationLevel.ERROR, this.name + " Disabled!", 3000L);

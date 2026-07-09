@@ -7,10 +7,10 @@ import awa.qwq.ovo.Naven.events.impl.EventShader;
 import awa.qwq.ovo.Naven.utils.StencilUtils;
 import awa.qwq.ovo.Naven.utils.TimeHelper;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.ints.IntDoubleImmutablePair;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.util.math.MatrixStack;
 import org.lwjgl.opengl.GL11;
 
 public class BlurUtils {
@@ -46,9 +46,9 @@ public class BlurUtils {
    };
 
    public static void onRenderAfterWorld(EventRender2D e, float fps, int strengthIndex) {
-      Minecraft mc = Minecraft.getInstance();
-      int width = mc.getWindow().getWidth();
-      int height = mc.getWindow().getHeight();
+      MinecraftClient mc = MinecraftClient.getInstance();
+      int width = mc.getWindow().getFramebufferWidth();
+      int height = mc.getWindow().getFramebufferHeight();
 
       try {
          StencilUtils.write(false);
@@ -80,7 +80,7 @@ public class BlurUtils {
 
          if (shouldRefresh(fps)) {
             PostProcessRenderer.beginRender(e.getStack());
-            renderToFbo(e.getStack(), fbos[0], mc.getMainRenderTarget().getColorTextureId(), shaderDown, offset);
+            renderToFbo(e.getStack(), fbos[0], mc.getFramebuffer().getColorAttachment(), shaderDown, offset);
 
             for (int ix = 0; ix < iterations; ix++) {
                renderToFbo(e.getStack(), fbos[ix + 1], fbos[ix].texture, shaderDown, offset);
@@ -95,7 +95,7 @@ public class BlurUtils {
             hasBlurredFrame = true;
          }
 
-         mc.getMainRenderTarget().bindWrite(false);
+         mc.getFramebuffer().beginWrite(false);
          GL.viewport(0, 0, width, height);
          shaderUp.bind();
          GL.bindTexture(fbos[0].texture);
@@ -117,7 +117,7 @@ public class BlurUtils {
       return sodiumLoaded || !hasBlurredFrame || blurTimer.delay((double)(1000.0F / safeFps));
    }
 
-   private static void renderToFbo(PoseStack stack, Framebuffer targetFbo, int sourceText, Shader shader, double offset) {
+   private static void renderToFbo(MatrixStack stack, Framebuffer targetFbo, int sourceText, Shader shader, double offset) {
       targetFbo.bind();
       targetFbo.setViewport();
       boolean stencilEnabled = GL11.glIsEnabled(GL11.GL_STENCIL_TEST);

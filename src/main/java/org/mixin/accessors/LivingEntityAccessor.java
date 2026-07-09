@@ -1,17 +1,17 @@
 package org.mixin.accessors;
 
-import net.minecraft.network.syncher.EntityDataAccessor;
-import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.data.TrackedData;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin({LivingEntity.class})
 public interface LivingEntityAccessor {
-   @Accessor
+   @Accessor("jumpingCooldown")
    void setNoJumpDelay(int var1);
 
-   @Accessor("DATA_EFFECT_COLOR_ID")
-   static EntityDataAccessor<Integer> getEffectColorId() {
+   @Accessor("POTION_SWIRLS_COLOR")
+   static TrackedData<Integer> getEffectColorId() {
       return null;
    }
 }

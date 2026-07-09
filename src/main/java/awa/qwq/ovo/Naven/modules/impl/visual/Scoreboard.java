@@ -13,7 +13,7 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import java.util.function.Consumer;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.DrawContext;
 import org.joml.Vector4f;
 
 @ModuleInfo(
@@ -36,7 +36,7 @@ public class Scoreboard extends Module {
    private final DragManager dragManager = new DragManager(this.xOffset, this.down);
    private Vector4f shaderRect;
    private long shaderRectTime;
-   private Consumer<GuiGraphics> modernRenderer;
+   private Consumer<DrawContext> modernRenderer;
    private long modernRendererTime;
 
    public void updateDrag(float baseX, float baseY, float width, float height) {
@@ -56,7 +56,7 @@ public class Scoreboard extends Module {
       this.shaderRectTime = System.currentTimeMillis();
    }
 
-   public void setModernRenderer(Consumer<GuiGraphics> modernRenderer) {
+   public void setModernRenderer(Consumer<DrawContext> modernRenderer) {
       this.modernRenderer = modernRenderer;
       this.modernRendererTime = System.currentTimeMillis();
    }

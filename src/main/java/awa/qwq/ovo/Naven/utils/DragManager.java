@@ -6,15 +6,15 @@ import awa.qwq.ovo.Naven.ui.ClickGUI;
 import awa.qwq.ovo.Naven.values.HasValue;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ChatScreen;
-import net.minecraft.client.gui.screens.OptionsScreen;
-import net.minecraft.client.gui.screens.OptionsSubScreen;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.ChatScreen;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.option.GameOptionsScreen;
+import net.minecraft.client.gui.screen.option.OptionsScreen;
 import org.lwjgl.glfw.GLFW;
 
 public class DragManager {
-    private static final Minecraft mc = Minecraft.getInstance();
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
     private static DragManager activeDrag;
 
     private final FloatValue xOffset;
@@ -93,22 +93,22 @@ public class DragManager {
 
     private static boolean canDrag() {
         if (mc.player == null
-                || mc.level == null
-                || mc.screen == null
-                || mc.mouseHandler == null
+                || mc.world == null
+                || mc.currentScreen == null
+                || mc.mouse == null
                 || mc.getWindow() == null) {
             return false;
         }
 
-        Screen screen = mc.screen;
-        if (screen instanceof OptionsScreen || screen instanceof OptionsSubScreen) {
+        Screen screen = mc.currentScreen;
+        if (screen instanceof OptionsScreen || screen instanceof GameOptionsScreen) {
             return false;
         }
 
         return screen instanceof ChatScreen
                 || screen instanceof ClickGUI
                 || screen instanceof AkarinClickGUI
-                || !screen.isPauseScreen();
+                || !screen.shouldPause();
     }
 
     private static boolean isLeftMouseDown() {
@@ -116,25 +116,25 @@ public class DragManager {
             return false;
         }
 
-        return GLFW.glfwGetMouseButton(mc.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+        return GLFW.glfwGetMouseButton(mc.getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
     }
 
     private static float getMouseX() {
-        int screenWidth = mc.getWindow().getScreenWidth();
+        int screenWidth = mc.getWindow().getWidth();
         if (screenWidth <= 0) {
             return 0.0F;
         }
 
-        return (float) mc.mouseHandler.xpos() * (float) mc.getWindow().getGuiScaledWidth() / (float) screenWidth;
+        return (float) mc.mouse.getX() * (float) mc.getWindow().getScaledWidth() / (float) screenWidth;
     }
 
     private static float getMouseY() {
-        int screenHeight = mc.getWindow().getScreenHeight();
+        int screenHeight = mc.getWindow().getHeight();
         if (screenHeight <= 0) {
             return 0.0F;
         }
 
-        return (float) mc.mouseHandler.ypos() * (float) mc.getWindow().getGuiScaledHeight() / (float) screenHeight;
+        return (float) mc.mouse.getY() * (float) mc.getWindow().getScaledHeight() / (float) screenHeight;
     }
 
     private static boolean isHovering(float mouseX, float mouseY, float x, float y, float width, float height) {

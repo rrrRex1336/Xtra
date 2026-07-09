@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.events.impl;
 
 import awa.qwq.ovo.Naven.events.api.events.Event;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.entity.Entity;
 
 public class EventRotationAnimation implements Event {
    public static Entity currentEntity;

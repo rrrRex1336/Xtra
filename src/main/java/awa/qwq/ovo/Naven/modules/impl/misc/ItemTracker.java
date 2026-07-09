@@ -19,9 +19,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
-import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.resources.language.I18n;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.client.resource.language.I18n;
+import net.minecraft.entity.Entity;
 import org.antlr.v4.runtime.misc.OrderedHashSet;
 
 @ModuleInfo(
@@ -45,14 +45,14 @@ public class ItemTracker extends Module {
    private void updatePositions(float renderPartialTicks) {
       this.entityPositions.clear();
 
-      for (Entity entity : mc.level.entitiesForRendering()) {
-         if (entity != mc.player && entity instanceof AbstractClientPlayer) {
-            double x = MathUtils.interpolate(renderPartialTicks, entity.xo, entity.getX());
-            double y = MathUtils.interpolate(renderPartialTicks, entity.yo, entity.getY()) + (double)entity.getBbHeight();
-            double z = MathUtils.interpolate(renderPartialTicks, entity.zo, entity.getZ());
+      for (Entity entity : mc.world.getEntities()) {
+         if (entity != mc.player && entity instanceof AbstractClientPlayerEntity) {
+            double x = MathUtils.interpolate(renderPartialTicks, entity.prevX, entity.getX());
+            double y = MathUtils.interpolate(renderPartialTicks, entity.prevY, entity.getY()) + (double)entity.getHeight();
+            double z = MathUtils.interpolate(renderPartialTicks, entity.prevZ, entity.getZ());
             Vector2f vector = ProjectionUtils.project(x, y, z, renderPartialTicks);
             this.entityPositions
-               .add(new ItemTracker.TargetInfo((AbstractClientPlayer)entity, vector, EntityWatcher.getEntityTags((AbstractClientPlayer)entity)));
+               .add(new ItemTracker.TargetInfo((AbstractClientPlayerEntity)entity, vector, EntityWatcher.getEntityTags((AbstractClientPlayerEntity)entity)));
          }
       }
 
@@ -61,7 +61,7 @@ public class ItemTracker extends Module {
 
          for (SharedESPData value : dataMap.values()) {
             double x = value.getPosX();
-            double y = value.getPosY() + (double)mc.player.getBbHeight();
+            double y = value.getPosY() + (double)mc.player.getHeight();
             double z = value.getPosZ();
             Vector2f vector = ProjectionUtils.project(x, y, z, renderPartialTicks);
             this.entityPositions.add(new ItemTracker.TargetInfo(null, vector, Set.of(value.getTags())));
@@ -72,14 +72,14 @@ public class ItemTracker extends Module {
    @EventTarget
    public void onRender(EventRender2D e) {
       for (ItemTracker.TargetInfo info : this.entityPositions) {
-         e.getStack().pushPose();
+         e.getStack().push();
          double y = 0.0;
 
          for (String entityTag : info.getDescription()) {
             Fonts.harmony
                .render(
                   e.getStack(),
-                  I18n.get(entityTag, new Object[0]),
+                  I18n.translate(entityTag, new Object[0]),
                   (double)(info.getPosition().x + 10.0F),
                   (double)info.getPosition().y + y,
                   Color.RED,
@@ -90,12 +90,12 @@ public class ItemTracker extends Module {
          }
 
          if (this.debug.getCurrentValue() && info.getPlayer() != null) {
-            AbstractClientPlayer player = info.getPlayer();
+            AbstractClientPlayerEntity player = info.getPlayer();
             OrderedHashSet<String> debugInfos = new OrderedHashSet();
             debugInfos.add("X: " + player.getX());
             debugInfos.add("Y: " + player.getY());
             debugInfos.add("Z: " + player.getZ());
-            debugInfos.add("Ticks: " + player.tickCount);
+            debugInfos.add("Ticks: " + player.age);
 
             for (String debugInfo : debugInfos) {
                Fonts.harmony.render(e.getStack(), debugInfo, (double)(info.getPosition().x + 10.0F), (double)info.getPosition().y + y, Color.RED, true, 0.35F);
@@ -103,16 +103,16 @@ public class ItemTracker extends Module {
             }
          }
 
-         e.getStack().popPose();
+         e.getStack().pop();
       }
    }
 
    private static class TargetInfo {
-      AbstractClientPlayer player;
+      AbstractClientPlayerEntity player;
       Vector2f position;
       Set<String> description;
 
-      public AbstractClientPlayer getPlayer() {
+      public AbstractClientPlayerEntity getPlayer() {
          return this.player;
       }
 
@@ -124,7 +124,7 @@ public class ItemTracker extends Module {
          return this.description;
       }
 
-      public void setPlayer(AbstractClientPlayer player) {
+      public void setPlayer(AbstractClientPlayerEntity player) {
          this.player = player;
       }
 
@@ -184,7 +184,7 @@ public class ItemTracker extends Module {
          return "ItemTracker.TargetInfo(player=" + this.getPlayer() + ", position=" + this.getPosition() + ", description=" + this.getDescription() + ")";
       }
 
-      public TargetInfo(AbstractClientPlayer player, Vector2f position, Set<String> description) {
+      public TargetInfo(AbstractClientPlayerEntity player, Vector2f position, Set<String> description) {
          this.player = player;
          this.position = position;
          this.description = description;

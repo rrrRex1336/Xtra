@@ -11,8 +11,8 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.block.Blocks;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(
    name = "FastCobweb",
@@ -47,7 +47,7 @@ public class FastCobweb extends Module {
          return;
       }
 
-      int tick = mc.player.tickCount;
+      int tick = mc.player.age;
       if (tick != this.playerInWebTick) {
          return;
       }
@@ -58,15 +58,15 @@ public class FastCobweb extends Module {
       this.inputJump = event.isJump();
       this.inputSneak = event.isSneak();
 
-      if (!mc.player.onGround()) {
+      if (!mc.player.isOnGround()) {
          return;
       }
 
       if (event.isSneak()) {
-         this.lastGroundSneakTick = mc.player.tickCount;
+         this.lastGroundSneakTick = mc.player.age;
       }
 
-      if (!event.isSneak() && (mc.player.tickCount - this.lastGroundSneakTick) > 1) {
+      if (!event.isSneak() && (mc.player.age - this.lastGroundSneakTick) > 1) {
          return;
       }
 
@@ -84,13 +84,13 @@ public class FastCobweb extends Module {
          return;
       }
 
-      int tick = mc.player.tickCount;
+      int tick = mc.player.age;
       if (tick != this.playerInWebTick) {
          return;
       }
 
-      Vec3 base = mc.player.getDeltaMovement();
-      boolean onGround = mc.player.onGround();
+      Vec3d base = mc.player.getVelocity();
+      boolean onGround = mc.player.isOnGround();
 
       float forward = 0.0F;
       float strafe = 0.0F;
@@ -98,10 +98,10 @@ public class FastCobweb extends Module {
       boolean sneak = false;
 
       if (mc.player.input != null) {
-         forward = mc.player.input.forwardImpulse;
-         strafe = mc.player.input.leftImpulse;
+         forward = mc.player.input.movementForward;
+         strafe = mc.player.input.movementSideways;
          jump = mc.player.input.jumping;
-         sneak = mc.player.input.shiftKeyDown;
+         sneak = mc.player.input.sneaking;
       } else if (this.inputTick == tick) {
          forward = this.inputForward;
          strafe = this.inputStrafe;
@@ -124,7 +124,7 @@ public class FastCobweb extends Module {
          motionZ = 0.0;
          if (forward != 0 || strafe != 0) {
             double speed = 0.14122;
-            float yaw = mc.player.getYRot();
+            float yaw = mc.player.getYaw();
             double radYaw = Math.toRadians(yaw);
             motionX = (-Math.sin(radYaw) * forward + Math.cos(radYaw) * strafe) * speed;
             motionZ = (Math.cos(radYaw) * forward + Math.sin(radYaw) * strafe) * speed;
@@ -144,7 +144,7 @@ public class FastCobweb extends Module {
          motionY = 0.0;
       }
 
-      mc.player.setDeltaMovement(motionX, motionY, motionZ);
+      mc.player.setVelocity(motionX, motionY, motionZ);
       mc.player.fallDistance = 0.0F;
    }
 
@@ -154,15 +154,15 @@ public class FastCobweb extends Module {
          return;
       }
       if (e.getState().getBlock() == Blocks.COBWEB) {
-         this.playerInWebTick = mc.player.tickCount;
-         Vec3 vanilla = e.getStuckSpeedMultiplier();
-         if (mc.player.onGround()) {
+         this.playerInWebTick = mc.player.age;
+         Vec3d vanilla = e.getStuckSpeedMultiplier();
+         if (mc.player.isOnGround()) {
             double t = this.groundMultiplier.getCurrentValue();
             double x = vanilla.x + (1.0 - vanilla.x) * t;
             double z = vanilla.z + (1.0 - vanilla.z) * t;
-            e.setStuckSpeedMultiplier(new Vec3(x, vanilla.y, z));
+            e.setStuckSpeedMultiplier(new Vec3d(x, vanilla.y, z));
          } else {
-            e.setStuckSpeedMultiplier(new Vec3(1.0, 1.0, 1.0));
+            e.setStuckSpeedMultiplier(new Vec3d(1.0, 1.0, 1.0));
          }
       }
    }

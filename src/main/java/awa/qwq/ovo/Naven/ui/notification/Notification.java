@@ -4,8 +4,8 @@ import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.utils.StencilUtils;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
+import net.minecraft.client.util.math.MatrixStack;
 
 public class Notification {
    public static byte[] authTokens;
@@ -22,11 +22,11 @@ public class Notification {
       this.maxAge = age;
    }
 
-   public void renderShader(PoseStack stack, float x, float y) {
+   public void renderShader(MatrixStack stack, float x, float y) {
       RenderUtils.drawRoundedRect(stack, x + 2.0F, y + 4.0F, this.getWidth(), 20.0F, 5.0F, this.level.getColor());
    }
 
-   public void render(PoseStack stack, float x, float y) {
+   public void render(MatrixStack stack, float x, float y) {
       StencilUtils.write(false);
       RenderUtils.drawRoundedRect(stack, x + 2.0F, y + 4.0F, this.getWidth(), 20.0F, 5.0F, this.level.getColor());
       StencilUtils.erase(true);

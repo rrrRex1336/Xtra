@@ -15,16 +15,21 @@ import java.util.List;
 import java.util.Optional;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.Style;
-import net.minecraft.network.chat.numbers.BlankFormat;
-import net.minecraft.network.chat.numbers.NumberFormat;
-import net.minecraft.network.chat.numbers.StyledFormat;
-import net.minecraft.world.scores.*;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.hud.InGameHud;
+import net.minecraft.scoreboard.AbstractTeam;
+import net.minecraft.scoreboard.Scoreboard;
+import net.minecraft.scoreboard.ScoreboardEntry;
+import net.minecraft.scoreboard.ScoreboardObjective;
+import net.minecraft.scoreboard.Team;
+import net.minecraft.scoreboard.number.BlankNumberFormat;
+import net.minecraft.scoreboard.number.NumberFormat;
+import net.minecraft.scoreboard.number.StyledNumberFormat;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+import net.minecraft.scoreboard.*;
 import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -34,32 +39,32 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(value = {Gui.class}, priority = 100)
+@Mixin(value = {InGameHud.class}, priority = 100)
 public abstract class MixinGui {
 
    @Shadow
-   protected Component title;
+   protected Text title;
    @Shadow
-   protected int titleTime;
+   protected int titleRemainTicks;
    @Shadow
-   protected int titleFadeInTime;
+   protected int titleFadeInTicks;
    @Shadow
-   protected int titleStayTime;
+   protected int titleStayTicks;
    @Shadow
-   protected int titleFadeOutTime;
+   protected int titleFadeOutTicks;
    @Shadow
-   protected Component subtitle;
+   protected Text subtitle;
    @Shadow
    @Final
-   private static Comparator<PlayerScoreEntry> SCORE_DISPLAY_ORDER;
+   private static Comparator<ScoreboardEntry> SCOREBOARD_ENTRY_COMPARATOR;
    @Shadow
-   public abstract Font getFont();
+   public abstract TextRenderer getTextRenderer();
 
    private static final int MODERN_BACKGROUND_COLOR = new Color(0, 0, 0, 120).getRGB();
    private static final float MODERN_FONT_SCALE = 0.66F;
 
-   @Inject(method = "displayScoreboardSidebar", at = @At("HEAD"), cancellable = true)
-   public void hookScoreboardRender(GuiGraphics guiGraphics, Objective objective, CallbackInfo ci) {
+   @Inject(method = "renderScoreboardSidebar", at = @At("HEAD"), cancellable = true)
+   public void hookScoreboardRender(DrawContext guiGraphics, ScoreboardObjective objective, CallbackInfo ci) {
       awa.qwq.ovo.Naven.modules.impl.visual.Scoreboard module = this.getScoreboardModule();
       if (module == null || !module.isEnabled()) {
          return;
@@ -74,51 +79,51 @@ public abstract class MixinGui {
    }
 
    @Inject(
-           method = "displayScoreboardSidebar",
+           method = "renderScoreboardSidebar",
            at = @At("RETURN")
    )
-   private void onDisplayScoreboardSidebarReturn(GuiGraphics guiGraphics, Objective objective, CallbackInfo ci) {
+   private void onDisplayScoreboardSidebarReturn(DrawContext guiGraphics, ScoreboardObjective objective, CallbackInfo ci) {
       EventRenderScoreboard event = new EventRenderScoreboard(objective.getDisplayName());
       Naven.getInstance().getEventManager().call(event);
    }
 
    @Redirect(
-           method = "displayScoreboardSidebar",
+           method = "renderScoreboardSidebar",
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/world/scores/Objective;getDisplayName()Lnet/minecraft/network/chat/Component;"
+                   target = "Lnet/minecraft/scoreboard/ScoreboardObjective;getDisplayName()Lnet/minecraft/text/Text;"
            )
    )
-   public Component hookScoreboardTitle(Objective instance) {
+   public Text hookScoreboardTitle(ScoreboardObjective instance) {
       return this.getScoreboardTitle(instance);
    }
 
    @Redirect(
-           method = "displayScoreboardSidebar",
+           method = "renderScoreboardSidebar",
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/world/scores/Objective;numberFormatOrDefault(Lnet/minecraft/network/chat/numbers/NumberFormat;)Lnet/minecraft/network/chat/numbers/NumberFormat;"
+                   target = "Lnet/minecraft/scoreboard/ScoreboardObjective;getNumberFormatOr(Lnet/minecraft/scoreboard/number/NumberFormat;)Lnet/minecraft/scoreboard/number/NumberFormat;"
            )
    )
-   public NumberFormat hookScoreboardNumberFormat(Objective instance, NumberFormat fallback) {
-      NumberFormat numberFormat = instance.numberFormatOrDefault(fallback);
+   public NumberFormat hookScoreboardNumberFormat(ScoreboardObjective instance, NumberFormat fallback) {
+      NumberFormat numberFormat = instance.getNumberFormatOr(fallback);
       awa.qwq.ovo.Naven.modules.impl.visual.Scoreboard module = this.getScoreboardModule();
-      return this.shouldHideScoreboardScore(module) ? BlankFormat.INSTANCE : numberFormat;
+      return this.shouldHideScoreboardScore(module) ? BlankNumberFormat.INSTANCE : numberFormat;
    }
 
    @Inject(method = "setTitle", at = @At("HEAD"), cancellable = true)
-   public void hookTitle(Component pTitle, CallbackInfo ci) {
+   public void hookTitle(Text pTitle, CallbackInfo ci) {
       EventSetTitle event = new EventSetTitle(EventType.TITLE, pTitle);
       Naven.getInstance().getEventManager().call(event);
       if (!event.isCancelled()) {
          this.title = event.getTitle();
-         this.titleTime = this.titleFadeInTime + this.titleStayTime + this.titleFadeOutTime;
+         this.titleRemainTicks = this.titleFadeInTicks + this.titleStayTicks + this.titleFadeOutTicks;
          ci.cancel();
       }
    }
 
    @Inject(method = "setSubtitle", at = @At("HEAD"), cancellable = true)
-   public void hookSubtitle(Component pSubtitle, CallbackInfo ci) {
+   public void hookSubtitle(Text pSubtitle, CallbackInfo ci) {
       EventSetTitle event = new EventSetTitle(EventType.SUBTITLE, pSubtitle);
       Naven.getInstance().getEventManager().call(event);
       if (!event.isCancelled()) {
@@ -127,8 +132,8 @@ public abstract class MixinGui {
       }
    }
 
-   @Inject(method = "renderEffects", at = @At("HEAD"), cancellable = true)
-   public void hookRenderEffects(GuiGraphics guiGraphics, CallbackInfo ci) {
+   @Inject(method = "renderStatusEffectOverlay", at = @At("HEAD"), cancellable = true)
+   public void hookRenderEffects(DrawContext guiGraphics, CallbackInfo ci) {
       NoRender noRender = (NoRender) Naven.getInstance().getModuleManager().getModule(NoRender.class);
       if (noRender.isEnabled() && noRender.disableEffects.getCurrentValue()) {
          ci.cancel();
@@ -147,25 +152,25 @@ public abstract class MixinGui {
       return module != null && module.isEnabled() && module.hideScore.getCurrentValue();
    }
 
-   private Component getScoreboardTitle(Objective objective) {
+   private Text getScoreboardTitle(ScoreboardObjective objective) {
       EventRenderScoreboard event = new EventRenderScoreboard(objective.getDisplayName());
       Naven.getInstance().getEventManager().call(event);
       return event.getComponent();
    }
 
-   private String getScoreboardPlayerName(Scoreboard scoreboard, PlayerScoreEntry entry) {
-      Team team = scoreboard.getPlayersTeam(entry.owner());
-      return PlayerTeam.formatNameForTeam(team, entry.ownerName()).getString();
+   private String getScoreboardPlayerName(Scoreboard scoreboard, ScoreboardEntry entry) {
+      AbstractTeam team = scoreboard.getScoreHolderTeam(entry.owner());
+      return Team.decorateName(team, entry.name()).getString();
    }
 
-   private void renderScoreboard(GuiGraphics guiGraphics, Objective objective, awa.qwq.ovo.Naven.modules.impl.visual.Scoreboard module, boolean modern) {
+   private void renderScoreboard(DrawContext guiGraphics, ScoreboardObjective objective, awa.qwq.ovo.Naven.modules.impl.visual.Scoreboard module, boolean modern) {
       Scoreboard scoreboard = objective.getScoreboard();
       NumberFormat numberFormat = module.hideScore.getCurrentValue()
-              ? BlankFormat.INSTANCE
-              : objective.numberFormatOrDefault(StyledFormat.SIDEBAR_DEFAULT);
-      List<VanillaScoreboardLine> lines = scoreboard.listPlayerScores(objective).stream()
-              .filter(entry -> !entry.isHidden())
-              .sorted(SCORE_DISPLAY_ORDER)
+              ? BlankNumberFormat.INSTANCE
+              : objective.getNumberFormatOr(StyledNumberFormat.RED);
+      List<VanillaScoreboardLine> lines = scoreboard.getScoreboardEntries(objective).stream()
+              .filter(entry -> !entry.hidden())
+              .sorted(SCOREBOARD_ENTRY_COMPARATOR)
               .limit(15)
               .map(entry -> this.createVanillaScoreboardLine(scoreboard, numberFormat, module.hideScore.getCurrentValue(), entry))
               .toList();
@@ -175,14 +180,14 @@ public abstract class MixinGui {
          return;
       }
 
-      Font font = this.getFont();
-      Component title = this.getScoreboardTitle(objective);
-      int titleWidth = font.width(title);
+      TextRenderer font = this.getTextRenderer();
+      Text title = this.getScoreboardTitle(objective);
+      int titleWidth = font.getWidth(title);
       int maxWidth = titleWidth;
-      int separatorWidth = font.width(":");
+      int separatorWidth = font.getWidth(":");
 
       for (VanillaScoreboardLine line : lines) {
-         int lineWidth = font.width(line.name());
+         int lineWidth = font.getWidth(line.name());
          if (line.scoreWidth() > 0) {
             lineWidth += separatorWidth + line.scoreWidth();
          }
@@ -203,7 +208,7 @@ public abstract class MixinGui {
          }
       }
 
-      float baseBoxLeft = guiGraphics.guiWidth() - maxWidth - 5.0F;
+      float baseBoxLeft = guiGraphics.getScaledWindowWidth() - maxWidth - 5.0F;
       float scoreboardHeight = 10.0F + lines.size() * 9.0F;
       module.updateDrag(baseBoxLeft, 0.0F, maxWidth + 4.0F, scoreboardHeight);
       int boxLeft = Math.round(module.getRenderX(baseBoxLeft));
@@ -213,9 +218,9 @@ public abstract class MixinGui {
       int rowTop = titleTop + 10;
       int bottom = rowTop + lines.size() * 9;
       int titleY = rowTop - 9;
-      Minecraft minecraft = Minecraft.getInstance();
-      int backgroundColor = minecraft.options.getBackgroundColor(0.3F);
-      int titleBackgroundColor = minecraft.options.getBackgroundColor(0.4F);
+      MinecraftClient minecraft = MinecraftClient.getInstance();
+      int backgroundColor = minecraft.options.getTextBackgroundColor(0.3F);
+      int titleBackgroundColor = minecraft.options.getTextBackgroundColor(0.4F);
 
       if (modern) {
          float rectX = left - 2.0F;
@@ -231,7 +236,7 @@ public abstract class MixinGui {
             double misansAlpha = Fonts.misansScoreboard.mesh.alpha;
             this.prepareScoreboardRenderState();
             try {
-               RenderUtils.drawRoundedRect(overlayGraphics.pose(), rectX, rectY, rectWidth, rectHeight, 3.0F, MODERN_BACKGROUND_COLOR);
+               RenderUtils.drawRoundedRect(overlayGraphics.getMatrices(), rectX, rectY, rectWidth, rectHeight, 3.0F, MODERN_BACKGROUND_COLOR);
                this.prepareScoreboardRenderState();
                Fonts.misansScoreboard.setAlpha(1.0F);
                this.renderModernComponent(overlayGraphics, title, left + (renderMaxWidth - this.getModernComponentWidth(title)) / 2.0F, titleY, -1, false);
@@ -255,20 +260,20 @@ public abstract class MixinGui {
          module.clearModernRenderer();
          guiGraphics.fill(left - 2, titleTop, right, rowTop - 1, titleBackgroundColor);
          guiGraphics.fill(left - 2, rowTop - 1, right, bottom, backgroundColor);
-         guiGraphics.drawString(font, title, left + maxWidth / 2 - titleWidth / 2, titleY, -1, false);
+         guiGraphics.drawText(font, title, left + maxWidth / 2 - titleWidth / 2, titleY, -1, false);
       }
 
       for (int i = 0; i < lines.size(); i++) {
          VanillaScoreboardLine line = lines.get(i);
          int y = rowTop + i * 9;
-         guiGraphics.drawString(font, line.name(), left, y, -1, false);
+         guiGraphics.drawText(font, line.name(), left, y, -1, false);
          if (line.scoreWidth() > 0) {
-            guiGraphics.drawString(font, line.score(), right - line.scoreWidth(), y, -1, false);
+            guiGraphics.drawText(font, line.score(), right - line.scoreWidth(), y, -1, false);
          }
       }
    }
 
-   private float renderModernComponent(GuiGraphics guiGraphics, Component component, float x, float y, int fallbackColor, boolean shadow) {
+   private float renderModernComponent(DrawContext guiGraphics, Text component, float x, float y, int fallbackColor, boolean shadow) {
       float[] currentX = new float[]{x};
       boolean[] rendered = new boolean[]{false};
       component.visit((style, text) -> {
@@ -284,7 +289,7 @@ public abstract class MixinGui {
       return currentX[0] - x;
    }
 
-   private float getModernComponentWidth(Component component) {
+   private float getModernComponentWidth(Text component) {
       float[] width = new float[]{0.0F};
       boolean[] measured = new boolean[]{false};
       component.visit((style, text) -> {
@@ -296,7 +301,7 @@ public abstract class MixinGui {
       return measured[0] ? width[0] : this.getModernStringWidth(component.getString());
    }
 
-   private float renderModernString(GuiGraphics guiGraphics, String text, float x, float y, int color, boolean shadow) {
+   private float renderModernString(DrawContext guiGraphics, String text, float x, float y, int color, boolean shadow) {
       if (text.isEmpty()) {
          return 0.0F;
       }
@@ -304,7 +309,7 @@ public abstract class MixinGui {
       this.prepareScoreboardRenderState();
       CustomTextRenderer renderer = Fonts.misansScoreboard;
       renderer.setAlpha(1.0F);
-      renderer.render(guiGraphics.pose(), text, x, y, new Color(color, true), shadow, MODERN_FONT_SCALE);
+      renderer.render(guiGraphics.getMatrices(), text, x, y, new Color(color, true), shadow, MODERN_FONT_SCALE);
       return renderer.getWidth(text, MODERN_FONT_SCALE);
    }
 
@@ -314,7 +319,7 @@ public abstract class MixinGui {
 
    private int getStyleColor(Style style, int fallbackColor) {
       if (style != null && style.getColor() != null) {
-         return withOpaqueAlpha(style.getColor().getValue());
+         return withOpaqueAlpha(style.getColor().getRgb());
       }
 
       return withOpaqueAlpha(fallbackColor);
@@ -351,13 +356,13 @@ public abstract class MixinGui {
       }
    }
 
-   private VanillaScoreboardLine createVanillaScoreboardLine(Scoreboard scoreboard, NumberFormat numberFormat, boolean hideScore, PlayerScoreEntry entry) {
-      Team team = scoreboard.getPlayersTeam(entry.owner());
-      Component name = PlayerTeam.formatNameForTeam(team, entry.ownerName());
-      Component score = hideScore ? Component.empty() : entry.formatValue(numberFormat);
-      return new VanillaScoreboardLine(name, score, this.getFont().width(score));
+   private VanillaScoreboardLine createVanillaScoreboardLine(Scoreboard scoreboard, NumberFormat numberFormat, boolean hideScore, ScoreboardEntry entry) {
+      AbstractTeam team = scoreboard.getScoreHolderTeam(entry.owner());
+      Text name = Team.decorateName(team, entry.name());
+      Text score = hideScore ? Text.empty() : entry.formatted(numberFormat);
+      return new VanillaScoreboardLine(name, score, this.getTextRenderer().getWidth(score));
    }
 
-   private static record VanillaScoreboardLine(Component name, Component score, int scoreWidth) {
+   private static record VanillaScoreboardLine(Text name, Text score, int scoreWidth) {
    }
 }

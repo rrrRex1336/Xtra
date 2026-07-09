@@ -1,7 +1,7 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
-import net.minecraft.client.Timer;
+import net.minecraft.client.render.RenderTickCounter;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -9,20 +9,20 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin({Timer.class})
+@Mixin({RenderTickCounter.class})
 public class MixinTimer {
    @Shadow
-   public float partialTick;
+   public float tickDelta;
    @Shadow
-   private long lastMs;
+   private long prevTimeMillis;
    @Final
    @Shadow
-   private float msPerTick;
+   private float tickTime;
    @Shadow
-   public float tickDelta;
+   public float lastFrameDuration;
 
    @Inject(
-           method = {"advanceTime"},
+           method = {"beginRenderTick"},
            at = {@At("HEAD")},
            cancellable = true
    )
@@ -30,11 +30,11 @@ public class MixinTimer {
       if (Naven.TICK_TIMER != 1.0F) {
          float timerMultiplier = Naven.TICK_TIMER;
 
-         this.tickDelta = (float)(timeMillis - this.lastMs) / this.msPerTick * timerMultiplier;
-         this.lastMs = timeMillis;
-         this.partialTick = this.partialTick + this.tickDelta;
-         int i = (int)this.partialTick;
-         this.partialTick -= (float)i;
+         this.lastFrameDuration = (float)(timeMillis - this.prevTimeMillis) / this.tickTime * timerMultiplier;
+         this.prevTimeMillis = timeMillis;
+         this.tickDelta = this.tickDelta + this.lastFrameDuration;
+         int i = (int)this.tickDelta;
+         this.tickDelta -= (float)i;
          cir.setReturnValue(i);
       }
    }

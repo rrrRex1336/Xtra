@@ -12,9 +12,9 @@ import awa.qwq.ovo.Naven.utils.ChatUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.util.Hand;
 import org.lwjgl.glfw.GLFW;
 
 @ModuleInfo(
@@ -68,7 +68,7 @@ public class MiddlePearl extends Module {
     @EventTarget
     public void onMouseClick(EventMouseClick event) {
         int triggerKey = this.getTriggerKey();
-        if (event.getKey() != triggerKey || mc.player == null || mc.gameMode == null) {
+        if (event.getKey() != triggerKey || mc.player == null || mc.interactionManager == null) {
             return;
         }
 
@@ -115,7 +115,7 @@ public class MiddlePearl extends Module {
             return;
         }
 
-        this.originalSlot = mc.player.getInventory().selected;
+        this.originalSlot = mc.player.getInventory().selectedSlot;
         this.preparingPearl = true;
         this.restoreAt = -1L;
         if (this.mode.isCurrentMode("Fast Switch")) {
@@ -127,12 +127,12 @@ public class MiddlePearl extends Module {
     }
 
     private void throwPreparedPearl() {
-        if (!this.preparingPearl || mc.player == null || mc.gameMode == null) {
+        if (!this.preparingPearl || mc.player == null || mc.interactionManager == null) {
             return;
         }
 
         this.switchToPearl();
-        mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
+        mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
         this.preparingPearl = false;
         this.switchAt = -1L;
 
@@ -155,13 +155,13 @@ public class MiddlePearl extends Module {
 
     private void switchToPearl() {
         if (mc.player != null && this.pearlSlot >= 0 && this.pearlSlot < 9) {
-            mc.player.getInventory().selected = this.pearlSlot;
+            mc.player.getInventory().selectedSlot = this.pearlSlot;
         }
     }
 
     private void restoreOriginalSlot() {
         if (mc.player != null && this.originalSlot >= 0 && this.originalSlot < 9) {
-            mc.player.getInventory().selected = this.originalSlot;
+            mc.player.getInventory().selectedSlot = this.originalSlot;
         }
         this.originalSlot = -1;
     }
@@ -178,7 +178,7 @@ public class MiddlePearl extends Module {
 
     private int findPearlSlot() {
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getItem(i);
+            ItemStack stack = mc.player.getInventory().getStack(i);
             if (stack.getItem() == Items.ENDER_PEARL && stack.getCount() > 0) {
                 return i;
             }

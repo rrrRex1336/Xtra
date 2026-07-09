@@ -12,15 +12,15 @@ import awa.qwq.ovo.Naven.utils.TimeHelper;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
-import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket.Action;
+import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 
 @ModuleInfo(
    name = "AutoHeal",
@@ -52,19 +52,19 @@ public class AutoHeal extends Module {
    public void onMotion(EventMotion e) {
       if (e.getType() == EventType.PRE) {
          if (this.useItem) {
-            PacketUtils.sendSequencedPacket(id -> new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, id));
+            PacketUtils.sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, id));
             this.useItem = false;
             return;
          }
 
          if (this.throwItem) {
-            mc.getConnection().send(new ServerboundPlayerActionPacket(Action.DROP_ITEM, BlockPos.ZERO, Direction.DOWN));
+            mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(Action.DROP_ITEM, BlockPos.ORIGIN, Direction.DOWN));
             this.throwItem = false;
             return;
          }
 
          if (this.switchBack) {
-            mc.getConnection().send(new ServerboundSetCarriedItemPacket(mc.player.getInventory().selected));
+            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(mc.player.getInventory().selectedSlot));
             this.switchBack = false;
             return;
          }
@@ -76,7 +76,7 @@ public class AutoHeal extends Module {
          if (mc.player.getHealth() / mc.player.getMaxHealth() < this.health.getCurrentValue()) {
             if (this.mode.isCurrentMode("Soup")) {
                for (int i = 0; i < 9; i++) {
-                  ItemStack stack = (ItemStack)mc.player.getInventory().items.get(i);
+                  ItemStack stack = (ItemStack)mc.player.getInventory().main.get(i);
                   if (stack.getItem() == Items.MUSHROOM_STEW) {
                      this.switchUseItem(i, true);
                      this.switchBack = true;
@@ -85,7 +85,7 @@ public class AutoHeal extends Module {
                }
             } else if (this.mode.isCurrentMode("Head")) {
                for (int ix = 0; ix < 9; ix++) {
-                  ItemStack stack = (ItemStack)mc.player.getInventory().items.get(ix);
+                  ItemStack stack = (ItemStack)mc.player.getInventory().main.get(ix);
                   if (InventoryUtils.isGoldenHead(stack)) {
                      this.switchUseItem(ix, false);
                      this.switchBack = true;
@@ -98,7 +98,7 @@ public class AutoHeal extends Module {
    }
 
    private void switchUseItem(int slot, boolean throwItem) {
-      mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
+      mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
       this.throwItem = throwItem;
       this.useItem = true;
    }

@@ -7,9 +7,9 @@ import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import java.util.Objects;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
 
 @ModuleInfo(
    name = "Teams",
@@ -27,10 +27,10 @@ public class Teams extends Module {
    public static boolean isSameTeam(Entity player) {
       if (!Naven.getInstance().getModuleManager().getModule(Teams.class).isEnabled()) {
          return false;
-      } else if (player instanceof Player) {
+      } else if (player instanceof PlayerEntity) {
          if (instance.mode.isCurrentMode("Color")) {
-            Integer c1 = player.getTeamColor();
-            Integer c2 = mc.player.getTeamColor();
+            Integer c1 = player.getTeamColorValue();
+            Integer c2 = mc.player.getTeamColorValue();
             return c1.equals(c2);
          } else {
             String playerTeam = getTeam(player);
@@ -43,11 +43,11 @@ public class Teams extends Module {
    }
 
    public static String getTeam(Entity entity) {
-      PlayerInfo playerInfo = mc.getConnection().getPlayerInfo(entity.getUUID());
+      PlayerListEntry playerInfo = mc.getNetworkHandler().getPlayerListEntry(entity.getUuid());
       if (playerInfo == null) {
          return null;
       } else {
-         return playerInfo.getTeam() != null ? playerInfo.getTeam().getName() : null;
+         return playerInfo.getScoreboardTeam() != null ? playerInfo.getScoreboardTeam().getName() : null;
       }
    }
 }

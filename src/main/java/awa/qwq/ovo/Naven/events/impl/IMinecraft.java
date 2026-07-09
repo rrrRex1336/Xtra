@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.events.impl;
 
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.MinecraftClient;
 
 public interface IMinecraft  {
-    Minecraft mc = Minecraft.getInstance();
+    MinecraftClient mc = MinecraftClient.getInstance();
 }

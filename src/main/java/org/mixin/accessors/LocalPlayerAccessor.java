@@ -1,29 +1,29 @@
 package org.mixin.accessors;
 
-import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.network.ClientPlayerEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin({LocalPlayer.class})
+@Mixin({ClientPlayerEntity.class})
 public interface LocalPlayerAccessor {
-   @Accessor
+   @Accessor("lastSprinting")
    boolean isWasSprinting();
 
-   @Accessor("yRotLast")
+   @Accessor("lastYaw")
    float getYRotLast();
 
-   @Accessor("xRotLast")
+   @Accessor("lastPitch")
    float getXRotLast();
 
-   @Accessor("xRotLast")
+   @Accessor("lastPitch")
    void setXRotLast(float var1);
 
-   @Accessor("yRotLast")
+   @Accessor("lastYaw")
    void setYRotLast(float var1);
 
-   @Accessor("positionReminder")
+   @Accessor("ticksSinceLastPositionPacketSent")
    int getPositionReminder();
 
-   @Accessor("positionReminder")
+   @Accessor("ticksSinceLastPositionPacketSent")
    void setPositionReminder(int var1);
 }

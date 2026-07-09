@@ -12,15 +12,14 @@ import awa.qwq.ovo.Naven.ui.notification.Notification;
 import awa.qwq.ovo.Naven.ui.notification.NotificationLevel;
 import awa.qwq.ovo.Naven.utils.ChatUtils;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SwordItem;
-
 import java.awt.*;
 import java.util.HashSet;
 import java.util.Set;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.item.SwordItem;
 
 @ModuleInfo(
         name = "KillerDetection",
@@ -39,12 +38,12 @@ public class KillerDetection extends Module {
 
     @EventTarget
     private void onUpdate(EventUpdate event) {
-        if (mc.level == null || mc.player == null) {
+        if (mc.world == null || mc.player == null) {
             return;
         }
 
-        for (Entity entity : mc.level.entitiesForRendering()) {
-            if (entity instanceof Player player) {
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity instanceof PlayerEntity player) {
                 if (player == mc.player) {
                     continue;
                 }
@@ -55,7 +54,7 @@ public class KillerDetection extends Module {
                     continue;
                 }
 
-                ItemStack mainHandItem = player.getMainHandItem();
+                ItemStack mainHandItem = player.getMainHandStack();
 
                 if (mainHandItem.getItem() == Items.IRON_SWORD || mainHandItem.getItem() == Items.DIAMOND_SWORD || mainHandItem.getItem() instanceof SwordItem) {
                     ChatUtils.addChatMessage("[KillerDetection] Player " + playerName + " It's a killer!");
@@ -69,15 +68,15 @@ public class KillerDetection extends Module {
 
     @EventTarget
     private void onRender3D(EventRender2D event) {
-        if (mc.level == null || mc.player == null) {
+        if (mc.world == null || mc.player == null) {
             return;
         }
 
-        int screenWidth = mc.getWindow().getWidth();
-        int screenHeight = mc.getWindow().getHeight();
+        int screenWidth = mc.getWindow().getFramebufferWidth();
+        int screenHeight = mc.getWindow().getFramebufferHeight();
 
-        for (Entity entity : mc.level.entitiesForRendering()) {
-            if (entity instanceof Player player) {
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity instanceof PlayerEntity player) {
                 String playerName = player.getName().getString();
                 if (detectedKillers.contains(playerName)) {
                     float size = 50.0f;

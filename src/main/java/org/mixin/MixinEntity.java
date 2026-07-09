@@ -4,18 +4,18 @@ import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.chat.ChatClient;
 import awa.qwq.ovo.Naven.events.impl.*;
 import awa.qwq.ovo.Naven.modules.impl.player.NoPush;
-import net.minecraft.world.entity.projectile.Projectile;
 import awa.qwq.ovo.Naven.utils.BlinkingPlayer;
-import net.minecraft.client.Minecraft;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.MoverType;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.vehicle.AbstractMinecart;
-import net.minecraft.world.entity.vehicle.Boat;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.block.BlockState;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.MovementType;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.projectile.ProjectileEntity;
+import net.minecraft.entity.vehicle.AbstractMinecartEntity;
+import net.minecraft.entity.vehicle.BoatEntity;
+import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
@@ -29,25 +29,25 @@ public abstract class MixinEntity{
    private boolean naven_Modern$movementUtilsMoveHook;
 
    @Shadow
-   protected Vec3 stuckSpeedMultiplier;
+   protected Vec3d movementMultiplier;
 
    @Shadow
-   public abstract float getViewXRot(float var1);
+   public abstract float getPitch(float var1);
 
    @Shadow
-   public abstract float getViewYRot(float var1);
+   public abstract float getYaw(float var1);
 
    @Shadow
-   protected abstract Vec3 calculateViewVector(float var1, float var2);
+   protected abstract Vec3d getRotationVector(float var1, float var2);
 
    @Shadow
-   public abstract Vec3 getDeltaMovement();
+   public abstract Vec3d getVelocity();
 
    @Shadow
-   public abstract void setDeltaMovement(Vec3 pDeltaMovement);
+   public abstract void setVelocity(Vec3d pDeltaMovement);
 
    @Shadow
-   public abstract void setDeltaMovement(double pX, double pY, double pZ);
+   public abstract void setVelocity(double pX, double pY, double pZ);
 
    @Shadow
    public float fallDistance;
@@ -57,13 +57,13 @@ public abstract class MixinEntity{
            at = {@At("HEAD")},
            cancellable = true
    )
-   private void onMove(MoverType type, Vec3 movement, CallbackInfo ci) {
+   private void onMove(MovementType type, Vec3d movement, CallbackInfo ci) {
       if (this.naven_Modern$movementUtilsMoveHook) {
          return;
       }
 
       Entity thisEntity = (Entity)(Object)this;
-      if (thisEntity == Minecraft.getInstance().player) {
+      if (thisEntity == MinecraftClient.getInstance().player) {
          EventMove event = new EventMove(movement.x, movement.y, movement.z);
          Naven.getInstance().getEventManager().call(event);
          if (event.isCancelled()) {
@@ -75,7 +75,7 @@ public abstract class MixinEntity{
             ci.cancel();
             this.naven_Modern$movementUtilsMoveHook = true;
             try {
-               thisEntity.move(type, new Vec3(event.getX(), event.getY(), event.getZ()));
+               thisEntity.move(type, new Vec3d(event.getX(), event.getY(), event.getZ()));
             } finally {
                this.naven_Modern$movementUtilsMoveHook = false;
             }
@@ -89,29 +89,29 @@ public abstract class MixinEntity{
     * @reason
     */
    @Overwrite
-   public final Vec3 getViewVector(float p_20253_) {
-      float pitch = this.getViewXRot(p_20253_);
-      float yaw = this.getViewYRot(p_20253_);
+   public final Vec3d getRotationVec(float p_20253_) {
+      float pitch = this.getPitch(p_20253_);
+      float yaw = this.getYaw(p_20253_);
       Entity thisEntity = (Entity)(Object)this;
-      if (thisEntity == Minecraft.getInstance().player) {
+      if (thisEntity == MinecraftClient.getInstance().player) {
          EventRayTrace lookEvent = new EventRayTrace(thisEntity, yaw, pitch);
          Naven.getInstance().getEventManager().call(lookEvent);
          yaw = lookEvent.yaw;
          pitch = lookEvent.pitch;
       }
 
-      return this.calculateViewVector(pitch, yaw);
+      return this.getRotationVector(pitch, yaw);
    }
 
-   @ModifyVariable(method = "moveRelative", at = @At("HEAD"), argsOnly = true)
+   @ModifyVariable(method = "updateVelocity", at = @At("HEAD"), argsOnly = true)
    private float modifyFriction(float friction) {
       if ((Object) this == Naven.getInstance().mc.player) {
          EventStrafe2 event = new EventStrafe2(
-                 Naven.getInstance().mc.player.getYRot(),
+                 Naven.getInstance().mc.player.getYaw(),
                  friction,
-                 Naven.getInstance().mc.player.input.forwardImpulse,
-                 Naven.getInstance().mc.player.input.leftImpulse,
-                 Naven.getInstance().mc.player.onGround()
+                 Naven.getInstance().mc.player.input.movementForward,
+                 Naven.getInstance().mc.player.input.movementSideways,
+                 Naven.getInstance().mc.player.isOnGround()
          );
          Naven.getInstance().getEventManager().call(event);
          return event.getFriction();
@@ -120,10 +120,10 @@ public abstract class MixinEntity{
    }
 
    @ModifyArg(
-           method = {"moveRelative"},
+           method = {"updateVelocity"},
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/world/entity/Entity;getInputVector(Lnet/minecraft/world/phys/Vec3;FF)Lnet/minecraft/world/phys/Vec3;",
+                   target = "Lnet/minecraft/entity/Entity;movementInputToVelocity(Lnet/minecraft/util/math/Vec3d;FF)Lnet/minecraft/util/math/Vec3d;",
                    ordinal = 0
            ),
            index = 2
@@ -135,25 +135,25 @@ public abstract class MixinEntity{
    }
 
    @Inject(
-           method = {"makeStuckInBlock"},
+           method = {"slowMovement"},
            at = {@At("RETURN")}
    )
-   private void makeStuckInBlock(BlockState pState, Vec3 pMotionMultiplier, CallbackInfo ci) {
+   private void makeStuckInBlock(BlockState pState, Vec3d pMotionMultiplier, CallbackInfo ci) {
       Entity thisEntity = (Entity)(Object)this;
-      if (Minecraft.getInstance().player == thisEntity) {
+      if (MinecraftClient.getInstance().player == thisEntity) {
          EventStuckInBlock event = new EventStuckInBlock(pState, pMotionMultiplier);
          Naven.getInstance().getEventManager().call(event);
          if (event.isCancelled()) {
-            this.stuckSpeedMultiplier = Vec3.ZERO;
+            this.movementMultiplier = Vec3d.ZERO;
             return;
          }
 
-         this.stuckSpeedMultiplier = event.getStuckSpeedMultiplier();
+         this.movementMultiplier = event.getStuckSpeedMultiplier();
       }
    }
 
    @Inject(
-           method = {"push(Lnet/minecraft/world/entity/Entity;)V"},
+           method = {"pushAwayFrom(Lnet/minecraft/entity/Entity;)V"},
            at = {@At("HEAD")},
            cancellable = true
    )
@@ -164,7 +164,7 @@ public abstract class MixinEntity{
          return;
       }
 
-      if (!(self instanceof Player player)) return;
+      if (!(self instanceof PlayerEntity player)) return;
       NoPush noPush = (NoPush) Naven.getInstance().getModuleManager().getModule(NoPush.class);
       if (noPush == null || !noPush.isEnabled()) return;
       if (shouldCancelPush(entity, noPush)) {
@@ -175,22 +175,22 @@ public abstract class MixinEntity{
       }
    }
    private boolean shouldCancelPush(Entity pusher, NoPush module) {
-      if (pusher instanceof Player) {
+      if (pusher instanceof PlayerEntity) {
          return module.players.getCurrentValue();
-      } else if (pusher instanceof Mob) {
+      } else if (pusher instanceof MobEntity) {
          return module.mobs.getCurrentValue();
       } else if (pusher instanceof ItemEntity) {
          return module.items.getCurrentValue();
-      } else if (pusher instanceof AbstractMinecart || pusher instanceof Boat) {
+      } else if (pusher instanceof AbstractMinecartEntity || pusher instanceof BoatEntity) {
          return module.vehicles.getCurrentValue();
-      } else if (pusher instanceof Projectile) {
+      } else if (pusher instanceof ProjectileEntity) {
          return module.projectiles.getCurrentValue();
       }
       return false;
    }
 
    private boolean isLocalIrcCollision(Entity self, Entity other) {
-      Minecraft mc = Minecraft.getInstance();
+      MinecraftClient mc = MinecraftClient.getInstance();
       if (mc == null || mc.player == null || self == null || other == null) {
          return false;
       }

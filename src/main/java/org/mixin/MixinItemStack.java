@@ -9,25 +9,25 @@ import awa.qwq.ovo.Naven.viaversionfix.items.spear.SpearLogic;
 import awa.qwq.ovo.Naven.viaversionfix.items.spear.SpearMaterial;
 import com.google.common.collect.Multimap;
 import java.util.List;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
-import net.minecraft.stats.Stats;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
-import net.minecraft.world.entity.ai.attributes.Attribute;
-import net.minecraft.world.entity.ai.attributes.AttributeModifier;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Rarity;
-import net.minecraft.world.item.TooltipFlag;
-import net.minecraft.world.item.UseAnim;
-import net.minecraft.world.item.context.UseOnContext;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.block.BlockState;
+import net.minecraft.client.item.TooltipContext;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.attribute.EntityAttribute;
+import net.minecraft.entity.attribute.EntityAttributeModifier;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.ItemUsageContext;
+import net.minecraft.stat.Stats;
+import net.minecraft.text.Text;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.Hand;
+import net.minecraft.util.Rarity;
+import net.minecraft.util.TypedActionResult;
+import net.minecraft.util.UseAction;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -36,38 +36,38 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ItemStack.class)
 public class MixinItemStack {
-   @Inject(method = "getTooltipLines", at = @At("RETURN"))
-   private void localizeMappedMaceTooltip(Player player, TooltipFlag tooltipFlag, CallbackInfoReturnable<List<Component>> cir) {
+   @Inject(method = "getTooltip", at = @At("RETURN"))
+   private void localizeMappedMaceTooltip(PlayerEntity player, TooltipContext tooltipFlag, CallbackInfoReturnable<List<Text>> cir) {
       if (!ViaVersionFix.isHighVersionItemFixEnabled()
          || (!InventoryUtils.isServerMace((ItemStack)(Object)this) && !InventoryUtils.isServerSpear((ItemStack)(Object)this))) {
          return;
       }
 
-      List<Component> tooltip = cir.getReturnValue();
+      List<Text> tooltip = cir.getReturnValue();
       for (int i = 0; i < tooltip.size(); i++) {
-         Component line = tooltip.get(i);
+         Text line = tooltip.get(i);
          String localized = localizeHighVersionEnchantments(line.getString());
          if (!localized.equals(line.getString())) {
-            tooltip.set(i, Component.literal(localized).withStyle(line.getStyle()));
+            tooltip.set(i, Text.literal(localized).fillStyle(line.getStyle()));
          }
       }
    }
 
-   @Inject(method = "getHoverName", at = @At("HEAD"), cancellable = true)
-   private void getMappedMaceHoverName(CallbackInfoReturnable<Component> cir) {
+   @Inject(method = "getName", at = @At("HEAD"), cancellable = true)
+   private void getMappedMaceHoverName(CallbackInfoReturnable<Text> cir) {
       if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace((ItemStack)(Object)this)) {
-         cir.setReturnValue(Component.translatable("item.naven-modern.mace"));
+         cir.setReturnValue(Text.translatable("item.naven-modern.mace"));
       } else if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerWindCharge((ItemStack)(Object)this)) {
-         cir.setReturnValue(Component.translatable("item.naven-modern.wind_charge"));
+         cir.setReturnValue(Text.translatable("item.naven-modern.wind_charge"));
       } else if (ViaVersionFix.isHighVersionItemFixEnabled()) {
          SpearMaterial material = InventoryUtils.getServerSpearMaterial((ItemStack)(Object)this);
          if (material != null) {
-            cir.setReturnValue(Component.translatable(material.translationKey()));
+            cir.setReturnValue(Text.translatable(material.translationKey()));
          }
       }
    }
 
-   @Inject(method = "hasCustomHoverName", at = @At("HEAD"), cancellable = true)
+   @Inject(method = "hasCustomName", at = @At("HEAD"), cancellable = true)
    private void mappedMaceHasNoCustomHoverName(CallbackInfoReturnable<Boolean> cir) {
       if (ViaVersionFix.isHighVersionItemFixEnabled()
          && (InventoryUtils.isServerMace((ItemStack)(Object)this)
@@ -91,7 +91,7 @@ public class MixinItemStack {
       }
    }
 
-   @Inject(method = "is(Lnet/minecraft/world/item/Item;)Z", at = @At("HEAD"), cancellable = true)
+   @Inject(method = "isOf(Lnet/minecraft/item/Item;)Z", at = @At("HEAD"), cancellable = true)
    private void recognizeMappedMace(Item item, CallbackInfoReturnable<Boolean> cir) {
       if (!ViaVersionFix.isHighVersionItemFixEnabled()) {
          return;
@@ -124,7 +124,7 @@ public class MixinItemStack {
    }
 
    @Inject(method = "use", at = @At("HEAD"), cancellable = true)
-   private void useMappedWindCharge(Level level, Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResultHolder<ItemStack>> cir) {
+   private void useMappedWindCharge(World level, PlayerEntity player, Hand hand, CallbackInfoReturnable<TypedActionResult<ItemStack>> cir) {
       if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerWindCharge((ItemStack)(Object)this)) {
          cir.setReturnValue(ModItems.WIND_CHARGE.use(level, player, hand));
       } else if (ViaVersionFix.isHighVersionItemFixEnabled()) {
@@ -135,102 +135,102 @@ public class MixinItemStack {
       }
    }
 
-   @Inject(method = "useOn", at = @At("HEAD"), cancellable = true)
-   private void useMappedMaceOn(UseOnContext context, CallbackInfoReturnable<InteractionResult> cir) {
+   @Inject(method = "useOnBlock", at = @At("HEAD"), cancellable = true)
+   private void useMappedMaceOn(ItemUsageContext context, CallbackInfoReturnable<ActionResult> cir) {
       if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace((ItemStack)(Object)this)) {
-         cir.setReturnValue(ModItems.MACE.useOn(context));
+         cir.setReturnValue(ModItems.MACE.useOnBlock(context));
       }
    }
 
-   @Inject(method = "getDestroySpeed", at = @At("HEAD"), cancellable = true)
+   @Inject(method = "getMiningSpeedMultiplier", at = @At("HEAD"), cancellable = true)
    private void getMappedMaceDestroySpeed(BlockState state, CallbackInfoReturnable<Float> cir) {
       if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace((ItemStack)(Object)this)) {
-         cir.setReturnValue(ModItems.MACE.getDestroySpeed((ItemStack)(Object)this, state));
+         cir.setReturnValue(ModItems.MACE.getMiningSpeedMultiplier((ItemStack)(Object)this, state));
       }
    }
 
-   @Inject(method = "mineBlock", at = @At("HEAD"), cancellable = true)
-   private void mineBlockWithMappedMace(Level level, BlockState state, BlockPos pos, Player player, CallbackInfo ci) {
+   @Inject(method = "postMine", at = @At("HEAD"), cancellable = true)
+   private void mineBlockWithMappedMace(World level, BlockState state, BlockPos pos, PlayerEntity player, CallbackInfo ci) {
       ItemStack stack = (ItemStack)(Object)this;
       if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace(stack)) {
-         if (ModItems.MACE.mineBlock(stack, level, state, pos, player)) {
-            player.awardStat(Stats.ITEM_USED.get(ModItems.MACE));
+         if (ModItems.MACE.postMine(stack, level, state, pos, player)) {
+            player.incrementStat(Stats.USED.getOrCreateStat(ModItems.MACE));
          }
 
          ci.cancel();
       }
    }
 
-   @Inject(method = "isCorrectToolForDrops", at = @At("HEAD"), cancellable = true)
+   @Inject(method = "isSuitableFor", at = @At("HEAD"), cancellable = true)
    private void isMappedMaceCorrectTool(BlockState state, CallbackInfoReturnable<Boolean> cir) {
       if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace((ItemStack)(Object)this)) {
-         cir.setReturnValue(ModItems.MACE.isCorrectToolForDrops(state));
+         cir.setReturnValue(ModItems.MACE.isSuitableFor(state));
       }
    }
 
    @Inject(method = "getAttributeModifiers", at = @At("HEAD"), cancellable = true)
-   private void getMappedMaceAttributes(EquipmentSlot slot, CallbackInfoReturnable<Multimap<Attribute, AttributeModifier>> cir) {
+   private void getMappedMaceAttributes(EquipmentSlot slot, CallbackInfoReturnable<Multimap<EntityAttribute, EntityAttributeModifier>> cir) {
       if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace((ItemStack)(Object)this)) {
-         cir.setReturnValue(ModItems.MACE.getDefaultAttributeModifiers(slot));
+         cir.setReturnValue(ModItems.MACE.getAttributeModifiers(slot));
       } else if (ViaVersionFix.isHighVersionItemFixEnabled()) {
          SpearItem spear = getMappedSpear((ItemStack)(Object)this);
          if (spear != null) {
-            cir.setReturnValue(spear.getDefaultAttributeModifiers(slot));
+            cir.setReturnValue(spear.getAttributeModifiers(slot));
          }
       }
    }
 
-   @Inject(method = "hurtEnemy", at = @At("RETURN"))
-   private void hurtEnemyWithMappedMace(LivingEntity target, Player attacker, CallbackInfo ci) {
+   @Inject(method = "postHit", at = @At("RETURN"))
+   private void hurtEnemyWithMappedMace(LivingEntity target, PlayerEntity attacker, CallbackInfo ci) {
       ItemStack stack = (ItemStack)(Object)this;
       if (ViaVersionFix.isHighVersionItemFixEnabled() && InventoryUtils.isServerMace(stack)) {
-         MaceLogic.handlePostHit(attacker.level(), target, attacker, stack);
+         MaceLogic.handlePostHit(attacker.getWorld(), target, attacker, stack);
       } else if (ViaVersionFix.isHighVersionItemFixEnabled()) {
          SpearMaterial material = InventoryUtils.getServerSpearMaterial(stack);
          if (material != null) {
-            SpearLogic.playHitSound(attacker.level(), attacker, material);
+            SpearLogic.playHitSound(attacker.getWorld(), attacker, material);
          }
       }
    }
 
-   @Inject(method = "getUseAnimation", at = @At("HEAD"), cancellable = true)
-   private void getMappedSpearUseAnimation(CallbackInfoReturnable<UseAnim> cir) {
+   @Inject(method = "getUseAction", at = @At("HEAD"), cancellable = true)
+   private void getMappedSpearUseAnimation(CallbackInfoReturnable<UseAction> cir) {
       SpearItem spear = getMappedSpear((ItemStack)(Object)this);
       if (spear != null) {
-         cir.setReturnValue(spear.getUseAnimation((ItemStack)(Object)this));
+         cir.setReturnValue(spear.getUseAction((ItemStack)(Object)this));
       }
    }
 
-   @Inject(method = "getUseDuration", at = @At("HEAD"), cancellable = true)
+   @Inject(method = "getMaxUseTime", at = @At("HEAD"), cancellable = true)
    private void getMappedSpearUseDuration(CallbackInfoReturnable<Integer> cir) {
       SpearItem spear = getMappedSpear((ItemStack)(Object)this);
       if (spear != null) {
-         cir.setReturnValue(spear.getUseDuration((ItemStack)(Object)this));
+         cir.setReturnValue(spear.getMaxUseTime((ItemStack)(Object)this));
       }
    }
 
-   @Inject(method = "onUseTick", at = @At("HEAD"), cancellable = true)
-   private void onMappedSpearUseTick(Level level, LivingEntity entity, int remainingUseDuration, CallbackInfo ci) {
+   @Inject(method = "usageTick", at = @At("HEAD"), cancellable = true)
+   private void onMappedSpearUseTick(World level, LivingEntity entity, int remainingUseDuration, CallbackInfo ci) {
       SpearItem spear = getMappedSpear((ItemStack)(Object)this);
       if (spear != null) {
-         spear.onUseTick(level, entity, (ItemStack)(Object)this, remainingUseDuration);
+         spear.usageTick(level, entity, (ItemStack)(Object)this, remainingUseDuration);
          ci.cancel();
       }
    }
 
-   @Inject(method = "releaseUsing", at = @At("HEAD"), cancellable = true)
-   private void releaseMappedSpearUsing(Level level, LivingEntity entity, int timeLeft, CallbackInfo ci) {
+   @Inject(method = "onStoppedUsing", at = @At("HEAD"), cancellable = true)
+   private void releaseMappedSpearUsing(World level, LivingEntity entity, int timeLeft, CallbackInfo ci) {
       SpearItem spear = getMappedSpear((ItemStack)(Object)this);
       if (spear != null) {
-         spear.releaseUsing((ItemStack)(Object)this, level, entity, timeLeft);
+         spear.onStoppedUsing((ItemStack)(Object)this, level, entity, timeLeft);
          ci.cancel();
       }
    }
 
    private static String localizeHighVersionEnchantments(String text) {
-      return text.replace("Wind Burst", Component.translatable("enchantment.minecraft.wind_burst").getString())
-         .replace("Breach", Component.translatable("enchantment.minecraft.breach").getString())
-         .replace("Density", Component.translatable("enchantment.minecraft.density").getString());
+      return text.replace("Wind Burst", Text.translatable("enchantment.minecraft.wind_burst").getString())
+         .replace("Breach", Text.translatable("enchantment.minecraft.breach").getString())
+         .replace("Density", Text.translatable("enchantment.minecraft.density").getString());
    }
 
    private static SpearItem getMappedSpear(ItemStack stack) {

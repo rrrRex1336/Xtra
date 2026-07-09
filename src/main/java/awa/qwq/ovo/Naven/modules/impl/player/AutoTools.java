@@ -12,18 +12,20 @@ import awa.qwq.ovo.Naven.modules.impl.world.BedAura;
 import awa.qwq.ovo.Naven.utils.InventoryUtils;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.*;
-import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.DropExperienceBlock;
-import net.minecraft.world.level.block.RedStoneOreBlock;
-import net.minecraft.world.level.block.WebBlock;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult.Type;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.CobwebBlock;
+import net.minecraft.block.ExperienceDroppingBlock;
+import net.minecraft.block.RedstoneOreBlock;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.enchantment.Enchantments;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.SwordItem;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult.Type;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.item.*;
 
 @ModuleInfo(
         name = "AutoTools",
@@ -52,8 +54,8 @@ public class AutoTools extends Module {
    @EventTarget
    public void onUpdateHeldItem(EventUpdateHeldItem e) {
       if (!shouldWork()) return;
-      if (this.switchBack.getCurrentValue() && this.silent.getCurrentValue() && e.getHand() == InteractionHand.MAIN_HAND && this.originSlot != -1) {
-         e.setItem(mc.player.getInventory().getItem(this.originSlot));
+      if (this.switchBack.getCurrentValue() && this.silent.getCurrentValue() && e.getHand() == Hand.MAIN_HAND && this.originSlot != -1) {
+         e.setItem(mc.player.getInventory().getStack(this.originSlot));
       }
    }
 
@@ -61,44 +63,44 @@ public class AutoTools extends Module {
    public void onMotion(EventMotion e) {
       if (!shouldWork()) return;
       if (e.getType() == EventType.PRE) {
-         if (mc.gameMode.isDestroying()) {
+         if (mc.interactionManager.isBreakingBlock()) {
             if (this.checkSword.getCurrentValue()) {
-               ItemStack itemStack = mc.player.getMainHandItem();
+               ItemStack itemStack = mc.player.getMainHandStack();
                if (itemStack.getItem() instanceof SwordItem) {
                   return;
                }
             }
 
-            if (mc.hitResult.getType() == Type.BLOCK) {
-               BlockHitResult hitResult = (BlockHitResult) mc.hitResult;
+            if (mc.crosshairTarget.getType() == Type.BLOCK) {
+               BlockHitResult hitResult = (BlockHitResult) mc.crosshairTarget;
                int bestTool = this.getBestTool(hitResult.getBlockPos());
-               if (bestTool != -1 && bestTool != mc.player.getInventory().selected) {
-                  this.originSlot = mc.player.getInventory().selected;
-                  mc.player.getInventory().selected = bestTool;
+               if (bestTool != -1 && bestTool != mc.player.getInventory().selectedSlot) {
+                  this.originSlot = mc.player.getInventory().selectedSlot;
+                  mc.player.getInventory().selectedSlot = bestTool;
                }
             }
          }
-      } else if (!mc.gameMode.isDestroying() && this.switchBack.getCurrentValue() && this.originSlot != -1) {
-         mc.player.getInventory().selected = this.originSlot;
+      } else if (!mc.interactionManager.isBreakingBlock() && this.switchBack.getCurrentValue() && this.originSlot != -1) {
+         mc.player.getInventory().selectedSlot = this.originSlot;
          this.originSlot = -1;
       }
    }
 
    private int getBestTool(BlockPos pos) {
-      BlockState blockState = mc.level.getBlockState(pos);
+      BlockState blockState = mc.world.getBlockState(pos);
       Block block = blockState.getBlock();
       int slot = 0;
       float dmg = 1.0F;
 
       for (int index = 0; index < 9; index++) {
-         ItemStack itemStack = mc.player.getInventory().getItem(index);
+         ItemStack itemStack = mc.player.getInventory().getStack(index);
          if (!InventoryUtils.isGodItem(itemStack)
                  && !itemStack.isEmpty()
                  && !blockState.isAir()
-                 && (!(itemStack.getItem() instanceof SwordItem) || block instanceof WebBlock)) {
-            float strVsBlock = itemStack.getItem().getDestroySpeed(itemStack, blockState);
-            if (strVsBlock > 1.0F && !(block instanceof DropExperienceBlock) && !(block instanceof RedStoneOreBlock)) {
-               int i = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.BLOCK_EFFICIENCY, itemStack);
+                 && (!(itemStack.getItem() instanceof SwordItem) || block instanceof CobwebBlock)) {
+            float strVsBlock = itemStack.getItem().getMiningSpeedMultiplier(itemStack, blockState);
+            if (strVsBlock > 1.0F && !(block instanceof ExperienceDroppingBlock) && !(block instanceof RedstoneOreBlock)) {
+               int i = EnchantmentHelper.getLevel(Enchantments.EFFICIENCY, itemStack);
                if (i > 0) {
                   strVsBlock += (float) (i * i + 1);
                }

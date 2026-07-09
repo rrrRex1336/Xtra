@@ -2,13 +2,13 @@ package awa.qwq.ovo.Naven.events.impl;
 
 import awa.qwq.ovo.Naven.events.api.events.callables.EventCancellable;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
-import net.minecraft.network.chat.Component;
+import net.minecraft.text.Text;
 
 public class EventSetTitle extends EventCancellable {
    private EventType type;
-   private Component title;
+   private Text title;
 
-   public EventSetTitle(EventType type, Component title) {
+   public EventSetTitle(EventType type, Text title) {
       this.type = type;
       this.title = title;
    }
@@ -17,7 +17,7 @@ public class EventSetTitle extends EventCancellable {
       return this.type;
    }
 
-   public Component getTitle() {
+   public Text getTitle() {
       return this.title;
    }
 
@@ -25,7 +25,7 @@ public class EventSetTitle extends EventCancellable {
       this.type = type;
    }
 
-   public void setTitle(Component title) {
+   public void setTitle(Text title) {
       this.title = title;
    }
 }

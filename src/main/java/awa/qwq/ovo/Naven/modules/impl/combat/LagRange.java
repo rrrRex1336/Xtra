@@ -14,20 +14,20 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import lombok.Getter;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
-import net.minecraft.network.protocol.login.ServerboundHelloPacket;
-import net.minecraft.network.protocol.login.ServerboundKeyPacket;
-import net.minecraft.network.protocol.status.ServerboundPingRequestPacket;
-import net.minecraft.network.protocol.status.ServerboundStatusRequestPacket;
-import net.minecraft.util.Mth;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.handshake.HandshakeC2SPacket;
+import net.minecraft.network.packet.c2s.login.LoginHelloC2SPacket;
+import net.minecraft.network.packet.c2s.login.LoginKeyC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.network.packet.c2s.query.QueryPingC2SPacket;
+import net.minecraft.network.packet.c2s.query.QueryRequestC2SPacket;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 import org.lwjgl.opengl.GL11;
 
 import java.util.HashSet;
@@ -38,11 +38,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class LagRange extends Module {
     public static final Set<Class<?>> whitelist = new HashSet<>() {
         {
-            this.add(ClientIntentionPacket.class);
-            this.add(ServerboundStatusRequestPacket.class);
-            this.add(ServerboundPingRequestPacket.class);
-            this.add(ServerboundHelloPacket.class);
-            this.add(ServerboundKeyPacket.class);
+            this.add(HandshakeC2SPacket.class);
+            this.add(QueryRequestC2SPacket.class);
+            this.add(QueryPingC2SPacket.class);
+            this.add(LoginHelloC2SPacket.class);
+            this.add(LoginKeyC2SPacket.class);
         }
     };
     private final java.util.Queue<Packet<?>> packets = new ConcurrentLinkedQueue<>();
@@ -74,7 +74,7 @@ public class LagRange extends Module {
     @Getter
     private int shouldReleaseTicks = 0;
     private int releasedTicks = 0;
-    private Vec3 targetPosition = null;
+    private Vec3d targetPosition = null;
     private boolean hasPosition = false;
     private LivingEntity currentAttackTarget = null;
     @Getter
@@ -87,15 +87,15 @@ public class LagRange extends Module {
     private int targetHurtTime = 0;
     @Getter
     private int noTargetTimer = 0;
-    private Vec3 lastTargetPosition = null;
+    private Vec3d lastTargetPosition = null;
     private long lastUpdateTime = 0;
 
-    private void updateTargetPosition(ServerboundMovePlayerPacket packet) {
-        if (packet.hasPosition()) {
+    private void updateTargetPosition(PlayerMoveC2SPacket packet) {
+        if (packet.changesPosition()) {
             if (this.targetPosition != null) {
                 this.lastTargetPosition = this.targetPosition;
             }
-            this.targetPosition = new Vec3(
+            this.targetPosition = new Vec3d(
                     packet.getX(0),
                     packet.getY(0),
                     packet.getZ(0)
@@ -105,7 +105,7 @@ public class LagRange extends Module {
         }
     }
 
-    private Vec3 getInterpolatedPosition(float partialTicks) {
+    private Vec3d getInterpolatedPosition(float partialTicks) {
         if (targetPosition == null) return null;
         if (lastTargetPosition == null) return targetPosition;
 
@@ -118,14 +118,14 @@ public class LagRange extends Module {
     }
 
     private long getBlinkTicks() {
-        return this.packets.stream().filter(packet -> packet instanceof ServerboundMovePlayerPacket).count();
+        return this.packets.stream().filter(packet -> packet instanceof PlayerMoveC2SPacket).count();
     }
 
     private void releaseTick() {
         while (!this.packets.isEmpty()) {
             Packet<?> poll = this.packets.poll();
             NetworkUtils.sendPacketNoEvent(poll);
-            if (poll instanceof ServerboundMovePlayerPacket movePacket) {
+            if (poll instanceof PlayerMoveC2SPacket movePacket) {
                 this.releasedTicks++;
                 this.updateTargetPosition(movePacket);
                 break;
@@ -153,7 +153,7 @@ public class LagRange extends Module {
         while (!this.packets.isEmpty() && released < toRelease && released < 10) {
             Packet<?> poll = this.packets.poll();
             NetworkUtils.sendPacketNoEvent(poll);
-            if (poll instanceof ServerboundMovePlayerPacket movePacket) {
+            if (poll instanceof PlayerMoveC2SPacket movePacket) {
                 released++;
                 this.updateTargetPosition(movePacket);
             }
@@ -185,20 +185,20 @@ public class LagRange extends Module {
     @EventTarget
     public void onRenderWorld(EventRender e) {
         if (!this.hasPosition || this.targetPosition == null) return;
-        Vec3 renderPos = getInterpolatedPosition(e.getRenderPartialTicks());
+        Vec3d renderPos = getInterpolatedPosition(e.getRenderPartialTicks());
         if (renderPos == null) renderPos = this.targetPosition;
 
-        PoseStack stack = e.getPMatrixStack();
-        stack.pushPose();
+        MatrixStack stack = e.getPMatrixStack();
+        stack.push();
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
         GL11.glDisable(GL11.GL_DEPTH_TEST);
         GL11.glDepthMask(false);
         GL11.glEnable(GL11.GL_LINE_SMOOTH);
-        RenderSystem.setShader(GameRenderer::getPositionShader);
+        RenderSystem.setShader(GameRenderer::getPositionProgram);
         RenderUtils.applyRegionalRenderOffset(stack);
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 0.8F);
-        AABB box = new AABB(
+        Box box = new Box(
                 renderPos.x - 0.3, renderPos.y, renderPos.z - 0.3,
                 renderPos.x + 0.3, renderPos.y + 1.8, renderPos.z + 0.3
         );
@@ -209,7 +209,7 @@ public class LagRange extends Module {
         GL11.glEnable(GL11.GL_DEPTH_TEST);
         GL11.glDepthMask(true);
         GL11.glDisable(GL11.GL_LINE_SMOOTH);
-        stack.popPose();
+        stack.pop();
     }
 
     @Override
@@ -276,7 +276,7 @@ public class LagRange extends Module {
                     currentAttackTarget = null;
                 }
 
-                targetLagTicks = Mth.clamp(targetLagTicks, 1, (int) maxTicks.getCurrentValue());
+                targetLagTicks = MathHelper.clamp(targetLagTicks, 1, (int) maxTicks.getCurrentValue());
                 if (currentLagTicks < targetLagTicks) {
                     currentLagTicks++;
                 } else if (currentLagTicks > targetLagTicks) {
@@ -289,10 +289,10 @@ public class LagRange extends Module {
                 }
 
                 this.setSuffix("Lag: " + currentLagTicks + "/" + maxTicks.getCurrentValue());
-                this.progress.target = Mth.clamp((float) currentLagTicks / this.maxTicks.getCurrentValue() * 100.0F, 0.0F, 100.0F);
+                this.progress.target = MathHelper.clamp((float) currentLagTicks / this.maxTicks.getCurrentValue() * 100.0F, 0.0F, 100.0F);
             } else {
                 this.setSuffix("Lag Ticks: " + this.getBlinkTicks());
-                this.progress.target = Mth.clamp((float) this.getBlinkTicks() / this.maxTicks.getCurrentValue() * 100.0F, 0.0F, 100.0F);
+                this.progress.target = MathHelper.clamp((float) this.getBlinkTicks() / this.maxTicks.getCurrentValue() * 100.0F, 0.0F, 100.0F);
                 this.releasedTicks = 0;
                 while ((float)this.releasedTicks < 10.0F && (float)this.getBlinkTicks() >= this.maxTicks.getCurrentValue() && !this.packets.isEmpty()) {
                     this.releaseTick();
@@ -324,7 +324,7 @@ public class LagRange extends Module {
             }
 
             e.setCancelled(true);
-            if (e.getPacket() instanceof ServerboundMovePlayerPacket movePacket) {
+            if (e.getPacket() instanceof PlayerMoveC2SPacket movePacket) {
                 if (this.packets.isEmpty()) {
                     this.updateTargetPosition(movePacket);
                 }

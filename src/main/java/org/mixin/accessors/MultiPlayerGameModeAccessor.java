@@ -1,16 +1,16 @@
 package org.mixin.accessors;
 
-import net.minecraft.client.multiplayer.MultiPlayerGameMode;
-import net.minecraft.world.level.GameType;
+import net.minecraft.client.network.ClientPlayerInteractionManager;
+import net.minecraft.world.GameMode;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
-@Mixin({MultiPlayerGameMode.class})
+@Mixin({ClientPlayerInteractionManager.class})
 public interface MultiPlayerGameModeAccessor {
-   @Invoker("ensureHasSentCarriedItem")
+   @Invoker("syncSelectedSlot")
    void invokeEnsureHasSentCarriedItem();
 
-   @Accessor("localPlayerMode")
-   GameType getLocalPlayerMode();
+   @Accessor("gameMode")
+   GameMode getLocalPlayerMode();
 }

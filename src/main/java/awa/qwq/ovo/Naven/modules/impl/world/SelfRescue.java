@@ -15,20 +15,19 @@ import awa.qwq.ovo.Naven.utils.TimeHelper;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.client.Minecraft;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.AirBlock;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.FireBlock;
-import net.minecraft.world.level.block.LavaCauldronBlock;
-import net.minecraft.world.phys.Vec3;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import net.minecraft.block.AirBlock;
+import net.minecraft.block.Block;
+import net.minecraft.block.FireBlock;
+import net.minecraft.block.LavaCauldronBlock;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.item.Items;
+import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(
         name = "SelfRescue",
@@ -36,7 +35,7 @@ import java.util.Random;
         category = Category.WORLD
 )
 public class SelfRescue extends Module {
-    private final Minecraft mc = Minecraft.getInstance();
+    private final MinecraftClient mc = MinecraftClient.getInstance();
     public FloatValue fallDistValue = ValueBuilder.create(this, "Fall Distance")
             .setDefaultFloatValue(3.0F)
             .setFloatStep(1.0F)
@@ -92,11 +91,11 @@ public class SelfRescue extends Module {
     }
 
     private static class PearlTrajectory {
-        public Vec3 hitPosition;
+        public Vec3d hitPosition;
         public BlockPos hitBlockPos;
         public int ticksToHit;
         public boolean fellIntoVoid;
-        public List<Vec3> points = new ArrayList<>();
+        public List<Vec3d> points = new ArrayList<>();
 
         public PearlTrajectory() {}
     }
@@ -127,20 +126,20 @@ public class SelfRescue extends Module {
             motionZ *= 0.99F;
 
             BlockPos blockPos = new BlockPos((int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z));
-            if (!mc.level.getBlockState(blockPos).isAir()) {
-                trajectory.hitPosition = new Vec3(x, y, z);
+            if (!mc.world.getBlockState(blockPos).isAir()) {
+                trajectory.hitPosition = new Vec3d(x, y, z);
                 trajectory.hitBlockPos = blockPos;
                 trajectory.ticksToHit = tick;
                 break;
             }
 
-            if (y < mc.level.getMinBuildHeight()) {
+            if (y < mc.world.getBottomY()) {
                 trajectory.fellIntoVoid = true;
                 break;
             }
 
             if (debugValue.getCurrentValue() && tick % 5 == 0) {
-                trajectory.points.add(new Vec3(x, y, z));
+                trajectory.points.add(new Vec3d(x, y, z));
             }
         }
 
@@ -148,7 +147,7 @@ public class SelfRescue extends Module {
     }
 
     private double assessRotation(float yaw, float pitch) {
-        Vec3 playerPos = mc.player.position();
+        Vec3d playerPos = mc.player.getPos();
 
         PearlTrajectory trajectory = simulatePearlTrajectory(
                 playerPos.x, playerPos.y, playerPos.z, yaw, pitch);
@@ -187,14 +186,14 @@ public class SelfRescue extends Module {
             for (int dz = -1; dz <= 1; dz++) {
                 if (dx == 0 && dz == 0) continue;
 
-                BlockPos checkPos = hitPos.offset(dx, 0, dz);
+                BlockPos checkPos = hitPos.add(dx, 0, dz);
                 if (isSafeBlock(checkPos)) {
                     safety += 0.05;
                 }
             }
         }
 
-        if (isSolidBlock(hitPos.below())) {
+        if (isSolidBlock(hitPos.down())) {
             safety += 0.2;
         }
 
@@ -206,11 +205,11 @@ public class SelfRescue extends Module {
     }
 
     private boolean isSolidBlock(BlockPos pos) {
-        return mc.level.getBlockState(pos).isSolid();
+        return mc.world.getBlockState(pos).isSolid();
     }
 
     private boolean isDangerousBlock(BlockPos pos) {
-        Block block = mc.level.getBlockState(pos).getBlock();
+        Block block = mc.world.getBlockState(pos).getBlock();
         return block instanceof LavaCauldronBlock || block instanceof FireBlock;
     }
 
@@ -231,7 +230,7 @@ public class SelfRescue extends Module {
             }
         }
 
-        if (mc.player.onGround()) {
+        if (mc.player.isOnGround()) {
             if (scaffoldEnabled) {
                 if (scaffold != null) {
                     scaffold.setEnabled(false);
@@ -255,12 +254,12 @@ public class SelfRescue extends Module {
             return;
         }
 
-        if (mc.player.getDeltaMovement().y < 0.1 &&
+        if (mc.player.getVelocity().y < 0.1 &&
                 !isBlockUnder() &&
                 mc.player.fallDistance > fallDistValue.getCurrentValue()) {
             Module stuck = Naven.getInstance().getModuleManager().getModule(Stuck.class);
 
-            if (mc.player.getDeltaMovement().y >= -1 &&
+            if (mc.player.getVelocity().y >= -1 &&
                     scaffoldValue.getCurrentValue() &&
                     scaffold != null && !scaffold.isEnabled() &&
                     stuck != null && !stuck.isEnabled()) {
@@ -270,10 +269,10 @@ public class SelfRescue extends Module {
                     ChatUtils.addChatMessage("Enabled scaffold for slow fall");
                 }
             }
-            else if (mc.player.getDeltaMovement().y < -1 &&
+            else if (mc.player.getVelocity().y < -1 &&
                     autoPearlValue.getCurrentValue() &&
                     attempted <= this.attemptTime.getCurrentValue() &&
-                    !mc.player.onGround()) {
+                    !mc.player.isOnGround()) {
                 attempted += 1;
                 int pearlSlot = findEnderPearlSlot();
                 if (pearlSlot == -1) {
@@ -282,7 +281,7 @@ public class SelfRescue extends Module {
                     }
                     return;
                 }
-                mc.player.getInventory().selected = pearlSlot < 9 ? pearlSlot : 8;
+                mc.player.getInventory().selectedSlot = pearlSlot < 9 ? pearlSlot : 8;
                 if (scaffoldEnabled && scaffold != null && scaffold.isEnabled()) {
                     scaffold.setEnabled(false);
                     scaffoldEnabled = false;
@@ -326,12 +325,12 @@ public class SelfRescue extends Module {
 
     private int findEnderPearlSlot() {
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getItem(i).getItem() == Items.ENDER_PEARL) {
+            if (mc.player.getInventory().getStack(i).getItem() == Items.ENDER_PEARL) {
                 return i;
             }
         }
         for (int i = 9; i < 36; i++) {
-            if (mc.player.getInventory().getItem(i).getItem() == Items.ENDER_PEARL) {
+            if (mc.player.getInventory().getStack(i).getItem() == Items.ENDER_PEARL) {
                 return i;
             }
         }
@@ -340,15 +339,15 @@ public class SelfRescue extends Module {
     }
 
     private boolean isBlockUnder() {
-        return mc.level.getBlockState(mc.player.blockPosition().below()).isSolid();
+        return mc.world.getBlockState(mc.player.getBlockPos().down()).isSolid();
     }
 
     private boolean isAboveVoid() {
-        BlockPos playerPos = mc.player.blockPosition();
+        BlockPos playerPos = mc.player.getBlockPos();
         int playerY = playerPos.getY();
-        for (int y = playerY - 1; y >= mc.level.getMinBuildHeight(); y--) {
+        for (int y = playerY - 1; y >= mc.world.getBottomY(); y--) {
             BlockPos checkPos = new BlockPos(playerPos.getX(), y, playerPos.getZ());
-            if (!(mc.level.getBlockState(checkPos).getBlock() instanceof AirBlock)) {
+            if (!(mc.world.getBlockState(checkPos).getBlock() instanceof AirBlock)) {
                 return false;
             }
         }
@@ -360,9 +359,9 @@ public class SelfRescue extends Module {
         if (!autoPearlValue.getCurrentValue()) {
             return;
         }
-        mc.player.setYRot(yaw);
-        mc.player.setXRot(pitch);
-        NetworkUtils.sendPacket(new ServerboundUseItemPacket(InteractionHand.MAIN_HAND, 0));
+        mc.player.setYaw(yaw);
+        mc.player.setPitch(pitch);
+        NetworkUtils.sendPacket(new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, 0));
 
         if (debugValue.getCurrentValue()) {
             ChatUtils.addChatMessage("Throwing pearl at yaw: " + yaw + ", pitch: " + pitch);
@@ -386,7 +385,7 @@ public class SelfRescue extends Module {
         public void run() {
             timer.reset();
 
-            solutionYaw = mc.player.getYRot();
+            solutionYaw = mc.player.getYaw();
             solutionPitch = -45.0f;
 
             try {

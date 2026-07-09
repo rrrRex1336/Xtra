@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.events.impl;
 
 import awa.qwq.ovo.Naven.events.api.events.Event;
-import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.packet.Packet;
 
 public class EventServerSetPosition implements Event {
    private Packet<?> packet;

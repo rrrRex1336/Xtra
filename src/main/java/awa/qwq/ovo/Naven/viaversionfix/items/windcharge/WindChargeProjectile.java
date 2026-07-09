@@ -3,98 +3,97 @@ package awa.qwq.ovo.Naven.viaversionfix.items.windcharge;
 import awa.qwq.ovo.Naven.viaversionfix.items.ModEntities;
 import awa.qwq.ovo.Naven.viaversionfix.items.ModItems;
 import awa.qwq.ovo.Naven.viaversionfix.items.ModSounds;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.ParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.projectile.AbstractHurtingProjectile;
-import net.minecraft.world.entity.projectile.ItemSupplier;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.Explosion;
-import net.minecraft.world.level.ExplosionDamageCalculator;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.block.BlockState;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.FlyingItemEntity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.projectile.ExplosiveProjectileEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.particle.ParticleEffect;
+import net.minecraft.particle.ParticleTypes;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.BlockView;
+import net.minecraft.world.RaycastContext;
+import net.minecraft.world.World;
+import net.minecraft.world.explosion.Explosion;
+import net.minecraft.world.explosion.ExplosionBehavior;
 
-public class WindChargeProjectile extends AbstractHurtingProjectile implements ItemSupplier {
+public class WindChargeProjectile extends ExplosiveProjectileEntity implements FlyingItemEntity {
    private static final float EXPLOSION_RADIUS = 1.2F;
    private static final double BLOCK_HIT_OFFSET = 0.25D;
-   private static final ExplosionDamageCalculator WIND_CHARGE_DAMAGE_CALCULATOR = new ExplosionDamageCalculator() {
+   private static final ExplosionBehavior WIND_CHARGE_DAMAGE_CALCULATOR = new ExplosionBehavior() {
       @Override
-      public boolean shouldBlockExplode(Explosion explosion, BlockGetter level, BlockPos pos, BlockState state, float power) {
+      public boolean canDestroyBlock(Explosion explosion, BlockView level, BlockPos pos, BlockState state, float power) {
          return false;
       }
 
       @Override
-      public float getEntityDamageAmount(Explosion explosion, Entity entity) {
+      public float calculateDamage(Explosion explosion, Entity entity) {
          return 0.0F;
       }
    };
 
-   public WindChargeProjectile(EntityType<WindChargeProjectile> type, Level level) {
+   public WindChargeProjectile(EntityType<WindChargeProjectile> type, World level) {
       super(type, level);
-      this.xPower = 0.0D;
-      this.yPower = 0.0D;
-      this.zPower = 0.0D;
+      this.powerX = 0.0D;
+      this.powerY = 0.0D;
+      this.powerZ = 0.0D;
    }
 
-   public WindChargeProjectile(Level level, LivingEntity owner) {
+   public WindChargeProjectile(World level, LivingEntity owner) {
       this(ModEntities.WIND_CHARGE_PROJECTILE, level);
       this.setOwner(owner);
-      this.setPos(owner.getX(), owner.getEyeY() - 0.1D, owner.getZ());
+      this.setPosition(owner.getX(), owner.getEyeY() - 0.1D, owner.getZ());
    }
 
    @Override
-   public boolean canCollideWith(Entity entity) {
-      return !(entity instanceof WindChargeProjectile) && super.canCollideWith(entity);
+   public boolean collidesWith(Entity entity) {
+      return !(entity instanceof WindChargeProjectile) && super.collidesWith(entity);
    }
 
    @Override
-   protected boolean canHitEntity(Entity entity) {
-      return !(entity instanceof WindChargeProjectile) && !entity.is(this.getOwner()) && super.canHitEntity(entity);
+   protected boolean canHit(Entity entity) {
+      return !(entity instanceof WindChargeProjectile) && !entity.isPartOf(this.getOwner()) && super.canHit(entity);
    }
 
    @Override
-   protected void onHitEntity(EntityHitResult result) {
-      super.onHitEntity(result);
-      if (this.level().isClientSide) {
+   protected void onEntityHit(EntityHitResult result) {
+      super.onEntityHit(result);
+      if (this.getWorld().isClient) {
          return;
       }
 
       Entity owner = this.getOwner();
       LivingEntity livingOwner = owner instanceof LivingEntity living ? living : null;
-      result.getEntity().hurt(this.damageSources().mobProjectile(this, livingOwner), 1.0F);
-      this.explode(this.position());
+      result.getEntity().damage(this.getDamageSources().mobProjectile(this, livingOwner), 1.0F);
+      this.explode(this.getPos());
    }
 
    @Override
-   protected void onHitBlock(BlockHitResult result) {
-      super.onHitBlock(result);
-      if (!this.level().isClientSide) {
-         Vec3 offset = Vec3.atLowerCornerOf(result.getDirection().getNormal()).scale(BLOCK_HIT_OFFSET);
-         this.explode(result.getLocation().add(offset));
+   protected void onBlockHit(BlockHitResult result) {
+      super.onBlockHit(result);
+      if (!this.getWorld().isClient) {
+         Vec3d offset = Vec3d.of(result.getSide().getVector()).multiply(BLOCK_HIT_OFFSET);
+         this.explode(result.getPos().add(offset));
       }
    }
 
    @Override
-   protected void onHit(HitResult result) {
-      super.onHit(result);
-      if (!this.level().isClientSide) {
+   protected void onCollision(HitResult result) {
+      super.onCollision(result);
+      if (!this.getWorld().isClient) {
          this.discard();
       }
    }
 
-   private void explode(Vec3 pos) {
-      this.level()
-         .explode(
+   private void explode(Vec3d pos) {
+      this.getWorld()
+         .createExplosion(
             this,
             null,
             WIND_CHARGE_DAMAGE_CALCULATOR,
@@ -103,7 +102,7 @@ public class WindChargeProjectile extends AbstractHurtingProjectile implements I
             pos.z,
             EXPLOSION_RADIUS,
             false,
-            Level.ExplosionInteraction.NONE,
+            World.ExplosionSourceType.NONE,
             ParticleTypes.GUST,
             ParticleTypes.GUST_EMITTER,
             ModSounds.WIND_CHARGE_WIND_BURST
@@ -111,32 +110,32 @@ public class WindChargeProjectile extends AbstractHurtingProjectile implements I
    }
 
    @Override
-   protected boolean shouldBurn() {
+   protected boolean isBurning() {
       return false;
    }
 
    @Override
-   protected float getInertia() {
+   protected float getDrag() {
       return 1.0F;
    }
 
    @Override
-   protected float getLiquidInertia() {
-      return this.getInertia();
+   protected float getDragInWater() {
+      return this.getDrag();
    }
 
    @Override
-   protected ParticleOptions getTrailParticle() {
+   protected ParticleEffect getParticleType() {
       return ParticleTypes.GUST;
    }
 
    @Override
-   protected ClipContext.Block getClipType() {
-      return ClipContext.Block.OUTLINE;
+   protected RaycastContext.ShapeType getRaycastShapeType() {
+      return RaycastContext.ShapeType.OUTLINE;
    }
 
    @Override
-   public ItemStack getItem() {
+   public ItemStack getStack() {
       return ModItems.WIND_CHARGE_RENDER_STACK;
    }
 }

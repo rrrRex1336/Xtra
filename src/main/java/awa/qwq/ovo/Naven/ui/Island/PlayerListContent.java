@@ -6,32 +6,32 @@ import awa.qwq.ovo.Naven.events.impl.EventRenderTabOverlay;
 import awa.qwq.ovo.Naven.modules.impl.visual.Island;
 import awa.qwq.ovo.Naven.ui.Island.TabOverlayState;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.client.renderer.entity.LivingEntityRenderer;
-import net.minecraft.client.resources.PlayerSkin;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FormattedCharSequence;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.player.PlayerModelPart;
-import net.minecraft.world.level.GameType;
-import net.minecraft.world.scores.PlayerTeam;
 import org.mixin.PlayerTabOverlayAccessor;
 
 import java.util.Comparator;
 import java.util.List;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.PlayerSkinDrawer;
+import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.client.render.entity.LivingEntityRenderer;
+import net.minecraft.client.render.entity.PlayerModelPart;
+import net.minecraft.client.util.SkinTextures;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.scoreboard.Team;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.OrderedText;
+import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
+import net.minecraft.world.GameMode;
 
 public class PlayerListContent implements IslandContent {
-    private static final Minecraft mc = Minecraft.getInstance();
-    private static final Comparator<PlayerInfo> PLAYER_COMPARATOR = Comparator.<PlayerInfo>comparingInt((p) -> {
-        return p.getGameMode() == GameType.SPECTATOR ? 1 : 0;
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
+    private static final Comparator<PlayerListEntry> PLAYER_COMPARATOR = Comparator.<PlayerListEntry>comparingInt((p) -> {
+        return p.getGameMode() == GameMode.SPECTATOR ? 1 : 0;
     }).thenComparing((p) -> {
-        return java.util.Optional.ofNullable(p.getTeam()).map(PlayerTeam::getName).orElse("");
+        return java.util.Optional.ofNullable(p.getScoreboardTeam()).map(Team::getName).orElse("");
     }).thenComparing((p) -> {
         return p.getProfile().getName();
     }, String::compareToIgnoreCase);
@@ -40,7 +40,7 @@ public class PlayerListContent implements IslandContent {
      * @reason
      */
     @SuppressWarnings("removal")
-    private final ResourceLocation GUI_ICONS_LOCATION = new ResourceLocation("minecraft", "textures/gui/icons.png");
+    private final Identifier GUI_ICONS_LOCATION = new Identifier("minecraft", "textures/gui/icons.png");
 
     private boolean isVisible = false;
     private final SmoothAnimationTimer alphaAnimation = new SmoothAnimationTimer(0.0f, 0.3f);
@@ -61,7 +61,7 @@ public class PlayerListContent implements IslandContent {
             return false;
         }
 
-        boolean tabPressed = mc.options.keyPlayerList.isDown();
+        boolean tabPressed = mc.options.playerListKey.isPressed();
 
         alphaAnimation.target = tabPressed ? 1.0f : 0.0f;
         alphaAnimation.update(true);
@@ -76,12 +76,12 @@ public class PlayerListContent implements IslandContent {
     }
     
     @Override
-    public void render(GuiGraphics graphics, PoseStack stack, float x, float y) {
-        if (!isVisible || mc.player == null || mc.player.connection == null) {
+    public void render(DrawContext graphics, MatrixStack stack, float x, float y) {
+        if (!isVisible || mc.player == null || mc.player.networkHandler == null) {
             return;
         }
 
-        List<PlayerInfo> playerList = getPlayerInfos();
+        List<PlayerListEntry> playerList = getPlayerInfos();
         if (playerList.isEmpty()) {
             return;
         }
@@ -93,17 +93,17 @@ public class PlayerListContent implements IslandContent {
 
         float alpha = alphaAnimation.value;
 
-        Component header = getTabHeader();
+        Text header = getTabHeader();
         if (header != null) {
             EventRenderTabOverlay headerEvent = new EventRenderTabOverlay(EventType.HEADER, header, null);
             Naven.getInstance().getEventManager().call(headerEvent);
-            List<FormattedCharSequence> headerLines = mc.font.split(headerEvent.getComponent(), (int)contentWidth);
+            List<OrderedText> headerLines = mc.textRenderer.wrapLines(headerEvent.getComponent(), (int)contentWidth);
             
-            for (FormattedCharSequence line : headerLines) {
-                int lineWidth = mc.font.width(line);
+            for (OrderedText line : headerLines) {
+                int lineWidth = mc.textRenderer.getWidth(line);
                 float lineX = contentX + (contentWidth - lineWidth) / 2f;
                 int color = ((int)(255 * alpha) << 24) | 0xFFFFFF;
-                graphics.drawString(mc.font, line, (int)lineX, (int)contentY, color, false);
+                graphics.drawText(mc.textRenderer, line, (int)lineX, (int)contentY, color, false);
                 contentY += 9;
             }
             contentY += 2;
@@ -115,16 +115,16 @@ public class PlayerListContent implements IslandContent {
 
         int maxNameWidth = 0;
         int maxScoreWidth = 0;
-        int avatarWidth = mc.isLocalServer() || (mc.getConnection() != null && mc.getConnection().getConnection().isEncrypted()) ? 9 : 0;
+        int avatarWidth = mc.isInSingleplayer() || (mc.getNetworkHandler() != null && mc.getNetworkHandler().getConnection().isEncrypted()) ? 9 : 0;
         int columnPadding = 10;
         
-        for (PlayerInfo playerInfo : playerList) {
-            Component displayName = getNameForDisplay(playerInfo);
+        for (PlayerListEntry playerInfo : playerList) {
+            Text displayName = getNameForDisplay(playerInfo);
             EventRenderTabOverlay nameEvent = new EventRenderTabOverlay(EventType.NAME, displayName, playerInfo);
             Naven.getInstance().getEventManager().call(nameEvent);
             displayName = nameEvent.getComponent();
             
-            int nameWidth = mc.font.width(displayName) + 2;
+            int nameWidth = mc.textRenderer.getWidth(displayName) + 2;
             maxNameWidth = Math.max(maxNameWidth, nameWidth);
         }
         
@@ -142,52 +142,52 @@ public class PlayerListContent implements IslandContent {
                 continue;
             }
             
-            PlayerInfo currentPlayer = playerList.get(index);
+            PlayerListEntry currentPlayer = playerList.get(index);
             
             float currentPlayerX = playerX;
 
             if (avatarWidth > 0) {
-                Player entity = mc.level != null ? mc.level.getPlayerByUUID(currentPlayer.getProfile().getId()) : null;
-                boolean upsideDown = entity != null && LivingEntityRenderer.isEntityUpsideDown(entity);
-                boolean hasHat = entity != null && entity.isModelPartShown(PlayerModelPart.HAT);
-                PlayerSkin skin = currentPlayer.getSkin();
-                ResourceLocation skinLocation = skin.texture();
+                PlayerEntity entity = mc.world != null ? mc.world.getPlayerByUuid(currentPlayer.getProfile().getId()) : null;
+                boolean upsideDown = entity != null && LivingEntityRenderer.shouldFlipUpsideDown(entity);
+                boolean hasHat = entity != null && entity.isPartVisible(PlayerModelPart.HAT);
+                SkinTextures skin = currentPlayer.getSkinTextures();
+                Identifier skinLocation = skin.texture();
 
-                PlayerFaceRenderer.draw(graphics, skinLocation,
+                PlayerSkinDrawer.draw(graphics, skinLocation,
                         (int)currentPlayerX, (int)playerY, 8, hasHat, upsideDown);
                 currentPlayerX += avatarWidth;
             }
 
-            Component name = getNameForDisplay(currentPlayer);
+            Text name = getNameForDisplay(currentPlayer);
             EventRenderTabOverlay nameEvent = new EventRenderTabOverlay(EventType.NAME, name, currentPlayer);
             Naven.getInstance().getEventManager().call(nameEvent);
             name = nameEvent.getComponent();
-            int nameColor = currentPlayer.getGameMode() == GameType.SPECTATOR ? 
+            int nameColor = currentPlayer.getGameMode() == GameMode.SPECTATOR ? 
                 ((int)(255 * alpha) << 24) | 0x4AFFFFFF : ((int)(255 * alpha) << 24) | 0xFFFFFFFF;
-            graphics.drawString(mc.font, name, (int)currentPlayerX, (int)playerY, nameColor, false);
+            graphics.drawText(mc.textRenderer, name, (int)currentPlayerX, (int)playerY, nameColor, false);
 
 
             renderPingIcon(stack, graphics, columnWidth, (int)(currentPlayerX - avatarWidth), (int)playerY, currentPlayer, alpha);
         }
 
-        Component footer = getTabFooter();
+        Text footer = getTabFooter();
         if (footer != null) {
             contentY = startY + rows * 9 + 2;
             EventRenderTabOverlay footerEvent = new EventRenderTabOverlay(EventType.FOOTER, footer, null);
             Naven.getInstance().getEventManager().call(footerEvent);
-            List<FormattedCharSequence> footerLines = mc.font.split(footerEvent.getComponent(), (int)contentWidth);
+            List<OrderedText> footerLines = mc.textRenderer.wrapLines(footerEvent.getComponent(), (int)contentWidth);
             
-            for (FormattedCharSequence line : footerLines) {
-                int lineWidth = mc.font.width(line);
+            for (OrderedText line : footerLines) {
+                int lineWidth = mc.textRenderer.getWidth(line);
                 float lineX = contentX + (contentWidth - lineWidth) / 2f;
                 int color = ((int)(255 * alpha) << 24) | 0xFFFFFF;
-                graphics.drawString(mc.font, line, (int)lineX, (int)contentY, color, false);
+                graphics.drawText(mc.textRenderer, line, (int)lineX, (int)contentY, color, false);
                 contentY += 9;
             }
         }
     }
     
-    private void renderPingIcon(PoseStack stack, GuiGraphics graphics, int columnWidth, int x, int y, PlayerInfo playerInfo, float alpha) {
+    private void renderPingIcon(MatrixStack stack, DrawContext graphics, int columnWidth, int x, int y, PlayerListEntry playerInfo, float alpha) {
         int latency = playerInfo.getLatency();
         int iconIndex;
         if (latency < 0) {
@@ -204,52 +204,52 @@ public class PlayerListContent implements IslandContent {
             iconIndex = 4;
         }
         
-        stack.pushPose();
+        stack.push();
         stack.translate(0.0F, 0.0F, 100.0F);
-        graphics.blit(GUI_ICONS_LOCATION, x + columnWidth - 11, y, 0, 176 + iconIndex * 8, 10, 8);
-        stack.popPose();
+        graphics.drawTexture(GUI_ICONS_LOCATION, x + columnWidth - 11, y, 0, 176 + iconIndex * 8, 10, 8);
+        stack.pop();
     }
     
-    private Component getTabHeader() {
+    private Text getTabHeader() {
         try {
-            return ((PlayerTabOverlayAccessor) mc.gui.getTabList()).getHeader();
+            return ((PlayerTabOverlayAccessor) mc.inGameHud.getPlayerListHud()).getHeader();
         } catch (Exception ignored) {
             return TabOverlayState.getHeader();
         }
     }
     
-    private Component getTabFooter() {
+    private Text getTabFooter() {
         try {
-            return ((PlayerTabOverlayAccessor) mc.gui.getTabList()).getFooter();
+            return ((PlayerTabOverlayAccessor) mc.inGameHud.getPlayerListHud()).getFooter();
         } catch (Exception ignored) {
             return TabOverlayState.getFooter();
         }
     }
     
-    private List<PlayerInfo> getPlayerInfos() {
-        if (mc.player == null || mc.player.connection == null) {
+    private List<PlayerListEntry> getPlayerInfos() {
+        if (mc.player == null || mc.player.networkHandler == null) {
             return java.util.Collections.emptyList();
         }
-        return mc.player.connection.getListedOnlinePlayers().stream()
+        return mc.player.networkHandler.getListedPlayerListEntries().stream()
             .sorted(PLAYER_COMPARATOR)
             .limit(80L)
             .collect(java.util.stream.Collectors.toList());
     }
     
-    private Component getNameForDisplay(PlayerInfo playerInfo) {
-        MutableComponent name;
-        if (playerInfo.getTabListDisplayName() != null) {
-            name = playerInfo.getTabListDisplayName().copy();
+    private Text getNameForDisplay(PlayerListEntry playerInfo) {
+        MutableText name;
+        if (playerInfo.getDisplayName() != null) {
+            name = playerInfo.getDisplayName().copy();
         } else {
-            name = PlayerTeam.formatNameForTeam(playerInfo.getTeam(),
-                Component.literal(playerInfo.getProfile().getName()));
+            name = Team.decorateName(playerInfo.getScoreboardTeam(),
+                Text.literal(playerInfo.getProfile().getName()));
         }
         return decorateName(playerInfo, name);
     }
     
-    private Component decorateName(PlayerInfo playerInfo, MutableComponent name) {
-        return playerInfo.getGameMode() == GameType.SPECTATOR ? 
-            name.withStyle(net.minecraft.ChatFormatting.ITALIC) : name;
+    private Text decorateName(PlayerListEntry playerInfo, MutableText name) {
+        return playerInfo.getGameMode() == GameMode.SPECTATOR ? 
+            name.formatted(net.minecraft.util.Formatting.ITALIC) : name;
     }
 
     private int getColumnCount(int playerCount) {
@@ -269,27 +269,27 @@ public class PlayerListContent implements IslandContent {
 
     @Override
     public float getWidth() {
-        if (!isVisible || mc.player == null || mc.player.connection == null) {
+        if (!isVisible || mc.player == null || mc.player.networkHandler == null) {
             return 200;
         }
         
-        List<PlayerInfo> playerList = getPlayerInfos();
+        List<PlayerListEntry> playerList = getPlayerInfos();
         if (playerList.isEmpty()) {
             return 200;
         }
         
         int maxNameWidth = 0;
         int maxScoreWidth = 0;
-        int avatarWidth = mc.isLocalServer() || (mc.getConnection() != null && mc.getConnection().getConnection().isEncrypted()) ? 9 : 0;
+        int avatarWidth = mc.isInSingleplayer() || (mc.getNetworkHandler() != null && mc.getNetworkHandler().getConnection().isEncrypted()) ? 9 : 0;
         int columnPadding = 10;
         
-        for (PlayerInfo playerInfo : playerList) {
-            Component displayName = getNameForDisplay(playerInfo);
+        for (PlayerListEntry playerInfo : playerList) {
+            Text displayName = getNameForDisplay(playerInfo);
             EventRenderTabOverlay nameEvent = new EventRenderTabOverlay(EventType.NAME, displayName, playerInfo);
             Naven.getInstance().getEventManager().call(nameEvent);
             displayName = nameEvent.getComponent();
             
-            int nameWidth = mc.font.width(displayName) + 2;
+            int nameWidth = mc.textRenderer.getWidth(displayName) + 2;
             maxNameWidth = Math.max(maxNameWidth, nameWidth);
         }
         
@@ -301,29 +301,29 @@ public class PlayerListContent implements IslandContent {
         int totalWidth = columns * columnWidth + (columns - 1) * 5;
 
         float headerWidth = 0;
-        Component header = getTabHeader();
+        Text header = getTabHeader();
         if (header != null) {
             EventRenderTabOverlay headerEvent = new EventRenderTabOverlay(EventType.HEADER, header, null);
             Naven.getInstance().getEventManager().call(headerEvent);
-            List<FormattedCharSequence> headerLines = mc.font.split(headerEvent.getComponent(), (int)totalWidth);
-            for (FormattedCharSequence line : headerLines) {
-                headerWidth = Math.max(headerWidth, mc.font.width(line));
+            List<OrderedText> headerLines = mc.textRenderer.wrapLines(headerEvent.getComponent(), (int)totalWidth);
+            for (OrderedText line : headerLines) {
+                headerWidth = Math.max(headerWidth, mc.textRenderer.getWidth(line));
             }
         }
         
         float footerWidth = 0;
-        Component footer = getTabFooter();
+        Text footer = getTabFooter();
         if (footer != null) {
             EventRenderTabOverlay footerEvent = new EventRenderTabOverlay(EventType.FOOTER, footer, null);
             Naven.getInstance().getEventManager().call(footerEvent);
-            List<FormattedCharSequence> footerLines = mc.font.split(footerEvent.getComponent(), (int)totalWidth);
-            for (FormattedCharSequence line : footerLines) {
-                footerWidth = Math.max(footerWidth, mc.font.width(line));
+            List<OrderedText> footerLines = mc.textRenderer.wrapLines(footerEvent.getComponent(), (int)totalWidth);
+            for (OrderedText line : footerLines) {
+                footerWidth = Math.max(footerWidth, mc.textRenderer.getWidth(line));
             }
         }
         
         float finalWidth = Math.max(Math.max(totalWidth, headerWidth), footerWidth) + 20;
-        int screenWidth = mc.getWindow().getGuiScaledWidth();
+        int screenWidth = mc.getWindow().getScaledWidth();
         finalWidth = Math.max(finalWidth, 200f); // 最小宽度200
         finalWidth = Math.min(finalWidth, screenWidth * 0.8f); // 最大宽度为屏幕的80%
         return finalWidth;
@@ -331,21 +331,21 @@ public class PlayerListContent implements IslandContent {
     
     @Override
     public float getHeight() {
-        if (!isVisible || mc.player == null || mc.player.connection == null) {
+        if (!isVisible || mc.player == null || mc.player.networkHandler == null) {
             return 40;
         }
         
-        List<PlayerInfo> playerList = getPlayerInfos();
+        List<PlayerListEntry> playerList = getPlayerInfos();
         if (playerList.isEmpty()) {
             return 40;
         }
         
         float height = 20;
-        Component header = getTabHeader();
+        Text header = getTabHeader();
         if (header != null) {
             EventRenderTabOverlay headerEvent = new EventRenderTabOverlay(EventType.HEADER, header, null);
             Naven.getInstance().getEventManager().call(headerEvent);
-            List<FormattedCharSequence> headerLines = mc.font.split(headerEvent.getComponent(), 500);
+            List<OrderedText> headerLines = mc.textRenderer.wrapLines(headerEvent.getComponent(), 500);
             height += headerLines.size() * 9 + 2;
         }
         int playerCount = playerList.size();
@@ -353,11 +353,11 @@ public class PlayerListContent implements IslandContent {
         int rows = getRowCount(playerCount, columns);
         height += rows * 9;
 
-        Component footer = getTabFooter();
+        Text footer = getTabFooter();
         if (footer != null) {
             EventRenderTabOverlay footerEvent = new EventRenderTabOverlay(EventType.FOOTER, footer, null);
             Naven.getInstance().getEventManager().call(footerEvent);
-            List<FormattedCharSequence> footerLines = mc.font.split(footerEvent.getComponent(), 500);
+            List<OrderedText> footerLines = mc.textRenderer.wrapLines(footerEvent.getComponent(), 500);
             height += footerLines.size() * 9 + 2;
         }
         

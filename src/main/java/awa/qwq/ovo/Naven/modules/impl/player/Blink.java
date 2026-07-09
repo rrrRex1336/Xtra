@@ -31,27 +31,27 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.player.RemotePlayer;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
-import net.minecraft.network.protocol.login.ServerboundHelloPacket;
-import net.minecraft.network.protocol.login.ServerboundKeyPacket;
-import net.minecraft.network.protocol.status.ServerboundPingRequestPacket;
-import net.minecraft.network.protocol.status.ServerboundStatusRequestPacket;
-import net.minecraft.util.Mth;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.Entity.RemovalReason;
-import net.minecraft.world.entity.item.PrimedTnt;
-import net.minecraft.world.entity.projectile.Arrow;
-import net.minecraft.world.entity.projectile.Snowball;
-import net.minecraft.world.entity.projectile.ThrownEgg;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.HitResult.Type;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.network.OtherClientPlayerEntity;
+import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.Entity.RemovalReason;
+import net.minecraft.entity.TntEntity;
+import net.minecraft.entity.projectile.ArrowEntity;
+import net.minecraft.entity.projectile.thrown.EggEntity;
+import net.minecraft.entity.projectile.thrown.SnowballEntity;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.handshake.HandshakeC2SPacket;
+import net.minecraft.network.packet.c2s.login.LoginHelloC2SPacket;
+import net.minecraft.network.packet.c2s.login.LoginKeyC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.network.packet.c2s.query.QueryPingC2SPacket;
+import net.minecraft.network.packet.c2s.query.QueryRequestC2SPacket;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.hit.HitResult.Type;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(
    name = "Blink",
@@ -60,16 +60,16 @@ import net.minecraft.world.phys.HitResult.Type;
 )
 public class Blink extends Module {
    private final EntityArrowData arrowData = new EntityArrowData();
-   private final BasicProjectileData eggData = new BasicProjectileData(Collections.singleton(ThrownEgg.class), new Color(255, 238, 154));
-   private final BasicProjectileData snowballData = new BasicProjectileData(Collections.singleton(Snowball.class), new Color(255, 255, 255));
+   private final BasicProjectileData eggData = new BasicProjectileData(Collections.singleton(EggEntity.class), new Color(255, 238, 154));
+   private final BasicProjectileData snowballData = new BasicProjectileData(Collections.singleton(SnowballEntity.class), new Color(255, 255, 255));
    public static final int mainColor = new Color(150, 45, 45, 255).getRGB();
    public static final Set<Class<?>> whitelist = new HashSet<Class<?>>() {
       {
-         this.add(ClientIntentionPacket.class);
-         this.add(ServerboundStatusRequestPacket.class);
-         this.add(ServerboundPingRequestPacket.class);
-         this.add(ServerboundHelloPacket.class);
-         this.add(ServerboundKeyPacket.class);
+         this.add(HandshakeC2SPacket.class);
+         this.add(QueryRequestC2SPacket.class);
+         this.add(QueryPingC2SPacket.class);
+         this.add(LoginHelloC2SPacket.class);
+         this.add(LoginKeyC2SPacket.class);
       }
    };
    private final Queue<Packet<?>> packets = new ConcurrentLinkedQueue<>();
@@ -117,28 +117,28 @@ public class Blink extends Module {
       .build()
       .getFloatValue();
    private boolean disabling = false;
-   private RemotePlayer fakePlayer;
+   private OtherClientPlayerEntity fakePlayer;
    private int shouldReleaseTicks = 0;
    private int releasedTicks = 0;
 
    private long getBlinkTicks() {
-      return this.packets.stream().filter(packet -> packet instanceof ServerboundMovePlayerPacket).count();
+      return this.packets.stream().filter(packet -> packet instanceof PlayerMoveC2SPacket).count();
    }
 
-   private void handleMove(ServerboundMovePlayerPacket packet) {
+   private void handleMove(PlayerMoveC2SPacket packet) {
       this.fakePlayer
-         .lerpTo(
+         .updateTrackedPositionAndAngles(
             packet.getX(this.fakePlayer.getX()),
             packet.getY(this.fakePlayer.getY()),
             packet.getZ(this.fakePlayer.getZ()),
-            packet.getYRot(this.fakePlayer.getYRot()),
-            packet.getXRot(this.fakePlayer.getXRot()),
+            packet.getYaw(this.fakePlayer.getYaw()),
+            packet.getPitch(this.fakePlayer.getPitch()),
             3
          );
-      if (packet.hasRotation()) {
-         this.fakePlayer.setYRot(packet.getYRot(this.fakePlayer.getYRot()));
-         this.fakePlayer.setYHeadRot(packet.getYRot(this.fakePlayer.getYRot()));
-         this.fakePlayer.setXRot(packet.getXRot(this.fakePlayer.getXRot()));
+      if (packet.changesLook()) {
+         this.fakePlayer.setYaw(packet.getYaw(this.fakePlayer.getYaw()));
+         this.fakePlayer.setHeadYaw(packet.getYaw(this.fakePlayer.getYaw()));
+         this.fakePlayer.setPitch(packet.getPitch(this.fakePlayer.getPitch()));
       }
    }
 
@@ -146,9 +146,9 @@ public class Blink extends Module {
       while (!this.packets.isEmpty()) {
          Packet<?> poll = this.packets.poll();
          NetworkUtils.sendPacketNoEvent(poll);
-         if (poll instanceof ServerboundMovePlayerPacket) {
+         if (poll instanceof PlayerMoveC2SPacket) {
             this.releasedTicks++;
-            this.handleMove((ServerboundMovePlayerPacket)poll);
+            this.handleMove((PlayerMoveC2SPacket)poll);
             break;
          }
       }
@@ -161,28 +161,28 @@ public class Blink extends Module {
       this.disabling = false;
       this.fakePlayer = new BlinkingPlayer(mc.player);
       this.fakePlayer.setSprinting(mc.player.isSprinting());
-      mc.level.addEntity(this.fakePlayer);
+      mc.world.addEntity(this.fakePlayer);
    }
 
    @Override
    public void onDisable() {
       if (this.fakePlayer != null) {
-         mc.level.removeEntity(this.fakePlayer.getId(), RemovalReason.DISCARDED);
+         mc.world.removeEntity(this.fakePlayer.getId(), RemovalReason.DISCARDED);
          this.fakePlayer = null;
       }
    }
 
    @EventTarget
    public void onRender(EventRender2D e) {
-      int x = mc.getWindow().getGuiScaledWidth() / 2 - 50;
-      int y = mc.getWindow().getGuiScaledHeight() / 2 + 15;
+      int x = mc.getWindow().getScaledWidth() / 2 - 50;
+      int y = mc.getWindow().getScaledHeight() / 2 + 15;
       this.progress.update(true);
       RenderUtils.drawRoundedRect(e.getStack(), (float)x, (float)y, 100.0F, 5.0F, 2.0F, Integer.MIN_VALUE);
       RenderUtils.drawRoundedRect(e.getStack(), (float)x, (float)y, this.progress.value, 5.0F, 2.0F, mainColor);
    }
 
    private boolean isPlayerNear(double distance) {
-      long players = mc.level.players().stream().filter(player -> {
+      long players = mc.world.getPlayers().stream().filter(player -> {
          if (player == mc.player) {
             return false;
          } else if (player instanceof BlinkingPlayer) {
@@ -194,8 +194,8 @@ public class Blink extends Module {
          } else if (AntiBots.isBot(player)) {
             return false;
          } else {
-            Vec3 eyePosition = player.getEyePosition();
-            Vec3 closestPoint = RotationUtils.getClosestPoint(eyePosition, this.fakePlayer.getBoundingBox());
+            Vec3d eyePosition = player.getEyePos();
+            Vec3d closestPoint = RotationUtils.getClosestPoint(eyePosition, this.fakePlayer.getBoundingBox());
             return eyePosition.distanceTo(closestPoint) < distance;
          }
       }).count();
@@ -203,20 +203,20 @@ public class Blink extends Module {
    }
 
    private boolean isTNTNear(double distance) {
-      Stream<Entity> stream = StreamSupport.stream(mc.level.entitiesForRendering().spliterator(), true);
-      long tnt = stream.filter(entity -> entity instanceof PrimedTnt && (double)this.fakePlayer.distanceTo(entity) <= distance).count();
+      Stream<Entity> stream = StreamSupport.stream(mc.world.getEntities().spliterator(), true);
+      long tnt = stream.filter(entity -> entity instanceof TntEntity && (double)this.fakePlayer.distanceTo(entity) <= distance).count();
       return tnt > 0L;
    }
 
    private boolean isArrowNear(double expands) {
-      for (Entity entity : mc.level.entitiesForRendering()) {
+      for (Entity entity : mc.world.getEntities()) {
          ProjectileData data;
-         if (entity instanceof Arrow) {
+         if (entity instanceof ArrowEntity) {
             data = this.arrowData;
-         } else if (entity instanceof ThrownEgg) {
+         } else if (entity instanceof EggEntity) {
             data = this.eggData;
          } else {
-            if (!(entity instanceof Snowball)) {
+            if (!(entity instanceof SnowballEntity)) {
                continue;
             }
 
@@ -232,24 +232,24 @@ public class Blink extends Module {
    }
 
    private boolean checkProjectile(Entity entity, ProjectileData projectileInfo, double expands) {
-      LocalPlayer thePlayer = mc.player;
-      ClientLevel theWorld = mc.level;
+      ClientPlayerEntity thePlayer = mc.player;
+      ClientWorld theWorld = mc.world;
       double posX = entity.getX();
       double posY = entity.getY();
       double posZ = entity.getZ();
-      double motionX = entity.getDeltaMovement().x;
-      double motionY = entity.getDeltaMovement().y;
-      double motionZ = entity.getDeltaMovement().z;
+      double motionX = entity.getVelocity().x;
+      double motionY = entity.getVelocity().y;
+      double motionZ = entity.getVelocity().z;
 
       while (true) {
          float data1 = projectileInfo.getData1();
          float data2 = projectileInfo.getData2();
-         AABB aabb = new AABB(posX - (double)data1, posY, posZ - (double)data1, posX + (double)data1, posY + (double)data2, posZ + (double)data1);
-         Vec3 vec3 = new Vec3(posX, posY, posZ);
-         Vec3 vec3WithMotion = new Vec3(posX + motionX, posY + motionY, posZ + motionZ);
-         HitResult movingObj = RayTraceUtils.rayTraceBlocks(vec3, vec3WithMotion, false, entity instanceof Arrow, false, entity);
-         List<Entity> entities = theWorld.getEntities(
-            thePlayer, aabb.contract(motionX, motionY, motionZ).expandTowards(1.0, 1.0, 1.0).inflate(expands, expands, expands)
+         Box aabb = new Box(posX - (double)data1, posY, posZ - (double)data1, posX + (double)data1, posY + (double)data2, posZ + (double)data1);
+         Vec3d vec3 = new Vec3d(posX, posY, posZ);
+         Vec3d vec3WithMotion = new Vec3d(posX + motionX, posY + motionY, posZ + motionZ);
+         HitResult movingObj = RayTraceUtils.rayTraceBlocks(vec3, vec3WithMotion, false, entity instanceof ArrowEntity, false, entity);
+         List<Entity> entities = theWorld.getOtherEntities(
+            thePlayer, aabb.shrink(motionX, motionY, motionZ).stretch(1.0, 1.0, 1.0).expand(expands, expands, expands)
          );
          if (entities.contains(this.fakePlayer)) {
             return true;
@@ -262,9 +262,9 @@ public class Blink extends Module {
             return false;
          }
 
-         motionX *= entity.isInWater() ? 0.8 : 0.99;
-         double var39 = motionY * (entity.isInWater() ? 0.8 : 0.99);
-         motionZ *= entity.isInWater() ? 0.8 : 0.99;
+         motionX *= entity.isTouchingWater() ? 0.8 : 0.99;
+         double var39 = motionY * (entity.isTouchingWater() ? 0.8 : 0.99);
+         motionZ *= entity.isTouchingWater() ? 0.8 : 0.99;
          motionY = var39 - (double)projectileInfo.getGravity();
       }
    }
@@ -292,7 +292,7 @@ public class Blink extends Module {
    public void onMotion(EventMotion e) {
       if (e.getType() == EventType.PRE && mc.player != null) {
          this.setSuffix("Delay C03s : " + this.getBlinkTicks());
-         this.progress.target = Mth.clamp((float) this.getBlinkTicks() / this.maxTicks.getCurrentValue() * 100.0F, 0.0F, 100.0F);
+         this.progress.target = MathHelper.clamp((float) this.getBlinkTicks() / this.maxTicks.getCurrentValue() * 100.0F, 0.0F, 100.0F);
          this.releasedTicks = 0;
          if (mc.player.hurtTime == 10) {
             this.shouldReleaseTicks = this.shouldReleaseTicks + (int)this.releaseOnDamage.getCurrentValue();

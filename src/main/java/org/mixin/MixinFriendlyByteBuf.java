@@ -1,22 +1,22 @@
 package org.mixin;
 
 import awa.qwq.ovo.Naven.modules.impl.visual.NameProtect;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.chat.Component;
+import net.minecraft.network.PacketByteBuf;
+import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
-@Mixin({FriendlyByteBuf.class})
+@Mixin({PacketByteBuf.class})
 public class MixinFriendlyByteBuf {
 
    /**
     * @author
-    * @reason
-    */
+   * @reason
+   */
    @Overwrite
-   public Component readComponent() {
-      String json = ((FriendlyByteBuf)(Object)this).readUtf();
+   public Text readText() {
+      String json = ((PacketByteBuf)(Object)this).readString();
       String protectedJson = NameProtect.getName(json);
-      return Component.Serializer.fromJson(protectedJson);
+      return Text.Serialization.fromJson(protectedJson);
    }
 }

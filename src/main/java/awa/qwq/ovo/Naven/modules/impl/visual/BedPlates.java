@@ -11,15 +11,15 @@ import awa.qwq.ovo.Naven.utils.Vector2f;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.BedBlock;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BedPart;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.block.BedBlock;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.enums.BedPart;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 
 @ModuleInfo(
         name = "BedPlates",
@@ -56,32 +56,32 @@ public class BedPlates extends Module {
     @EventTarget
     public void onUpdate(EventRender event) {
         this.obstructingBlocks.clear();
-        if (mc.player == null || mc.level == null) return;
+        if (mc.player == null || mc.world == null) return;
 
-        BlockPos playerPos = mc.player.blockPosition();
+        BlockPos playerPos = mc.player.getBlockPos();
         int far = (int) this.range.getCurrentValue();
         int maxLayers = (int) this.layers.getCurrentValue();
 
-        for (BlockPos pos : BlockPos.betweenClosed(
-                playerPos.offset(-far, -far, -far),
-                playerPos.offset(far, far, far))) {
+        for (BlockPos pos : BlockPos.iterate(
+                playerPos.add(-far, -far, -far),
+                playerPos.add(far, far, far))) {
 
-            BlockState state = mc.level.getBlockState(pos);
+            BlockState state = mc.world.getBlockState(pos);
             if (!(state.getBlock() instanceof BedBlock) ||
-                    state.getValue(BedBlock.PART) != BedPart.FOOT) {
+                    state.get(BedBlock.PART) != BedPart.FOOT) {
                 continue;
             }
 
             for (int layer = 0; layer < maxLayers; layer++) {
                 int[] offset = OFFSETS[layer];
-                BlockPos offsetPos = pos.offset(offset[0], offset[1], offset[2]);
-                BlockState offsetState = mc.level.getBlockState(offsetPos);
+                BlockPos offsetPos = pos.add(offset[0], offset[1], offset[2]);
+                BlockState offsetState = mc.world.getBlockState(offsetPos);
 
                 if (offsetState.isAir() || offsetState.getBlock() instanceof BedBlock) {
                     continue;
                 }
 
-                Vec3 blockCenter = new Vec3(
+                Vec3d blockCenter = new Vec3d(
                         offsetPos.getX() + 0.5,
                         offsetPos.getY() + 0.5,
                         offsetPos.getZ() + 0.5
@@ -104,9 +104,9 @@ public class BedPlates extends Module {
 
     @EventTarget
     public void onRender2D(EventRender2D event) {
-        PoseStack stack = event.getStack();
+        MatrixStack stack = event.getStack();
         for (BlockInfo blockInfo : this.obstructingBlocks) {
-            stack.pushPose();
+            stack.push();
             String text = blockInfo.getName();
             if (blockInfo.getLayer() > 0) {
                 text = "L" + (blockInfo.getLayer() + 1) + " " + text;
@@ -120,18 +120,18 @@ public class BedPlates extends Module {
                     true,
                     0.25f
             );
-            stack.popPose();
+            stack.pop();
         }
     }
 
     public static List<BlockPos> getBedSurroundingBlocks(BlockPos bedFoot, int maxLayers) {
         List<BlockPos> blocks = new ArrayList<>();
-        if (mc.player == null || mc.level == null) return blocks;
+        if (mc.player == null || mc.world == null) return blocks;
 
         for (int layer = 0; layer < maxLayers; layer++) {
             int[] offset = OFFSETS[layer];
-            BlockPos offsetPos = bedFoot.offset(offset[0], offset[1], offset[2]);
-            BlockState offsetState = mc.level.getBlockState(offsetPos);
+            BlockPos offsetPos = bedFoot.add(offset[0], offset[1], offset[2]);
+            BlockState offsetState = mc.world.getBlockState(offsetPos);
 
             if (!offsetState.isAir() && !(offsetState.getBlock() instanceof BedBlock)) {
                 blocks.add(offsetPos);
@@ -143,10 +143,10 @@ public class BedPlates extends Module {
 
     public static List<BlockPos> getFullBedSurroundingBlocks(BlockPos bedFoot, int maxLayers) {
         List<BlockPos> blocks = new ArrayList<>();
-        if (mc.player == null || mc.level == null) return blocks;
+        if (mc.player == null || mc.world == null) return blocks;
         for (int layer = 0; layer < maxLayers; layer++) {
-            BlockPos above = bedFoot.above(layer + 1);
-            BlockState aboveState = mc.level.getBlockState(above);
+            BlockPos above = bedFoot.up(layer + 1);
+            BlockState aboveState = mc.world.getBlockState(above);
             if (!aboveState.isAir() && !(aboveState.getBlock() instanceof BedBlock)) {
                 blocks.add(above);
             }
@@ -155,8 +155,8 @@ public class BedPlates extends Module {
                 {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}
         };
         for (int[] off : sideOffsets) {
-            BlockPos side = bedFoot.offset(off[0], off[1], off[2]);
-            BlockState sideState = mc.level.getBlockState(side);
+            BlockPos side = bedFoot.add(off[0], off[1], off[2]);
+            BlockState sideState = mc.world.getBlockState(side);
             if (!sideState.isAir() && !(sideState.getBlock() instanceof BedBlock)) {
                 blocks.add(side);
             }
@@ -166,9 +166,9 @@ public class BedPlates extends Module {
     }
 
     public static boolean hasBedProtection(BlockPos bedFoot) {
-        if (mc.level == null) return false;
-        BlockPos above = bedFoot.above();
-        BlockState aboveState = mc.level.getBlockState(above);
+        if (mc.world == null) return false;
+        BlockPos above = bedFoot.up();
+        BlockState aboveState = mc.world.getBlockState(above);
         return !aboveState.isAir() && !(aboveState.getBlock() instanceof BedBlock);
     }
 

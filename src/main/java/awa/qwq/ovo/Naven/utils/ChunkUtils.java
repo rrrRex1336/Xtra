@@ -2,22 +2,22 @@ package awa.qwq.ovo.Naven.utils;
 
 import java.util.Objects;
 import java.util.stream.Stream;
-import net.minecraft.client.Minecraft;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.WorldChunk;
 
 public class ChunkUtils {
-   private static final Minecraft mc = Minecraft.getInstance();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
 
    public static Stream<BlockEntity> getLoadedBlockEntities() {
       return getLoadedChunks().flatMap(chunk -> chunk.getBlockEntities().values().stream());
    }
 
-   public static Stream<LevelChunk> getLoadedChunks() {
-      int radius = Math.max(2, mc.options.getEffectiveRenderDistance()) + 3;
+   public static Stream<WorldChunk> getLoadedChunks() {
+      int radius = Math.max(2, mc.options.getClampedViewDistance()) + 3;
       int diameter = radius * 2 + 1;
-      ChunkPos center = mc.player.chunkPosition();
+      ChunkPos center = mc.player.getChunkPos();
       ChunkPos min = new ChunkPos(center.x - radius, center.z - radius);
       ChunkPos max = new ChunkPos(center.x + radius, center.z + radius);
       return Stream.<ChunkPos>iterate(min, pos -> {
@@ -33,6 +33,6 @@ public class ChunkUtils {
          } else {
             return new ChunkPos(x, z);
          }
-      }).limit((long)diameter * (long)diameter).filter(c -> mc.level.hasChunk(c.x, c.z)).map(c -> mc.level.getChunk(c.x, c.z)).filter(Objects::nonNull);
+      }).limit((long)diameter * (long)diameter).filter(c -> mc.world.isChunkLoaded(c.x, c.z)).map(c -> mc.world.getChunk(c.x, c.z)).filter(Objects::nonNull);
    }
 }

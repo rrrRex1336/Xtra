@@ -23,8 +23,7 @@ import awa.qwq.ovo.Naven.managers.rotation.RotationManager;
 import awa.qwq.ovo.Naven.values.HasValueManager;
 import awa.qwq.ovo.Naven.values.ValueManager;
 import linyanli1337.Loader;
-import net.minecraft.client.Minecraft;
-
+import net.minecraft.client.MinecraftClient;
 import java.awt.FontFormatException;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -51,7 +50,7 @@ public class Naven {
    public static float TICK_TIMER = 1.0F;
    public static Queue<Runnable> skipTasks = new ConcurrentLinkedQueue<>();
    public static int skipTicks = 0;
-   public static Minecraft mc = Minecraft.getInstance();
+   public static MinecraftClient mc = MinecraftClient.getInstance();
 
 
    private Naven() {
@@ -90,6 +89,7 @@ public class Naven {
       this.eventManager.register(this.eventWrapper);
       this.eventManager.register(new RotationManager());
       this.eventManager.register(new NetworkUtils());
+      this.eventManager.register(MovementUtils.INSTANCE);
       this.eventManager.register(new ServerUtils());
       this.eventManager.register(new EntityWatcher());
       CoordinateTelemetry.initialize();
@@ -102,14 +102,14 @@ public class Naven {
               && isReady
               && mc != null
               && mc.player != null
-              && mc.player.tickCount > 5;
+              && mc.player.age > 5;
    }
 
    public static void modRegister() {
 
 
       try {
-         mc = Minecraft.getInstance();
+         mc = MinecraftClient.getInstance();
          Module.refreshMinecraft();
          new Naven();
          if (!Loader.isNativeLoaded()) {
@@ -142,7 +142,7 @@ public class Naven {
    }
 
    public void enablePendingModulesIfReady() {
-      if (mc == null || mc.player == null || mc.level == null || this.pendingEnableModules.isEmpty()) {
+      if (mc == null || mc.player == null || mc.world == null || this.pendingEnableModules.isEmpty()) {
          return;
       }
 

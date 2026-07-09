@@ -26,10 +26,9 @@ import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
-
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.util.math.MatrixStack;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.renderer.GameRenderer;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
 
@@ -165,7 +164,7 @@ public class ModuleList extends Module {
         this.blurMatrices.clear();
         this.renderCustomGlow(e);
         this.glowRects.clear();
-        e.getStack().pushPose();
+        e.getStack().push();
 
         ModuleManager moduleManager = Naven.getInstance().getModuleManager();
         List<Module> allModules = new ArrayList<>(moduleManager.getModules());
@@ -219,7 +218,7 @@ public class ModuleList extends Module {
             float height = 0.0F;
             double fontHeight = font.getHeight(true, this.fontSize.getCurrentValue());
             float baseX = this.direction.isCurrentMode("Right") ?
-                    (float) mc.getWindow().getGuiScaledWidth() - maxWidth - 6.0F :
+                    (float) mc.getWindow().getScaledWidth() - maxWidth - 6.0F :
                     3.0F;
             float baseY = 0.0F;
 
@@ -276,7 +275,7 @@ public class ModuleList extends Module {
             double fontHeight = font.getHeight(true, (double) this.fontSize.getCurrentValue());
             float lineSpacing = 4.0F;
             float baseX = this.direction.isCurrentMode("Right") ?
-                    (float) mc.getWindow().getGuiScaledWidth() - maxWidth - 6.0F :
+                    (float) mc.getWindow().getScaledWidth() - maxWidth - 6.0F :
                     3.0F;
             float baseY = 0.0F;
 
@@ -366,7 +365,7 @@ public class ModuleList extends Module {
             }
         }
 
-        e.getStack().popPose();
+        e.getStack().pop();
     }
 
     private float getFontSize() {
@@ -465,7 +464,7 @@ public class ModuleList extends Module {
                 RenderSystem.defaultBlendFunc();
                 GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
                 GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
-                RenderSystem.setShader(GameRenderer::getPositionColorShader);
+                RenderSystem.setShader(GameRenderer::getPositionColorProgram);
                 RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
                 for (GlowRect rect : this.glowRects) {
@@ -476,7 +475,7 @@ public class ModuleList extends Module {
                 this.glowCutoutBuffer.setViewport();
                 GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
                 GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
-                RenderSystem.setShader(GameRenderer::getPositionColorShader);
+                RenderSystem.setShader(GameRenderer::getPositionColorProgram);
                 RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
                 for (GlowRect rect : this.glowRects) {
@@ -527,8 +526,8 @@ public class ModuleList extends Module {
             return;
         }
 
-        int width = mc.getWindow().getWidth();
-        int height = mc.getWindow().getHeight();
+        int width = mc.getWindow().getFramebufferWidth();
+        int height = mc.getWindow().getFramebufferHeight();
         if (this.glowMaskBuffer.width != width || this.glowMaskBuffer.height != height) {
             this.glowMaskBuffer.resize();
             this.glowCutoutBuffer.resize();
@@ -536,7 +535,7 @@ public class ModuleList extends Module {
         }
     }
 
-    private void drawGlowSource(PoseStack stack, GlowRect rect) {
+    private void drawGlowSource(MatrixStack stack, GlowRect rect) {
         int glowColor = mixColor(rect.color(), 0xFFFFFF, 0.08F);
         RenderUtils.drawRoundedRect(stack, rect.x() - 5.5F, rect.y() - 2.0F, rect.width() + 11.0F, rect.height() + 4.0F, 5.0F, withAlpha(glowColor, 70));
         RenderUtils.drawRoundedRect(stack, rect.x() - 3.75F, rect.y() - 1.35F, rect.width() + 7.5F, rect.height() + 2.7F, 4.5F, withAlpha(glowColor, 120));
@@ -544,7 +543,7 @@ public class ModuleList extends Module {
         RenderUtils.drawRoundedRect(stack, rect.x() - 0.75F, rect.y() - 0.25F, rect.width() + 1.5F, rect.height() + 0.5F, 3.0F, withAlpha(glowColor, 235));
     }
 
-    private void drawGlowCutout(PoseStack stack, GlowRect rect) {
+    private void drawGlowCutout(MatrixStack stack, GlowRect rect) {
         RenderUtils.drawRoundedRect(stack, rect.x(), rect.y(), rect.width(), rect.height(), 3.0F, 0xFFFFFFFF);
     }
 
@@ -555,15 +554,15 @@ public class ModuleList extends Module {
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
         this.renderGlowTexture(event.getStack(), this.glowMaskBuffer.texture, this.glowCutoutBuffer.texture, this.glowMaskBuffer.width, this.glowMaskBuffer.height, 1.0F, 0.0F, 1.0F, radius, softness, false);
 
-        mc.getMainRenderTarget().bindWrite(false);
-        GL.viewport(0, 0, mc.getWindow().getWidth(), mc.getWindow().getHeight());
+        mc.getFramebuffer().beginWrite(false);
+        GL.viewport(0, 0, mc.getWindow().getFramebufferWidth(), mc.getWindow().getFramebufferHeight());
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         GL11.glDisable(GL11.GL_DEPTH_TEST);
         this.renderGlowTexture(event.getStack(), this.glowBlurBuffer.texture, this.glowCutoutBuffer.texture, this.glowBlurBuffer.width, this.glowBlurBuffer.height, 0.0F, 1.0F, intensity, radius, softness, true);
     }
 
-    private void renderGlowTexture(PoseStack stack, int texture, int maskTexture, int width, int height, float directionX, float directionY, float intensity, int radius, float softness, boolean cutoutSource) {
+    private void renderGlowTexture(MatrixStack stack, int texture, int maskTexture, int width, int height, float directionX, float directionY, float intensity, int radius, float softness, boolean cutoutSource) {
         this.moduleListGlowShader.bind();
         GL.bindTexture(texture, 0);
         GL.bindTexture(maskTexture, 1);

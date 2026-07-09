@@ -3,30 +3,30 @@ package awa.qwq.ovo.Naven.utils;
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventHandlePacket;
 import io.netty.handler.codec.DecoderException;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.PacketListener;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.server.RunningOnDifferentThreadException;
-import net.minecraft.util.thread.BlockableEventLoop;
+import net.minecraft.network.OffThreadException;
+import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.listener.PacketListener;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.util.thread.ThreadExecutor;
 import org.slf4j.Logger;
 
 public class MixinProtectionUtils {
-   public static <T extends PacketListener> void onEnsureRunningOnSameThread(Logger LOGGER, Packet<T> packet, T listener, BlockableEventLoop<?> executor) throws RunningOnDifferentThreadException {
-      if (!executor.isSameThread()) {
-         executor.executeIfPossible(() -> {
-            if (listener.isAcceptingMessages()) {
+   public static <T extends PacketListener> void onEnsureRunningOnSameThread(Logger LOGGER, Packet<T> packet, T listener, ThreadExecutor<?> executor) throws OffThreadException {
+      if (!executor.isOnThread()) {
+         executor.executeSync(() -> {
+            if (listener.isConnectionOpen()) {
                try {
                   EventHandlePacket event = new EventHandlePacket((Packet)packet);
-                  if (executor.isSameThread()) {
+                  if (executor.isOnThread()) {
                      Naven.getInstance().getEventManager().call(event);
                      if (event.isCancelled()) {
                         return;
                      }
                   }
 
-                  packet.handle(listener);
+                  packet.apply(listener);
                } catch (Exception var5) {
-                  if (listener.shouldPropagateHandlingExceptions()) {
+                  if (listener.shouldCrashOnException()) {
                      throw var5;
                   }
 
@@ -36,11 +36,11 @@ public class MixinProtectionUtils {
                LOGGER.debug("Ignoring packet due to disconnection: {}", packet);
             }
          });
-         throw RunningOnDifferentThreadException.RUNNING_ON_DIFFERENT_THREAD;
+         throw OffThreadException.INSTANCE;
       }
    }
 
-   public static byte[] readByteArray(FriendlyByteBuf buf, int maxSize) {
+   public static byte[] readByteArray(PacketByteBuf buf, int maxSize) {
       int i = buf.readVarInt() - 1;
       if (i > maxSize) {
          throw new DecoderException("ByteArray with size " + i + " is bigger than allowed " + maxSize);

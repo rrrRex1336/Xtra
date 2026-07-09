@@ -22,18 +22,18 @@ import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import awa.qwq.ovo.Naven.values.impl.StringValue;
-import com.mojang.blaze3d.platform.InputConstants;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import java.util.HashMap;
 import java.util.List;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.text.Text;
 
 public class ClickGUI extends Screen {
-   private static final Minecraft mc = Minecraft.getInstance();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
    public static float windowX = 100.0F;
    public static float windowY = 100.0F;
    public static float windowWidth = 400.0F;
@@ -125,16 +125,16 @@ public class ClickGUI extends Screen {
    private TimeHelper valuesAlphaTimer = new TimeHelper();
 
    public ClickGUI() {
-      super(Component.nullToEmpty("Naven"));
+      super(Text.of("Naven"));
    }
 
-   public void onClose() {
+   public void close() {
       if (this.editingStringValue != null) {
          this.commitEditingString(true);
       }
       Naven.getInstance().getFileManager().save();
       Naven.getInstance().getEventManager().unregister(this);
-      super.onClose();
+      super.close();
    }
 
    public boolean mouseClicked(double mouseX, double mouseY, int mouseButton) {
@@ -252,12 +252,12 @@ public class ClickGUI extends Screen {
 
    public boolean keyPressed(int pKeyCode, int pScanCode, int pModifiers) {
       if (this.editingStringValue != null) {
-         if (pKeyCode == InputConstants.KEY_ESCAPE || pKeyCode == InputConstants.KEY_RETURN || pKeyCode == InputConstants.KEY_NUMPADENTER) {
-            this.commitEditingString(pKeyCode != InputConstants.KEY_ESCAPE);
+         if (pKeyCode == InputUtil.GLFW_KEY_ESCAPE || pKeyCode == InputUtil.GLFW_KEY_ENTER || pKeyCode == InputUtil.GLFW_KEY_KP_ENTER) {
+            this.commitEditingString(pKeyCode != InputUtil.GLFW_KEY_ESCAPE);
             return true;
          }
 
-         if (pKeyCode == InputConstants.KEY_BACKSPACE && !this.editingStringText.isEmpty()) {
+         if (pKeyCode == InputUtil.GLFW_KEY_BACKSPACE && !this.editingStringText.isEmpty()) {
             this.editingStringText = this.editingStringText.substring(0, this.editingStringText.length() - 1);
             return true;
          }
@@ -318,13 +318,13 @@ public class ClickGUI extends Screen {
 
    @EventTarget
    public void onShader(EventShader e) {
-      if (mc.screen == this) {
+      if (mc.currentScreen == this) {
          RenderUtils.drawRoundedRect(e.getStack(), windowX, windowY, this.widthAnimation.value, this.heightAnimation.value, 5.0F, 1073741824);
       }
    }
 
-   public void render(GuiGraphics g, int mouseX, int mouseY, float pPartialTick) {
-      PoseStack stack = g.pose();
+   public void render(DrawContext g, int mouseX, int mouseY, float pPartialTick) {
+      MatrixStack stack = g.getMatrices();
       this.hoveringModule = null;
       this.clickReturnModules = this.clickReturnCategories = this.clickOpenCategoryModules = false;
       CustomTextRenderer opensans = Fonts.opensans;

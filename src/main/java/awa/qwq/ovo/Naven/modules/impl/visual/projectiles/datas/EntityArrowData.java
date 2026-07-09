@@ -3,11 +3,11 @@ package awa.qwq.ovo.Naven.modules.impl.visual.projectiles.datas;
 import java.awt.Color;
 import java.util.Collections;
 import java.util.HashSet;
-import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.entity.projectile.ArrowEntity;
 
 public class EntityArrowData extends BasicProjectileData {
    public EntityArrowData() {
-      super(new HashSet<>(Collections.singletonList(Arrow.class)), new Color(255, 0, 0));
+      super(new HashSet<>(Collections.singletonList(ArrowEntity.class)), new Color(255, 0, 0));
    }
 
    @Override

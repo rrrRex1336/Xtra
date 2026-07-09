@@ -2,23 +2,23 @@ package awa.qwq.ovo.Naven.viaversionfix;
 
 import awa.qwq.ovo.Naven.viaversionfix.items.ModSounds;
 import awa.qwq.ovo.Naven.viaversionfix.items.mace.MaceItem;
-import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvent;
-import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.boss.dragon.EnderDragonEntity;
+import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.particle.ParticleTypes;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundEvent;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.World;
 
 public final class MaceLogic {
    private MaceLogic() {
    }
 
-   public static void handlePostHit(Level level, Entity target, LivingEntity attacker, ItemStack stack) {
+   public static void handlePostHit(World level, Entity target, LivingEntity attacker, ItemStack stack) {
       if (level == null || target == null || attacker == null || stack == null || stack.isEmpty()) {
          return;
       }
@@ -28,18 +28,18 @@ public final class MaceLogic {
          return;
       }
 
-      if (!level.isClientSide) {
+      if (!level.isClient) {
          attacker.fallDistance = 0.0F;
-         attacker.setDeltaMovement(Vec3.ZERO);
+         attacker.setVelocity(Vec3d.ZERO);
 
          float smashDamage = getSmashDamage(fallDistance);
-         target.hurt(getDamageSource(level, attacker), smashDamage);
-         if (target instanceof EnderDragon) {
-            target.hurt(level.damageSources().explosion(attacker, attacker), smashDamage);
+         target.damage(getDamageSource(level, attacker), smashDamage);
+         if (target instanceof EnderDragonEntity) {
+            target.damage(level.getDamageSources().explosion(attacker, attacker), smashDamage);
          }
 
-         if (level instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(
+         if (level instanceof ServerWorld serverLevel) {
+            serverLevel.spawnParticles(
                ParticleTypes.EXPLOSION,
                attacker.getX(),
                attacker.getY() + 1.5D,
@@ -56,8 +56,8 @@ public final class MaceLogic {
       }
    }
 
-   public static void playClientSmashSound(Level level, Entity target, LivingEntity attacker) {
-      if (level == null || target == null || attacker == null || !level.isClientSide || !canSmashAttack(attacker)) {
+   public static void playClientSmashSound(World level, Entity target, LivingEntity attacker) {
+      if (level == null || target == null || attacker == null || !level.isClient || !canSmashAttack(attacker)) {
          return;
       }
 
@@ -72,29 +72,29 @@ public final class MaceLogic {
       return 1.5F * fallDistance * 3.0F;
    }
 
-   private static DamageSource getDamageSource(Level level, LivingEntity attacker) {
-      if (attacker instanceof Player player) {
-         return level.damageSources().playerAttack(player);
+   private static DamageSource getDamageSource(World level, LivingEntity attacker) {
+      if (attacker instanceof PlayerEntity player) {
+         return level.getDamageSources().playerAttack(player);
       }
 
-      return level.damageSources().mobAttack(attacker);
+      return level.getDamageSources().mobAttack(attacker);
    }
 
-   private static void playSmashSound(Level level, LivingEntity attacker, Entity target, float fallDistance) {
+   private static void playSmashSound(World level, LivingEntity attacker, Entity target, float fallDistance) {
       playSmashSound(level, attacker, target, fallDistance, false);
    }
 
-   private static void playSmashSound(Level level, LivingEntity attacker, Entity target, float fallDistance, boolean local) {
+   private static void playSmashSound(World level, LivingEntity attacker, Entity target, float fallDistance, boolean local) {
       SoundEvent sound = getSmashSound(target, fallDistance);
       if (local) {
-         level.playLocalSound(attacker.getX(), attacker.getY(), attacker.getZ(), sound, attacker.getSoundSource(), 1.0F, 1.0F, false);
+         level.playSound(attacker.getX(), attacker.getY(), attacker.getZ(), sound, attacker.getSoundCategory(), 1.0F, 1.0F, false);
       } else {
-         level.playSound(null, attacker.getX(), attacker.getY(), attacker.getZ(), sound, attacker.getSoundSource(), 1.0F, 1.0F);
+         level.playSound(null, attacker.getX(), attacker.getY(), attacker.getZ(), sound, attacker.getSoundCategory(), 1.0F, 1.0F);
       }
    }
 
    private static SoundEvent getSmashSound(Entity target, float fallDistance) {
-      if (!target.onGround()) {
+      if (!target.isOnGround()) {
          return ModSounds.VANILLA_MACE_SMASH_AIR;
       }
 

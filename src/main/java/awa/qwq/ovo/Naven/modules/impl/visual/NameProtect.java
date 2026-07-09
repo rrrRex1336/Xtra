@@ -5,7 +5,7 @@ import awa.qwq.ovo.Naven.events.impl.EventRenderTabOverlay;
 import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
-import net.minecraft.network.chat.Component;
+import net.minecraft.text.Text;
 import org.apache.commons.lang3.StringUtils;
 
 @ModuleInfo(
@@ -35,6 +35,6 @@ public class NameProtect extends Module {
          return;
       }
 
-      event.setComponent(Component.literal(getName(event.getComponent().getString())));
+      event.setComponent(Text.literal(getName(event.getComponent().getString())));
    }
 }

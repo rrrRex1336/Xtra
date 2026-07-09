@@ -8,7 +8,7 @@ import awa.qwq.ovo.Naven.utils.shader.PostProcessRenderer;
 import awa.qwq.ovo.Naven.utils.shader.Shader;
 import awa.qwq.ovo.Naven.utils.shader.ShaderHelper;
 import it.unimi.dsi.fastutil.ints.IntDoubleImmutablePair;
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.MinecraftClient;
 
 public class KawaseBlur {
 
@@ -69,7 +69,7 @@ public class KawaseBlur {
 
         PostProcessRenderer.beginRender();
 
-        renderToFbo(fbos[0], Minecraft.getInstance().getMainRenderTarget().getColorTextureId(), shaderDown,
+        renderToFbo(fbos[0], MinecraftClient.getInstance().getFramebuffer().getColorAttachment(), shaderDown,
                 offset);
 
         for (int i = 0; i < iterations; i++) {
@@ -80,7 +80,7 @@ public class KawaseBlur {
             renderToFbo(fbos[i - 1], fbos[i].texture, shaderUp, offset);
         }
 
-        Minecraft.getInstance().getMainRenderTarget().bindWrite(true);
+        MinecraftClient.getInstance().getFramebuffer().beginWrite(true);
         shaderPassthrough.bind();
         ShaderHelper.bindTexture(fbos[0].texture);
         shaderPassthrough.set("uTexture", 0);

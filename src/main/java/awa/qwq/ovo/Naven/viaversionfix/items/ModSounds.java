@@ -1,9 +1,9 @@
 package awa.qwq.ovo.Naven.viaversionfix.items;
 
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.sounds.SoundEvent;
+import net.minecraft.registry.Registries;
+import net.minecraft.registry.Registry;
+import net.minecraft.sound.SoundEvent;
+import net.minecraft.util.Identifier;
 
 public final class ModSounds {
    public static final SoundEvent MACE_SMASH_GROUND = register("mace_smash_ground");
@@ -42,13 +42,13 @@ public final class ModSounds {
    }
 
    private static SoundEvent register(String name) {
-      ResourceLocation id = new ResourceLocation(ModItems.MOD_ID, name);
-      return Registry.register(BuiltInRegistries.SOUND_EVENT, id, SoundEvent.createVariableRangeEvent(id));
+      Identifier id = new Identifier(ModItems.MOD_ID, name);
+      return Registry.register(Registries.SOUND_EVENT, id, SoundEvent.of(id));
    }
 
    private static SoundEvent registerMinecraft(String name) {
-      ResourceLocation id = new ResourceLocation("minecraft", name);
-      return BuiltInRegistries.SOUND_EVENT.getOptional(id)
-         .orElseGet(() -> Registry.register(BuiltInRegistries.SOUND_EVENT, id, SoundEvent.createVariableRangeEvent(id)));
+      Identifier id = new Identifier("minecraft", name);
+      return Registries.SOUND_EVENT.getOrEmpty(id)
+         .orElseGet(() -> Registry.register(Registries.SOUND_EVENT, id, SoundEvent.of(id)));
    }
 }

@@ -4,13 +4,12 @@ import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.modules.Module;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
-
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Formatting;
 
 public class ModuleToggleContent implements IslandContent {
     private static class ModuleToggleEntry {
@@ -124,7 +123,7 @@ public class ModuleToggleContent implements IslandContent {
     }
 
     @Override
-    public void render(GuiGraphics graphics, PoseStack stack, float x, float y) {
+    public void render(DrawContext graphics, MatrixStack stack, float x, float y) {
         cleanupExpiredEntries();
 
         if (toggleEntries.isEmpty()) {
@@ -192,8 +191,8 @@ public class ModuleToggleContent implements IslandContent {
 
             // 状态文本
             String statusText = entry.isEnabled ?
-                    ChatFormatting.DARK_AQUA + entry.module.getName() + ChatFormatting.WHITE + " has been" + ChatFormatting.GREEN + " Enabled" + ChatFormatting.WHITE + "!" :
-                    ChatFormatting.DARK_AQUA + entry.module.getName() + ChatFormatting.WHITE + " has been" + ChatFormatting.RED + " Disabled" + ChatFormatting.WHITE + "!";
+                    Formatting.DARK_AQUA + entry.module.getName() + Formatting.WHITE + " has been" + Formatting.GREEN + " Enabled" + Formatting.WHITE + "!" :
+                    Formatting.DARK_AQUA + entry.module.getName() + Formatting.WHITE + " has been" + Formatting.RED + " Disabled" + Formatting.WHITE + "!";
 
             float titleHeight = (float) Fonts.opensans.getHeight(true, 0.4f);
             float statusY = currentY + titleHeight + 4;

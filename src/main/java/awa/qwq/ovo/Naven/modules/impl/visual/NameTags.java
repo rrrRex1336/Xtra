@@ -38,15 +38,15 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.core.BlockPos;
-import net.minecraft.util.Mth;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.HitResult.Type;
+import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.Items;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.hit.HitResult.Type;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 import org.joml.Vector4f;
 
 @ModuleInfo(
@@ -82,12 +82,12 @@ public class NameTags extends Module {
    List<Vector4f> blurMatrices = new ArrayList<>();
    private BlockPos spawnPosition;
    private Vector2f compassPosition;
-   private final Map<Player, Integer> aimTicks = new ConcurrentHashMap<>();
-   private Player aimingPlayer;
+   private final Map<PlayerEntity, Integer> aimTicks = new ConcurrentHashMap<>();
+   private PlayerEntity aimingPlayer;
 
    private boolean hasPlayer() {
-      for (Entity entity : mc.level.entitiesForRendering()) {
-         if (entity != mc.player && !(entity instanceof BlinkingPlayer) && entity instanceof Player) {
+      for (Entity entity : mc.world.getEntities()) {
+         if (entity != mc.player && !(entity instanceof BlinkingPlayer) && entity instanceof PlayerEntity) {
             return true;
          }
       }
@@ -95,8 +95,8 @@ public class NameTags extends Module {
       return false;
    }
 
-   private BlockPos getSpawnPosition(ClientLevel p_117922_) {
-      return p_117922_.dimensionType().natural() ? p_117922_.getSharedSpawnPos() : null;
+   private BlockPos getSpawnPosition(ClientWorld p_117922_) {
+      return p_117922_.getDimension().natural() ? p_117922_.getSpawnPos() : null;
    }
 
    @EventTarget
@@ -105,9 +105,9 @@ public class NameTags extends Module {
          if (!this.mcf.getCurrentValue()) {
             this.aimingPlayer = null;
          } else {
-            for (Player player : mc.level.players()) {
+            for (PlayerEntity player : mc.world.getPlayers()) {
                if (!(player instanceof BlinkingPlayer) && player != mc.player) {
-                  if (isAiming(player, mc.player.getYRot(), mc.player.getXRot())) {
+                  if (isAiming(player, mc.player.getYaw(), mc.player.getPitch())) {
                      if (this.aimTicks.containsKey(player)) {
                         this.aimTicks.put(player, this.aimTicks.get(player) + 1);
                      } else {
@@ -140,17 +140,17 @@ public class NameTags extends Module {
             return;
          }
 
-         this.spawnPosition = this.getSpawnPosition(mc.level);
+         this.spawnPosition = this.getSpawnPosition(mc.world);
       }
    }
 
    public static boolean isAiming(Entity targetEntity, float yaw, float pitch) {
-      Vec3 playerEye = new Vec3(mc.player.getX(), mc.player.getY() + (double)mc.player.getEyeHeight(), mc.player.getZ());
+      Vec3d playerEye = new Vec3d(mc.player.getX(), mc.player.getY() + (double)mc.player.getStandingEyeHeight(), mc.player.getZ());
       HitResult intercept = RotationUtils.getIntercept(targetEntity.getBoundingBox(), new Vector2f(yaw, pitch), playerEye, 150.0);
       if (intercept == null) {
          return false;
       } else {
-         return intercept.getType() != Type.ENTITY ? false : intercept.getLocation().distanceTo(playerEye) < 150.0;
+         return intercept.getType() != Type.ENTITY ? false : intercept.getPos().distanceTo(playerEye) < 150.0;
       }
    }
 
@@ -202,9 +202,9 @@ public class NameTags extends Module {
          Vector2f position = this.compassPosition;
          float scale = Math.max(
                80.0F
-                  - Mth.sqrt(
+                  - MathHelper.sqrt(
                      (float)mc.player
-                        .distanceToSqr(
+                        .squaredDistanceTo(
                            (double)this.spawnPosition.getX() + 0.5, (double)this.spawnPosition.getY() + 1.75, (double)this.spawnPosition.getZ() + 0.5
                         )
                   ),
@@ -231,9 +231,9 @@ public class NameTags extends Module {
       }
 
       for (Entry<Entity, Vector2f> entry : this.entityPositions.entrySet()) {
-         if (entry.getKey() != mc.player && entry.getKey() instanceof Player) {
-            Player living = (Player)entry.getKey();
-            e.getStack().pushPose();
+         if (entry.getKey() != mc.player && entry.getKey() instanceof PlayerEntity) {
+            PlayerEntity living = (PlayerEntity)entry.getKey();
+            e.getStack().push();
             float hp = living.getHealth();
             if (hp > 20.0F) {
                living.setHealth(20.0F);
@@ -287,13 +287,13 @@ public class NameTags extends Module {
             Fonts.harmony.setAlpha(0.8F);
             Fonts.harmony.render(e.getStack(), text, (double)(position.x - width / 2.0F), (double)(position.y - 1.0F), Color.WHITE, true, (double)scale);
             Fonts.harmony.setAlpha(1.0F);
-            e.getStack().popPose();
+            e.getStack().pop();
          }
       }
 
       if (this.shared.getCurrentValue()) {
          for (NameTags.NameTagData data : this.sharedPositions) {
-            e.getStack().pushPose();
+            e.getStack().push();
             Vector2f positionx = data.getRender();
             String textx = "§aShared§f | " + data.getDisplayName();
             String displayName = data.getDisplayName();
@@ -329,7 +329,7 @@ public class NameTags extends Module {
             Fonts.harmony.setAlpha(0.8F);
             Fonts.harmony.render(e.getStack(), textx, (double)(positionx.x - width / 2.0F), (double)(positionx.y - 1.0F), Color.WHITE, true, (double)scale);
             Fonts.harmony.setAlpha(1.0F);
-            e.getStack().popPose();
+            e.getStack().pop();
          }
       }
    }
@@ -341,7 +341,7 @@ public class NameTags extends Module {
       return displayName;
    }
 
-   private String formatPlayerName(Player player) {
+   private String formatPlayerName(PlayerEntity player) {
       String playerName = player.getName().getString();
       if (ChatClient.isIrcUser(playerName)) {
          return awa.qwq.ovo.Naven.modules.impl.misc.IRC.ircStatusPrefix(playerName) + playerName + "\u00a7f";
@@ -353,11 +353,11 @@ public class NameTags extends Module {
       this.entityPositions.clear();
       this.sharedPositions.clear();
 
-      for (Entity entity : mc.level.entitiesForRendering()) {
-         if (entity instanceof Player && !entity.getName().getString().startsWith("CIT-")) {
-            double x = MathUtils.interpolate(renderPartialTicks, entity.xo, entity.getX());
-            double y = MathUtils.interpolate(renderPartialTicks, entity.yo, entity.getY()) + (double)entity.getBbHeight() + 0.5;
-            double z = MathUtils.interpolate(renderPartialTicks, entity.zo, entity.getZ());
+      for (Entity entity : mc.world.getEntities()) {
+         if (entity instanceof PlayerEntity && !entity.getName().getString().startsWith("CIT-")) {
+            double x = MathUtils.interpolate(renderPartialTicks, entity.prevX, entity.getX());
+            double y = MathUtils.interpolate(renderPartialTicks, entity.prevY, entity.getY()) + (double)entity.getHeight() + 0.5;
+            double z = MathUtils.interpolate(renderPartialTicks, entity.prevZ, entity.getZ());
             Vector2f vector = ProjectionUtils.project(x, y, z, renderPartialTicks);
             vector.setY(vector.getY() - 2.0F);
             this.entityPositions.put(entity, vector);
@@ -369,7 +369,7 @@ public class NameTags extends Module {
 
          for (SharedESPData value : dataMap.values()) {
             double x = value.getPosX();
-            double y = value.getPosY() + (double)mc.player.getBbHeight() + 0.5;
+            double y = value.getPosY() + (double)mc.player.getHeight() + 0.5;
             double z = value.getPosZ();
             Vector2f vector = ProjectionUtils.project(x, y, z, renderPartialTicks);
             vector.setY(vector.getY() - 2.0F);
@@ -380,7 +380,7 @@ public class NameTags extends Module {
                + (value.getAbsorption() > 0.0 ? "+" + Math.round(value.getAbsorption()) : "")
                + "HP";
             this.sharedPositions
-               .add(new NameTags.NameTagData(displayName, value.getHealth(), value.getMaxHealth(), value.getAbsorption(), new Vec3(x, y, z), vector));
+               .add(new NameTags.NameTagData(displayName, value.getHealth(), value.getMaxHealth(), value.getAbsorption(), new Vec3d(x, y, z), vector));
          }
       }
    }
@@ -390,7 +390,7 @@ public class NameTags extends Module {
       private final double health;
       private final double maxHealth;
       private final double absorption;
-      private final Vec3 position;
+      private final Vec3d position;
       private final Vector2f render;
 
       public String getDisplayName() {
@@ -409,7 +409,7 @@ public class NameTags extends Module {
          return this.absorption;
       }
 
-      public Vec3 getPosition() {
+      public Vec3d getPosition() {
          return this.position;
       }
 
@@ -489,7 +489,7 @@ public class NameTags extends Module {
             + ")";
       }
 
-      public NameTagData(String displayName, double health, double maxHealth, double absorption, Vec3 position, Vector2f render) {
+      public NameTagData(String displayName, double health, double maxHealth, double absorption, Vec3d position, Vector2f render) {
          this.displayName = displayName;
          this.health = health;
          this.maxHealth = maxHealth;

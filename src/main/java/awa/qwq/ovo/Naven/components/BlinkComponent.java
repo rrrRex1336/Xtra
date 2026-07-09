@@ -1,13 +1,12 @@
 package awa.qwq.ovo.Naven.components;
 
 import awa.qwq.ovo.Naven.utils.NetworkUtils;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-
 import java.util.HashSet;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 
 public class BlinkComponent {
     private static final Queue<Packet<?>> packets = new ConcurrentLinkedQueue<>();
@@ -15,13 +14,13 @@ public class BlinkComponent {
 
     // 白名单包类型
     private static final Set<Class<?>> whitelist = new HashSet<Class<?>>() {{
-        add(net.minecraft.network.protocol.handshake.ClientIntentionPacket.class);
-        add(net.minecraft.network.protocol.status.ServerboundStatusRequestPacket.class);
-        add(net.minecraft.network.protocol.status.ServerboundPingRequestPacket.class);
-        add(net.minecraft.network.protocol.login.ServerboundHelloPacket.class);
-        add(net.minecraft.network.protocol.login.ServerboundKeyPacket.class);
-        add(net.minecraft.network.protocol.game.ServerboundUseItemPacket.class);
-        add(net.minecraft.network.protocol.game.ServerboundUseItemOnPacket.class);
+        add(net.minecraft.network.packet.c2s.handshake.HandshakeC2SPacket.class);
+        add(net.minecraft.network.packet.c2s.query.QueryRequestC2SPacket.class);
+        add(net.minecraft.network.packet.c2s.query.QueryPingC2SPacket.class);
+        add(net.minecraft.network.packet.c2s.login.LoginHelloC2SPacket.class);
+        add(net.minecraft.network.packet.c2s.login.LoginKeyC2SPacket.class);
+        add(net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket.class);
+        add(net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket.class);
     }};
 
     public static void startBlink() {
@@ -47,7 +46,7 @@ public class BlinkComponent {
             }
 
             // 只拦截移动包
-            if (packet instanceof ServerboundMovePlayerPacket) {
+            if (packet instanceof PlayerMoveC2SPacket) {
                 packets.add(packet);
             } else {
                 // 其他包直接发送
@@ -79,6 +78,6 @@ public class BlinkComponent {
     }
 
     public static long getBlinkTicks() {
-        return packets.stream().filter(packet -> packet instanceof ServerboundMovePlayerPacket).count();
+        return packets.stream().filter(packet -> packet instanceof PlayerMoveC2SPacket).count();
     }
 }

@@ -6,12 +6,12 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.animal.Animal;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.passive.AnimalEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.projectile.ArrowEntity;
 
 @ModuleInfo(
    name = "Glow",
@@ -29,14 +29,14 @@ public class Glow extends Module {
       Glow module = (Glow)Naven.getInstance().getModuleManager().getModule(Glow.class);
       if (!module.isEnabled()) {
          return false;
-      } else if (entity instanceof Player && module.players.getCurrentValue()) {
+      } else if (entity instanceof PlayerEntity && module.players.getCurrentValue()) {
          return true;
       } else if (entity instanceof ItemEntity && module.items.getCurrentValue()) {
          return true;
-      } else if (entity instanceof Mob && module.mobs.getCurrentValue()) {
+      } else if (entity instanceof MobEntity && module.mobs.getCurrentValue()) {
          return true;
       } else {
-         return entity instanceof Animal && module.animals.getCurrentValue() ? true : entity instanceof Arrow && module.arrows.getCurrentValue();
+         return entity instanceof AnimalEntity && module.animals.getCurrentValue() ? true : entity instanceof ArrowEntity && module.arrows.getCurrentValue();
       }
    }
 }

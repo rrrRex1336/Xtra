@@ -8,11 +8,11 @@ import awa.qwq.ovo.Naven.events.impl.EventRespawn;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.network.protocol.common.ClientboundPingPacket;
-import net.minecraft.network.protocol.game.ClientboundSetHealthPacket;
-import net.minecraft.network.protocol.game.ClientboundSetScorePacket;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.network.packet.s2c.common.CommonPingS2CPacket;
+import net.minecraft.network.packet.s2c.play.HealthUpdateS2CPacket;
+import net.minecraft.network.packet.s2c.play.ScoreboardScoreUpdateS2CPacket;
 
 public class ServerUtils {
    private static int grimTransactionCount = 0;
@@ -21,24 +21,24 @@ public class ServerUtils {
    @EventTarget(0)
    public void onAllPackets(EventGlobalPacket e) {
       if (e.getType() == EventType.RECEIVE) {
-         if (e.getPacket() instanceof ClientboundPingPacket) {
+         if (e.getPacket() instanceof CommonPingS2CPacket) {
             grimTransactionCount++;
          }
 
-         if (e.getPacket() instanceof ClientboundSetScorePacket packet
-                 && Minecraft.getInstance().level != null
+         if (e.getPacket() instanceof ScoreboardScoreUpdateS2CPacket packet
+                 && MinecraftClient.getInstance().world != null
                  && ("belowHealth".equals(packet.objectiveName()) || "health".equals(packet.objectiveName()))
-                 && !packet.owner().equals(Minecraft.getInstance().player.getGameProfile().getName())) {
+                 && !packet.scoreHolderName().equals(MinecraftClient.getInstance().player.getGameProfile().getName())) {
 
-            if (!HEALTHS.containsKey(packet.owner())) {
+            if (!HEALTHS.containsKey(packet.scoreHolderName())) {
                AtomicInteger atomic = new AtomicInteger();
-               HEALTHS.put(packet.owner(), atomic);
+               HEALTHS.put(packet.scoreHolderName(), atomic);
             }
 
-            HEALTHS.get(packet.owner()).set(packet.score());
+            HEALTHS.get(packet.scoreHolderName()).set(packet.score());
          }
 
-         if (e.getPacket() instanceof ClientboundSetHealthPacket packet && packet.getHealth() > 20.0F) {
+         if (e.getPacket() instanceof HealthUpdateS2CPacket packet && packet.getHealth() > 20.0F) {
             e.setCancelled(true);
          }
       }
@@ -46,8 +46,8 @@ public class ServerUtils {
 
    @EventTarget
    public void onUpdate(EventRender2D event) {
-      for (AbstractClientPlayer player : Minecraft.getInstance().level.players()) {
-         if (player != Minecraft.getInstance().player && HEALTHS.containsKey(player.getName().getString())) {
+      for (AbstractClientPlayerEntity player : MinecraftClient.getInstance().world.getPlayers()) {
+         if (player != MinecraftClient.getInstance().player && HEALTHS.containsKey(player.getName().getString())) {
             player.setHealth((float)Math.max(1, HEALTHS.get(player.getName().getString()).get()));
          }
       }

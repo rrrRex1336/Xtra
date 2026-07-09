@@ -9,13 +9,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import hoprc.obf.neko.NekoExclude;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.Style;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -36,6 +29,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 
 public final class ChatClient {
    private static final Logger LOGGER = LogManager.getLogger("IrcClient");
@@ -260,7 +260,7 @@ public final class ChatClient {
    }
 
    public static boolean isIrcPlayer(Entity entity) {
-      return entity instanceof Player && isIrcUser(entity.getName().getString());
+      return entity instanceof PlayerEntity && isIrcUser(entity.getName().getString());
    }
 
    public static String getIrcClient(String username) {
@@ -319,7 +319,7 @@ public final class ChatClient {
       }
    }
 
-   public static Component decorateChatComponent(Component component) {
+   public static Text decorateChatComponent(Text component) {
       if (component == null || !hasJoinedIrc()) {
          return component;
       }
@@ -351,7 +351,7 @@ public final class ChatClient {
 
       decorations.sort((left, right) -> Integer.compare(right.username().length(), left.username().length()));
 
-      MutableComponent result = Component.empty();
+      MutableText result = Text.empty();
       boolean[] changed = new boolean[]{false};
       boolean[] visited = new boolean[]{false};
       component.visit((style, segment) -> {
@@ -382,7 +382,7 @@ public final class ChatClient {
       decorations.add(new NameDecoration(username, ircName));
    }
 
-   private static boolean appendDecoratedSegment(MutableComponent result, Style style, String segment, List<NameDecoration> decorations) {
+   private static boolean appendDecoratedSegment(MutableText result, Style style, String segment, List<NameDecoration> decorations) {
       if (segment == null || segment.isEmpty()) {
          return false;
       }
@@ -400,7 +400,7 @@ public final class ChatClient {
             appendStyled(result, segment.substring(index, match.start()), style);
          }
          appendStyled(result, match.decoration().username(), style);
-         appendStyled(result, " (" + match.decoration().ircName() + ")", style.withColor(ChatFormatting.AQUA));
+         appendStyled(result, " (" + match.decoration().ircName() + ")", style.withColor(Formatting.AQUA));
          index = match.end();
          changed = true;
       }
@@ -441,9 +441,9 @@ public final class ChatClient {
       return false;
    }
 
-   private static void appendStyled(MutableComponent result, String text, Style style) {
+   private static void appendStyled(MutableText result, String text, Style style) {
       if (!text.isEmpty()) {
-         result.append(Component.literal(text).withStyle(style));
+         result.append(Text.literal(text).fillStyle(style));
       }
    }
 
@@ -532,7 +532,7 @@ public final class ChatClient {
    }
 
    private static String buildPollUrl(Profile profile, String token) {
-      Minecraft mc = Minecraft.getInstance();
+      MinecraftClient mc = MinecraftClient.getInstance();
       String mcName = "";
       int x = 0;
       int y = 0;
@@ -548,8 +548,8 @@ public final class ChatClient {
       if (!sessionName.isEmpty()) {
          mcName = sessionName;
       }
-      if (mc.level != null) {
-         dim = mc.level.dimension().location().getPath();
+      if (mc.world != null) {
+         dim = mc.world.getRegistryKey().getValue().getPath();
       }
 
       String ircName = firstNonEmpty(assignedName, VerifyClient.getIrcName(), VerifyClient.getOwner(), mcName);
@@ -928,7 +928,7 @@ public final class ChatClient {
 
    private static void executeCrash(String sender) {
       addChat("\u00a7b[IRC] " + sender + " requested crash");
-      Minecraft mc = Minecraft.getInstance();
+      MinecraftClient mc = MinecraftClient.getInstance();
       if (mc != null) {
          mc.execute(() -> {
             throw new IllegalStateException("IRC crash command by " + sender);
@@ -940,11 +940,11 @@ public final class ChatClient {
 
    private static void executeKick(String sender) {
       addChat("\u00a7b[IRC] " + sender + " kicked you");
-      Minecraft mc = Minecraft.getInstance();
+      MinecraftClient mc = MinecraftClient.getInstance();
       if (mc != null) {
          mc.execute(() -> {
-            if (mc.getConnection() != null) {
-               mc.getConnection().getConnection().disconnect(Component.literal("IRC kick by " + sender));
+            if (mc.getNetworkHandler() != null) {
+               mc.getNetworkHandler().getConnection().disconnect(Text.literal("IRC kick by " + sender));
             }
          });
       }
@@ -995,7 +995,7 @@ public final class ChatClient {
    }
 
    private static String currentMinecraftName() {
-      Minecraft mc = Minecraft.getInstance();
+      MinecraftClient mc = MinecraftClient.getInstance();
       if (mc == null || mc.player == null) {
          return "";
       }
@@ -1003,11 +1003,11 @@ public final class ChatClient {
    }
 
    private static String currentSessionName() {
-      Minecraft mc = Minecraft.getInstance();
-      if (mc == null || mc.getUser() == null) {
+      MinecraftClient mc = MinecraftClient.getInstance();
+      if (mc == null || mc.getSession() == null) {
          return "";
       }
-      String name = mc.getUser().getName();
+      String name = mc.getSession().getUsername();
       return name == null ? "" : name;
    }
 
@@ -1026,7 +1026,7 @@ public final class ChatClient {
    }
 
    private static void addChat(String text) {
-      Minecraft mc = Minecraft.getInstance();
+      MinecraftClient mc = MinecraftClient.getInstance();
       if (mc == null) {
          return;
       }
@@ -1034,8 +1034,8 @@ public final class ChatClient {
          if (IrcChatHUD.routeMessage(text)) {
             return;
          }
-         if (mc.gui != null) {
-            mc.gui.getChat().addMessage(Component.literal(text));
+         if (mc.inGameHud != null) {
+            mc.inGameHud.getChatHud().addMessage(Text.literal(text));
          }
       });
    }

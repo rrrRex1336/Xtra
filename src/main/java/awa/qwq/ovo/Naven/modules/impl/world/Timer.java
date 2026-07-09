@@ -79,7 +79,7 @@ public class Timer extends Module {
     @EventTarget
     public void onPostTick(EventRunTicks e) {
         if (e.getType() != EventType.POST) return;
-        if (mc.player == null || mc.level == null) return;
+        if (mc.player == null || mc.world == null) return;
 
         long now = System.nanoTime();
         double dt = (now - lastUpdateNs) / 1_000_000_000.0;
@@ -129,7 +129,7 @@ public class Timer extends Module {
 
         if (active && progress > 0) {
             if (pulse.getCurrentValue()) {
-                int tick = mc.player.tickCount % 4;
+                int tick = mc.player.age % 4;
                 if (tick == 0) {
                     return 0.8f;
                 }

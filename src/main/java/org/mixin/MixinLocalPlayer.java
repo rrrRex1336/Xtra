@@ -5,19 +5,19 @@ import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.*;
 import awa.qwq.ovo.Naven.utils.SkipTicks;
 import com.mojang.authlib.GameProfile;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Pos;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.PosRot;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Rot;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.StatusOnly;
-import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket.Action;
-import net.minecraft.util.Mth;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.world.ClientWorld;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket.Mode;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.Full;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.LookAndOnGround;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.OnGroundOnly;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.PositionAndOnGround;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -25,46 +25,46 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.At.Shift;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin({LocalPlayer.class})
-public abstract class MixinLocalPlayer extends AbstractClientPlayer {
+@Mixin({ClientPlayerEntity.class})
+public abstract class MixinLocalPlayer extends AbstractClientPlayerEntity {
    @Shadow
-   private boolean wasSprinting;
+   private boolean lastSprinting;
    @Shadow
    @Final
-   public ClientPacketListener connection;
+   public ClientPlayNetworkHandler networkHandler;
    @Shadow
-   private boolean wasShiftKeyDown;
+   private boolean lastSneaking;
    @Shadow
-   private double xLast;
+   private double lastX;
    @Shadow
-   private double yLast1;
+   private double lastBaseY;
    @Shadow
-   private double zLast;
+   private double lastZ;
    @Shadow
-   private float yRotLast;
+   private float lastYaw;
    @Shadow
-   private float xRotLast;
+   private float lastPitch;
    @Shadow
-   private int positionReminder;
+   private int ticksSinceLastPositionPacketSent;
    @Shadow
    private boolean lastOnGround;
    @Shadow
    private boolean autoJumpEnabled;
    @Shadow
    @Final
-   protected Minecraft minecraft;
+   protected MinecraftClient client;
 
    @Shadow
-   protected abstract boolean isControlledCamera();
+   protected abstract boolean isCamera();
 
    @Shadow
-   protected abstract void sendIsSprintingIfNeeded();
+   protected abstract void sendSprintingPacket();
 
-   public MixinLocalPlayer(ClientLevel pClientLevel, GameProfile pGameProfile) {
+   public MixinLocalPlayer(ClientWorld pClientLevel, GameProfile pGameProfile) {
       super(pClientLevel, pGameProfile);
    }
 
-   @Inject(method = "aiStep", at = @At("HEAD"))
+   @Inject(method = "tickMovement", at = @At("HEAD"))
    public void injectUpdateEvent(CallbackInfo ci) {
       Naven.getInstance().getEventManager().call(new EventUpdate());
    }
@@ -73,7 +73,7 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
            method = {"tick"},
            at = {@At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/client/player/AbstractClientPlayer;tick()V",
+                   target = "Lnet/minecraft/client/network/AbstractClientPlayerEntity;tick()V",
                    shift = Shift.BEFORE
            )}
    )
@@ -86,58 +86,58 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
     * @reason b
     */
    @Overwrite
-   private void sendPosition() {
-      EventMotion eventPre = new EventMotion(EventType.PRE, this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot(), this.onGround());
+   private void sendMovementPackets() {
+      EventMotion eventPre = new EventMotion(EventType.PRE, this.getX(), this.getY(), this.getZ(), this.getYaw(), this.getPitch(), this.isOnGround());
       Naven.getInstance().getEventManager().call(eventPre);
       if (eventPre.isCancelled()) {
          Naven.getInstance().getEventManager().call(new EventMotion(EventType.POST, eventPre.getYaw(), eventPre.getPitch()));
       } else {
-         this.sendIsSprintingIfNeeded();
-         boolean flag3 = this.isShiftKeyDown();
-         if (flag3 != this.wasShiftKeyDown) {
-            Action serverboundplayercommandpacket$action1 = flag3 ? Action.PRESS_SHIFT_KEY : Action.RELEASE_SHIFT_KEY;
-            this.connection.send(new ServerboundPlayerCommandPacket(this, serverboundplayercommandpacket$action1));
-            this.wasShiftKeyDown = flag3;
+         this.sendSprintingPacket();
+         boolean flag3 = this.isSneaking();
+         if (flag3 != this.lastSneaking) {
+            Mode serverboundplayercommandpacket$action1 = flag3 ? Mode.PRESS_SHIFT_KEY : Mode.RELEASE_SHIFT_KEY;
+            this.networkHandler.sendPacket(new ClientCommandC2SPacket(this, serverboundplayercommandpacket$action1));
+            this.lastSneaking = flag3;
          }
 
-         if (this.isControlledCamera()) {
-            double d4 = eventPre.getX() - this.xLast;
-            double d0 = eventPre.getY() - this.yLast1;
-            double d1 = eventPre.getZ() - this.zLast;
-            double d2 = (double) (eventPre.getYaw() - this.yRotLast);
-            double d3 = (double) (eventPre.getPitch() - this.xRotLast);
-            this.positionReminder++;
-            boolean flag1 = Mth.lengthSquared(d4, d0, d1) > Mth.square(2.0E-4) || this.positionReminder >= 20;
+         if (this.isCamera()) {
+            double d4 = eventPre.getX() - this.lastX;
+            double d0 = eventPre.getY() - this.lastBaseY;
+            double d1 = eventPre.getZ() - this.lastZ;
+            double d2 = (double) (eventPre.getYaw() - this.lastYaw);
+            double d3 = (double) (eventPre.getPitch() - this.lastPitch);
+            this.ticksSinceLastPositionPacketSent++;
+            boolean flag1 = MathHelper.squaredMagnitude(d4, d0, d1) > MathHelper.square(2.0E-4) || this.ticksSinceLastPositionPacketSent >= 20;
             boolean flag2 = d2 != 0.0 || d3 != 0.0;
-            if (this.isPassenger()) {
-               Vec3 vec3 = this.getDeltaMovement();
-               this.connection.send(new PosRot(vec3.x, -999.0, vec3.z, eventPre.getYaw(), eventPre.getPitch(), eventPre.isOnGround()));
+            if (this.hasVehicle()) {
+               Vec3d vec3 = this.getVelocity();
+               this.networkHandler.sendPacket(new Full(vec3.x, -999.0, vec3.z, eventPre.getYaw(), eventPre.getPitch(), eventPre.isOnGround()));
                flag1 = false;
             } else if (flag1 && flag2) {
-               this.connection
-                       .send(new PosRot(eventPre.getX(), eventPre.getY(), eventPre.getZ(), eventPre.getYaw(), eventPre.getPitch(), eventPre.isOnGround()));
+               this.networkHandler
+                       .sendPacket(new Full(eventPre.getX(), eventPre.getY(), eventPre.getZ(), eventPre.getYaw(), eventPre.getPitch(), eventPre.isOnGround()));
             } else if (flag1) {
-               this.connection.send(new Pos(eventPre.getX(), eventPre.getY(), eventPre.getZ(), eventPre.isOnGround()));
+               this.networkHandler.sendPacket(new PositionAndOnGround(eventPre.getX(), eventPre.getY(), eventPre.getZ(), eventPre.isOnGround()));
             } else if (flag2) {
-               this.connection.send(new Rot(eventPre.getYaw(), eventPre.getPitch(), eventPre.isOnGround()));
+               this.networkHandler.sendPacket(new LookAndOnGround(eventPre.getYaw(), eventPre.getPitch(), eventPre.isOnGround()));
             } else if (this.lastOnGround != eventPre.isOnGround()) {
-               this.connection.send(new StatusOnly(eventPre.isOnGround()));
+               this.networkHandler.sendPacket(new OnGroundOnly(eventPre.isOnGround()));
             }
 
             if (flag1) {
-               this.xLast = eventPre.getX();
-               this.yLast1 = eventPre.getY();
-               this.zLast = eventPre.getZ();
-               this.positionReminder = 0;
+               this.lastX = eventPre.getX();
+               this.lastBaseY = eventPre.getY();
+               this.lastZ = eventPre.getZ();
+               this.ticksSinceLastPositionPacketSent = 0;
             }
 
             if (flag2) {
-               this.yRotLast = eventPre.getYaw();
-               this.xRotLast = eventPre.getPitch();
+               this.lastYaw = eventPre.getYaw();
+               this.lastPitch = eventPre.getPitch();
             }
 
             this.lastOnGround = eventPre.isOnGround();
-            this.autoJumpEnabled = (Boolean) this.minecraft.options.autoJump().get();
+            this.autoJumpEnabled = (Boolean) this.client.options.getAutoJump().getValue();
          }
 
          Naven.getInstance().getEventManager().call(new EventMotion(EventType.POST, eventPre.getYaw(), eventPre.getPitch()));
@@ -145,14 +145,14 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
    }
 
    @Redirect(
-           method = {"aiStep"},
+           method = {"tickMovement"},
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/client/player/LocalPlayer;isUsingItem()Z",
+                   target = "Lnet/minecraft/client/network/ClientPlayerEntity;isUsingItem()Z",
                    ordinal = 0
            )
    )
-   public boolean onSlowdown(LocalPlayer localPlayer) {
+   public boolean onSlowdown(ClientPlayerEntity localPlayer) {
       EventSlowdown event = new EventSlowdown(localPlayer.isUsingItem());
       Naven.getInstance().getEventManager().call(event);
       return event.isSlowdown();
@@ -161,9 +161,9 @@ public abstract class MixinLocalPlayer extends AbstractClientPlayer {
    @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
    private void hookTick(CallbackInfo ci) {
       if (SkipTicks.tick()) {
-         this.xo = this.getX();
-         this.yo = this.getY();
-         this.zo = this.getZ();
+         this.prevX = this.getX();
+         this.prevY = this.getY();
+         this.prevZ = this.getZ();
          ci.cancel();
       }
    }

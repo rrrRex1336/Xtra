@@ -9,8 +9,8 @@ import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.StringValue;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Text;
 
 @ModuleInfo(
    name = "ServerNameSpoof",
@@ -28,7 +28,7 @@ public class ScoreboardSpoof extends Module {
    public void onRenderScoreboard(EventRenderScoreboard e) {
       String string = e.getComponent().getString();
       if (string.contains("布吉岛")) {
-         MutableComponent textComponent = Component.literal("§d§l" + serverName.getStringValue());
+         MutableText textComponent = Text.literal("§d§l" + serverName.getStringValue());
          textComponent.setStyle(e.getComponent().getStyle());
          e.setComponent(textComponent);
       }
@@ -39,9 +39,9 @@ public class ScoreboardSpoof extends Module {
       String string = e.getComponent().getString();
       if (string.contains("布吉岛")) {
          if (e.getType() == EventType.HEADER) {
-            e.setComponent(Component.literal("§d§lNaven.tech"));
+            e.setComponent(Text.literal("§d§lNaven.tech"));
          } else if (e.getType() == EventType.FOOTER) {
-            e.setComponent(Component.literal(""));
+            e.setComponent(Text.literal(""));
          }
       }
    }

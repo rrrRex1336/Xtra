@@ -1,11 +1,11 @@
 package org.mixin.accessors;
 
-import com.mojang.blaze3d.systems.RenderSystem.AutoStorageIndexBuffer;
+import com.mojang.blaze3d.systems.RenderSystem.ShapeIndexBuffer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin({AutoStorageIndexBuffer.class})
+@Mixin({ShapeIndexBuffer.class})
 public interface ShapeIndexBufferAccessor {
-   @Accessor("name")
+   @Accessor("id")
    int getId();
 }

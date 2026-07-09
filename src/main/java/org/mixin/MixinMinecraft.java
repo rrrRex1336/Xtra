@@ -12,44 +12,30 @@ import awa.qwq.ovo.Naven.events.impl.EventShutdown;
 import awa.qwq.ovo.Naven.modules.impl.visual.Glow;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.utils.animation.AnimationUtils;
-import awa.qwq.ovo.Naven.utils.ISkipTicks;
-import com.mojang.blaze3d.platform.Window;
 import net.minecraft.SharedConstants;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.User;
-import net.minecraft.client.main.GameConfig;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.RunArgs;
+import net.minecraft.client.session.Session;
+import net.minecraft.client.util.Window;
+import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.Entity;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(Minecraft.class)
-public class MixinMinecraft implements ISkipTicks {
-
-   @Unique
-   public int skipTicks;
+@Mixin(MinecraftClient.class)
+public class MixinMinecraft {
 
    @Unique
    private long naven_Modern$lastFrame;
 
    @Shadow
    @Final
-   private User user;
+   private Session session;
 
    @Shadow @Final private Window window;
-
-   @Override
-   public void setSkipTicks(int ticks) {
-      this.skipTicks = ticks;
-   }
-
-   @Override
-   public int getSkipTicks() {
-      return this.skipTicks;
-   }
 
    @Unique
    private boolean naven_Modern$webLoginScreenShown = false;
@@ -59,7 +45,7 @@ public class MixinMinecraft implements ISkipTicks {
    }
 
    @Inject(method = "<init>", at = @At("RETURN"))
-   public void onInit(GameConfig gameConfig, CallbackInfo ci) {
+   public void onInit(RunArgs gameConfig, CallbackInfo ci) {
       System.setProperty("java.awt.headless", "false");
    }
 
@@ -68,22 +54,19 @@ public class MixinMinecraft implements ISkipTicks {
     * @reason
     */
    @Overwrite
-   public void updateTitle() {
-      String gameVersion = SharedConstants.getCurrentVersion().getName();
+   public void updateWindowTitle() {
+      String gameVersion = SharedConstants.getGameVersion().getName();
       this.window.setTitle("Naven Modern " + gameVersion + " " + Version.getVersion());
    }
 
    @Inject(method = "tick", at = @At("HEAD"))
    private void onTick(CallbackInfo ci) {
-      if (skipTicks > 0) {
-         skipTicks--;
-      }
       // Show web login screen once Minecraft is ready (overlay gone, title screen visible)
       if (!naven_Modern$webLoginScreenShown && VerifyClient.hasPendingWebLogin()) {
-         Minecraft mc = (Minecraft) (Object) this;
-         if (mc.getOverlay() == null && mc.screen != null) {
+         MinecraftClient mc = (MinecraftClient) (Object) this;
+         if (mc.getOverlay() == null && mc.currentScreen != null) {
             naven_Modern$webLoginScreenShown = true;
-            mc.setScreen(new WebLoginScreen(VerifyClient.getPendingWebLoginUrl(), mc.screen));
+            mc.setScreen(new WebLoginScreen(VerifyClient.getPendingWebLoginUrl(), mc.currentScreen));
          }
       }
    }
@@ -95,8 +78,8 @@ public class MixinMinecraft implements ISkipTicks {
       }
    }
 
-   @Inject(method = "setLevel", at = @At("HEAD"))
-   private void onSetLevel(CallbackInfo ci) {
+   @Inject(method = "setWorld", at = @At("HEAD"))
+   private void onSetLevel(ClientWorld world, CallbackInfo ci) {
       if (Naven.getInstance() != null && Naven.getInstance().isReady()) {
          Naven.getInstance().getEventManager().call(new EventDisconnect());
       }
@@ -104,7 +87,7 @@ public class MixinMinecraft implements ISkipTicks {
 
    @Inject(method = "tick", at = @At("HEAD"))
    private void tickPre(CallbackInfo ci) {
-      Naven.mc = (Minecraft)(Object)this;
+      Naven.mc = (MinecraftClient)(Object)this;
       Module.refreshMinecraft();
       if (Naven.getInstance() == null) {
          Naven.modRegister();
@@ -123,41 +106,26 @@ public class MixinMinecraft implements ISkipTicks {
       }
    }
 
-   @Inject(method = "shouldEntityAppearGlowing", at = @At("RETURN"), cancellable = true)
+   @Inject(method = "hasOutline", at = @At("RETURN"), cancellable = true)
    private void shouldEntityAppearGlowing(Entity entity, CallbackInfoReturnable<Boolean> cir) {
       if (Glow.shouldGlow(entity)) {
          cir.setReturnValue(true);
       }
    }
 
-   @Inject(method = "runTick", at = @At("HEAD"))
-   private void runTick(CallbackInfo ci) {
+   @Inject(method = "render", at = @At("HEAD"))
+   private void runTick(boolean tick, CallbackInfo ci) {
       long currentTime = System.nanoTime() / 1000000L;
       int deltaTime = (int) (currentTime - this.naven_Modern$lastFrame);
       this.naven_Modern$lastFrame = currentTime;
       AnimationUtils.delta = deltaTime;
    }
 
-   @ModifyArg(
-           method = "runTick",
-           at = @At(
-                   value = "INVOKE",
-                   target = "Lnet/minecraft/client/renderer/GameRenderer;render(FJZ)V"
-           ),
-           index = 0
-   )
-   private float fixSkipTicks(float partialTick) {
-      if (this.skipTicks > 0) {
-         return 0.0F;
-      }
-      return partialTick;
-   }
-
    @Inject(
-           method = "handleKeybinds",
+           method = "handleInputEvents",
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/client/player/LocalPlayer;isUsingItem()Z",
+                   target = "Lnet/minecraft/client/network/ClientPlayerEntity;isUsingItem()Z",
                    ordinal = 0,
                    shift = At.Shift.BEFORE
            ),

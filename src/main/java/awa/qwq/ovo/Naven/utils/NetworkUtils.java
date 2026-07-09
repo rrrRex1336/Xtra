@@ -12,16 +12,26 @@ import awa.qwq.ovo.Naven.ui.notification.NotificationLevel;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket;
+import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInputC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
+import net.minecraft.network.packet.s2c.common.CommonPingS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityS2CPacket;
+import net.minecraft.network.packet.s2c.play.TeamS2CPacket;
+import net.minecraft.network.packet.s2c.play.WorldTimeUpdateS2CPacket;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.common.ClientboundPingPacket;
-import net.minecraft.network.protocol.game.*;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,61 +47,61 @@ public class NetworkUtils {
    }
 
    public static void sendPacket(Packet<?> packet) {
-      if (Minecraft.getInstance().getConnection() != null) {
-         Minecraft.getInstance().getConnection().send(packet);
+      if (MinecraftClient.getInstance().getNetworkHandler() != null) {
+         MinecraftClient.getInstance().getNetworkHandler().sendPacket(packet);
       }
    }
 
-   public static void sendUseItemPacket(InteractionHand hand, int sequence) {
-      sendPacket(new ServerboundUseItemPacket(hand, sequence));
+   public static void sendUseItemPacket(Hand hand, int sequence) {
+      sendPacket(new PlayerInteractItemC2SPacket(hand, sequence));
    }
 
-   public static void sendUseItemOnPacket(InteractionHand hand, BlockHitResult hitResult, int sequence) {
-      sendPacket(new ServerboundUseItemOnPacket(hand, hitResult, sequence));
+   public static void sendUseItemOnPacket(Hand hand, BlockHitResult hitResult, int sequence) {
+      sendPacket(new PlayerInteractBlockC2SPacket(hand, hitResult, sequence));
    }
 
-   public static void sendInteractPacket(BlockPos pos, Direction direction, InteractionHand hand) {
+   public static void sendInteractPacket(BlockPos pos, Direction direction, Hand hand) {
       BlockHitResult hitResult = new BlockHitResult(
-              new net.minecraft.world.phys.Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5),
+              new net.minecraft.util.math.Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5),
               direction, pos, false);
-      sendPacket(new ServerboundUseItemOnPacket(hand, hitResult, 0));
+      sendPacket(new PlayerInteractBlockC2SPacket(hand, hitResult, 0));
    }
 
-   public static void sendSwingPacket(InteractionHand hand) {
-      sendPacket(new ServerboundSwingPacket(hand));
+   public static void sendSwingPacket(Hand hand) {
+      sendPacket(new HandSwingC2SPacket(hand));
    }
 
    public static void sendMovePlayerPacket(double x, double y, double z, boolean onGround) {
-      sendPacket(new ServerboundMovePlayerPacket.Pos(x, y, z, onGround));
+      sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(x, y, z, onGround));
    }
 
    public static void sendMovePlayerPacket(double x, double y, double z, float yaw, float pitch, boolean onGround) {
-      sendPacket(new ServerboundMovePlayerPacket.PosRot(x, y, z, yaw, pitch, onGround));
+      sendPacket(new PlayerMoveC2SPacket.Full(x, y, z, yaw, pitch, onGround));
    }
 
-   public static void sendPlayerActionPacket(ServerboundPlayerActionPacket.Action action, BlockPos pos, Direction direction) {
-      sendPacket(new ServerboundPlayerActionPacket(action, pos, direction));
+   public static void sendPlayerActionPacket(PlayerActionC2SPacket.Action action, BlockPos pos, Direction direction) {
+      sendPacket(new PlayerActionC2SPacket(action, pos, direction));
    }
 
    public static void sendPlayerInputPacket(float xxa, float zza, boolean isJumping, boolean isSneaking) {
-      sendPacket(new ServerboundPlayerInputPacket(xxa, zza, isJumping, isSneaking));
+      sendPacket(new PlayerInputC2SPacket(xxa, zza, isJumping, isSneaking));
    }
 
-   public static void sendSetCreativeModeSlotPacket(int slot, net.minecraft.world.item.ItemStack item) {
-      sendPacket(new ServerboundSetCreativeModeSlotPacket(slot, item));
+   public static void sendSetCreativeModeSlotPacket(int slot, net.minecraft.item.ItemStack item) {
+      sendPacket(new CreativeInventoryActionC2SPacket(slot, item));
    }
 
    public static void sendHeldItemChangePacket(int slot) {
-      sendPacket(new ServerboundSetCarriedItemPacket(slot));
+      sendPacket(new UpdateSelectedSlotC2SPacket(slot));
    }
 
-   public static void sendPlayerCommandPacket(ServerboundPlayerCommandPacket.Action action) {
-      sendPacket(new ServerboundPlayerCommandPacket(Minecraft.getInstance().player, action));
+   public static void sendPlayerCommandPacket(ClientCommandC2SPacket.Mode action) {
+      sendPacket(new ClientCommandC2SPacket(MinecraftClient.getInstance().player, action));
    }
 
    public static void sendPacketNoEvent(Packet<?> packet) {
       passthroughsPackets.add(packet);
-      Minecraft.getInstance().getConnection().send(packet);
+      MinecraftClient.getInstance().getNetworkHandler().sendPacket(packet);
    }
 
    @EventTarget
@@ -121,10 +131,10 @@ public class NetworkUtils {
          isProcessing.set(true);
 
          // 原有的 ping 包计时逻辑
-         if (e.getPacket() instanceof ClientboundPingPacket
-                 || e.getPacket() instanceof ClientboundMoveEntityPacket
-                 || e.getPacket() instanceof ClientboundSetTimePacket
-                 || e.getPacket() instanceof ClientboundSetPlayerTeamPacket) {
+         if (e.getPacket() instanceof CommonPingS2CPacket
+                 || e.getPacket() instanceof EntityS2CPacket
+                 || e.getPacket() instanceof WorldTimeUpdateS2CPacket
+                 || e.getPacket() instanceof TeamS2CPacket) {
             timer.reset();
          }
 

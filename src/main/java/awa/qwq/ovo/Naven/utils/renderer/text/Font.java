@@ -5,8 +5,8 @@ import java.awt.Color;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.util.HashMap;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.texture.AbstractTexture;
+import net.minecraft.util.Formatting;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.stb.STBTTFontinfo;
 import org.lwjgl.stb.STBTTPackContext;
@@ -118,9 +118,9 @@ public class Font {
          int cp = string.charAt(i) - this.from;
          if (cp == 167 && i + 1 < string.length()) {
             char ctrl = string.charAt(i + 1);
-            ChatFormatting byCode = ChatFormatting.getByCode(ctrl);
+            Formatting byCode = Formatting.byCode(ctrl);
             if (byCode != null && byCode.isColor() && !shadow) {
-               currentColor = new Color(byCode.getColor());
+               currentColor = new Color(byCode.getColorValue());
             }
 
             i++;

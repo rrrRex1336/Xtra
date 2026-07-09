@@ -2,27 +2,27 @@ package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.events.impl.EventUpdateHeldItem;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.entity.layers.ItemInHandLayer;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.entity.feature.HeldItemFeatureRenderer;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.Hand;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-@Mixin({ItemInHandLayer.class})
+@Mixin({HeldItemFeatureRenderer.class})
 public class MixinItemInHandLayer {
    @Redirect(
-      method = {"render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/LivingEntity;FFFFFF)V"},
+      method = {"render(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumerProvider;ILnet/minecraft/entity/LivingEntity;FFFFFF)V"},
       at = @At(
          value = "INVOKE",
-         target = "Lnet/minecraft/world/entity/LivingEntity;getMainHandItem()Lnet/minecraft/world/item/ItemStack;"
+         target = "Lnet/minecraft/entity/LivingEntity;getMainHandStack()Lnet/minecraft/item/ItemStack;"
       )
    )
    private ItemStack hookMainHand(LivingEntity instance) {
-      EventUpdateHeldItem event = new EventUpdateHeldItem(InteractionHand.MAIN_HAND, instance.getMainHandItem());
-      if (instance == Minecraft.getInstance().player) {
+      EventUpdateHeldItem event = new EventUpdateHeldItem(Hand.MAIN_HAND, instance.getMainHandStack());
+      if (instance == MinecraftClient.getInstance().player) {
          Naven.getInstance().getEventManager().call(event);
       }
 
@@ -30,15 +30,15 @@ public class MixinItemInHandLayer {
    }
 
    @Redirect(
-      method = {"render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/LivingEntity;FFFFFF)V"},
+      method = {"render(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumerProvider;ILnet/minecraft/entity/LivingEntity;FFFFFF)V"},
       at = @At(
          value = "INVOKE",
-         target = "Lnet/minecraft/world/entity/LivingEntity;getOffhandItem()Lnet/minecraft/world/item/ItemStack;"
+         target = "Lnet/minecraft/entity/LivingEntity;getOffHandStack()Lnet/minecraft/item/ItemStack;"
       )
    )
    private ItemStack hookOffHand(LivingEntity instance) {
-      EventUpdateHeldItem event = new EventUpdateHeldItem(InteractionHand.OFF_HAND, instance.getOffhandItem());
-      if (instance == Minecraft.getInstance().player) {
+      EventUpdateHeldItem event = new EventUpdateHeldItem(Hand.OFF_HAND, instance.getOffHandStack());
+      if (instance == MinecraftClient.getInstance().player) {
          Naven.getInstance().getEventManager().call(event);
       }
 

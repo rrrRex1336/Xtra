@@ -9,9 +9,13 @@ import awa.qwq.ovo.Naven.modules.Category;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.modules.ModuleInfo;
 import awa.qwq.ovo.Naven.utils.NetworkUtils;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.common.ServerboundPongPacket;
-import net.minecraft.network.protocol.game.*;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.common.CommonPongC2SPacket;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
+import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
+
 
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -63,7 +67,7 @@ public class Flight extends Module {
         }
 
         NetworkUtils.sendPacketNoEvent(
-                new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.START_FALL_FLYING)
+                new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING)
         );
         shouldStartFallFlying = false;
         ticksUntilFallFlying = 0;
@@ -77,7 +81,7 @@ public class Flight extends Module {
 
         Packet<?> packet = event.getPacket();
         if (event.getType() == EventType.SEND) {
-            if (intercepting && packet instanceof ServerboundPongPacket) {
+            if (intercepting && packet instanceof CommonPongC2SPacket) {
                 event.setCancelled(true);
                 if (delayedPackets.isEmpty()) {
                     shouldStartFallFlying = true;
@@ -90,7 +94,7 @@ public class Flight extends Module {
                 return;
             }
 
-            if (packet instanceof ServerboundInteractPacket) {
+            if (packet instanceof PlayerInteractEntityC2SPacket) {
                 if (intercepting && !delayedPackets.isEmpty()) {
                     flushAndStopIntercepting();
                 }
@@ -99,14 +103,14 @@ public class Flight extends Module {
         }
 
         if (event.getType() == EventType.RECEIVE) {
-            if (packet instanceof ClientboundPlayerPositionPacket) {
+            if (packet instanceof PlayerPositionLookS2CPacket) {
                 if (intercepting && !delayedPackets.isEmpty()) {
                     flushAndStopIntercepting();
                 }
                 return;
             }
 
-            if (packet instanceof ClientboundSetEntityMotionPacket motionPacket && motionPacket.getId() == mc.player.getId()) {
+            if (packet instanceof EntityVelocityUpdateS2CPacket motionPacket && motionPacket.getId() == mc.player.getId()) {
                 if (intercepting || !delayedPackets.isEmpty()) {
                     return;
                 }

@@ -14,19 +14,19 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.enchantment.Enchantments;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.item.SwordItem;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.HitResult;
 import org.mixin.accessors.MultiPlayerGameModeAccessor;
-import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SwordItem;
-import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.phys.EntityHitResult;
-import net.minecraft.world.phys.HitResult;
 
 @ModuleInfo(
         name = "Criticals",
@@ -95,12 +95,12 @@ public class Criticals extends Module {
     public void onUpdate(EventUpdate event) {
 
         if (modeValue.isCurrentMode("Skip Ticks")) {
-            if (mc.player.onGround()) {
+            if (mc.player.isOnGround()) {
                 SkipTicks.dispatch();
                 return;
             }
             if (SkipTicks.isActive()) {
-                HitResult hit = mc.hitResult;
+                HitResult hit = mc.crosshairTarget;
                 boolean hasTarget = false;
                 if (hit != null && hit.getType() == HitResult.Type.ENTITY) {
                     Entity entity = ((EntityHitResult) hit).getEntity();
@@ -114,7 +114,7 @@ public class Criticals extends Module {
             }
         }
         if (modeValue.isCurrentMode("Legit")) {
-            if (mc.player.onGround()) {
+            if (mc.player.isOnGround()) {
                 offGroundTicks = 0;
                 attacking = false;
             } else {
@@ -150,7 +150,7 @@ public class Criticals extends Module {
         }
 
         if (modeValue.isCurrentMode("Skip Ticks")) {
-            if (mc.player.onGround() || mc.player.getDeltaMovement().y >= 0) {
+            if (mc.player.isOnGround() || mc.player.getVelocity().y >= 0) {
                 return;
             }
             if (!SkipTicks.isActive()) {
@@ -161,28 +161,28 @@ public class Criticals extends Module {
 
         if (modeValue.isCurrentMode("Packet")) {
             if (!event.isPost() && !runningAuraCriticalAttack && canAttemptHighVersionCritical(event.getTarget())) {
-                mc.player.resetAttackStrengthTicker();
+                mc.player.resetLastAttackedTicks();
             }
             return;
         }
 
         if (modeValue.isCurrentMode("Switch")) {
             if (event.isPost()) {
-                if (timer.delay(300.0) && this.previousSlot != -1 && mc.player.getInventory().selected != this.previousSlot) {
-                    mc.player.getInventory().selected = this.previousSlot;
-                    ((MultiPlayerGameModeAccessor) mc.gameMode).invokeEnsureHasSentCarriedItem();
+                if (timer.delay(300.0) && this.previousSlot != -1 && mc.player.getInventory().selectedSlot != this.previousSlot) {
+                    mc.player.getInventory().selectedSlot = this.previousSlot;
+                    ((MultiPlayerGameModeAccessor) mc.interactionManager).invokeEnsureHasSentCarriedItem();
                     this.previousSlot = -1;
                 }
-            } else if (this.overrideSwordSorting() && this.doTiger(mc.player.getMainHandItem())) {
-                if (EnchantmentHelper.getItemEnchantmentLevel(Enchantments.KNOCKBACK, mc.player.getMainHandItem()) == 0 && KillAura.targets.isEmpty()) {
+            } else if (this.overrideSwordSorting() && this.doTiger(mc.player.getMainHandStack())) {
+                if (EnchantmentHelper.getLevel(Enchantments.KNOCKBACK, mc.player.getMainHandStack()) == 0 && KillAura.targets.isEmpty()) {
                     for (int i = 36; i < 45; i++) {
-                        ItemStack curSlot = mc.player.inventoryMenu.getSlot(i).getItem();
-                        if (curSlot != mc.player.getMainHandItem()
+                        ItemStack curSlot = mc.player.playerScreenHandler.getSlot(i).getStack();
+                        if (curSlot != mc.player.getMainHandStack()
                                 && curSlot.getItem() instanceof SwordItem
                                 && curSlot.getItem() == Items.WOODEN_SWORD
-                                && EnchantmentHelper.getItemEnchantmentLevel(Enchantments.KNOCKBACK, curSlot) > 0) {
-                            mc.player.getInventory().selected = i - 36;
-                            ((MultiPlayerGameModeAccessor) mc.gameMode).invokeEnsureHasSentCarriedItem();
+                                && EnchantmentHelper.getLevel(Enchantments.KNOCKBACK, curSlot) > 0) {
+                            mc.player.getInventory().selectedSlot = i - 36;
+                            ((MultiPlayerGameModeAccessor) mc.interactionManager).invokeEnsureHasSentCarriedItem();
                             timer.reset();
                             return;
                         }
@@ -199,9 +199,9 @@ public class Criticals extends Module {
                 float worstScore = 0.0F;
 
                 for (int ix = 36; ix < 45; ix++) {
-                    ItemStack curSlot = mc.player.inventoryMenu.getSlot(ix).getItem();
-                    if (curSlot != mc.player.getMainHandItem() && !curSlot.isEmpty() && (ix - 36 == 8 || ix - 36 == 0) && this.doTiger(curSlot)) {
-                        float delta = (float) (InventoryUtils.getItemDamage(curSlot) - InventoryUtils.getItemDamage(mc.player.getMainHandItem()));
+                    ItemStack curSlot = mc.player.playerScreenHandler.getSlot(ix).getStack();
+                    if (curSlot != mc.player.getMainHandStack() && !curSlot.isEmpty() && (ix - 36 == 8 || ix - 36 == 0) && this.doTiger(curSlot)) {
+                        float delta = (float) (InventoryUtils.getItemDamage(curSlot) - InventoryUtils.getItemDamage(mc.player.getMainHandStack()));
                         if (delta > 0.0F && delta < score) {
                             choice = ix;
                             score = delta;
@@ -217,26 +217,26 @@ public class Criticals extends Module {
                 if (choice != -1) {
                     int resultSlot = choice - 36;
                     if (this.previousSlot == -1) {
-                        this.previousSlot = mc.player.getInventory().selected;
+                        this.previousSlot = mc.player.getInventory().selectedSlot;
                     }
 
                     if (this.packet.getCurrentValue()) {
-                        mc.getConnection().send(new ServerboundSetCarriedItemPacket(resultSlot));
+                        mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(resultSlot));
                     } else {
-                        mc.player.getInventory().selected = resultSlot;
-                        ((MultiPlayerGameModeAccessor) mc.gameMode).invokeEnsureHasSentCarriedItem();
+                        mc.player.getInventory().selectedSlot = resultSlot;
+                        ((MultiPlayerGameModeAccessor) mc.interactionManager).invokeEnsureHasSentCarriedItem();
                     }
                 } else if (worstChoice != -1) {
                     int resultSlotx = worstChoice - 36;
                     if (this.previousSlot == -1) {
-                        this.previousSlot = mc.player.getInventory().selected;
+                        this.previousSlot = mc.player.getInventory().selectedSlot;
                     }
 
                     if (this.packet.getCurrentValue()) {
-                        mc.getConnection().send(new ServerboundSetCarriedItemPacket(resultSlotx));
+                        mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(resultSlotx));
                     } else {
-                        mc.player.getInventory().selected = resultSlotx;
-                        ((MultiPlayerGameModeAccessor) mc.gameMode).invokeEnsureHasSentCarriedItem();
+                        mc.player.getInventory().selectedSlot = resultSlotx;
+                        ((MultiPlayerGameModeAccessor) mc.interactionManager).invokeEnsureHasSentCarriedItem();
                     }
                 }
 
@@ -249,8 +249,8 @@ public class Criticals extends Module {
 
     @EventTarget
     public void onMoveInput(EventMoveInput event) {
-        if (autoJump.getCurrentValue() && mc.player.onGround()) {
-            HitResult hit = mc.hitResult;
+        if (autoJump.getCurrentValue() && mc.player.isOnGround()) {
+            HitResult hit = mc.crosshairTarget;
             if (hit != null && hit.getType() == HitResult.Type.ENTITY) {
                 Entity entity = ((EntityHitResult) hit).getEntity();
                 if (entity instanceof LivingEntity && mc.player.distanceTo(entity) <= rangeValue.getCurrentValue()) {
@@ -275,7 +275,7 @@ public class Criticals extends Module {
     }
 
     private boolean shouldHandlePacketMode() {
-        return isEnabled() && modeValue.isCurrentMode("Packet") && mc.player != null && mc.level != null;
+        return isEnabled() && modeValue.isCurrentMode("Packet") && mc.player != null && mc.world != null;
     }
 
     private boolean shouldHoldAuraAttack0(Entity target) {
@@ -298,7 +298,7 @@ public class Criticals extends Module {
                 || !auraCriticalPrepared
                 || !isPendingAuraTarget(target)
                 || !canAttemptHighVersionCritical(target)
-                || mc.gameMode == null) {
+                || mc.interactionManager == null) {
             return false;
         }
 
@@ -306,14 +306,14 @@ public class Criticals extends Module {
         boolean restoreSprintKey = restoreSprintKeyAfterAuraCritical;
         runningAuraCriticalAttack = true;
         try {
-            mc.options.keySprint.setDown(false);
+            mc.options.sprintKey.setPressed(false);
             if (mc.player.isSprinting()) {
                 mc.player.setSprinting(false);
             }
-            mc.gameMode.attack(mc.player, target);
-            mc.player.swing(InteractionHand.MAIN_HAND);
-            mc.player.resetAttackStrengthTicker();
-            lastStackTick = mc.player.tickCount;
+            mc.interactionManager.attackEntity(mc.player, target);
+            mc.player.swingHand(Hand.MAIN_HAND);
+            mc.player.resetLastAttackedTicks();
+            lastStackTick = mc.player.age;
             lastStackTargetId = target.getId();
             packetDelay.reset();
         } finally {
@@ -323,7 +323,7 @@ public class Criticals extends Module {
                 mc.player.setSprinting(true);
             }
             if (restoreSprintKey) {
-                mc.options.keySprint.setDown(true);
+                mc.options.sprintKey.setPressed(true);
             }
         }
         return true;
@@ -336,7 +336,7 @@ public class Criticals extends Module {
                 || !canAttemptHighVersionCritical(target)) {
             return;
         }
-        if (mc.player.tickCount == lastStackTick && target.getId() == lastStackTargetId) {
+        if (mc.player.age == lastStackTick && target.getId() == lastStackTargetId) {
             return;
         }
 
@@ -344,7 +344,7 @@ public class Criticals extends Module {
         auraCriticalPrepared = false;
         restorePlayerSprintingAfterAuraCritical = false;
         restoreSprintKeyAfterAuraCritical = false;
-        lastStackTick = mc.player.tickCount;
+        lastStackTick = mc.player.age;
         lastStackTargetId = target.getId();
         packetDelay.reset();
     }
@@ -360,9 +360,9 @@ public class Criticals extends Module {
 
         if (!auraCriticalPrepared) {
             restorePlayerSprintingAfterAuraCritical = mc.player.isSprinting();
-            restoreSprintKeyAfterAuraCritical = mc.options.keySprint.isDown();
+            restoreSprintKeyAfterAuraCritical = mc.options.sprintKey.isPressed();
         }
-        mc.options.keySprint.setDown(false);
+        mc.options.sprintKey.setPressed(false);
         if (mc.player.isSprinting()) {
             mc.player.setSprinting(false);
         }
@@ -373,15 +373,15 @@ public class Criticals extends Module {
         if (!(target instanceof LivingEntity living) || mc.player == null) {
             return false;
         }
-        return !living.isDeadOrDying()
+        return !living.isDead()
                 && living.getHealth() > 0.0F
                 && mc.player.distanceTo(target) <= rangeValue.getCurrentValue()
                 && mc.player.fallDistance > 0.0F
-                && !mc.player.onGround()
-                && !mc.player.onClimbable()
-                && !mc.player.isInWater()
-                && !mc.player.hasEffect(MobEffects.BLINDNESS)
-                && !mc.player.isPassenger();
+                && !mc.player.isOnGround()
+                && !mc.player.isClimbing()
+                && !mc.player.isTouchingWater()
+                && !mc.player.hasStatusEffect(StatusEffects.BLINDNESS)
+                && !mc.player.hasVehicle();
     }
 
     private boolean isPendingAuraTarget(Entity target) {
@@ -403,10 +403,10 @@ public class Criticals extends Module {
             if (this.overrideSwordSorting()
                     && !KillAura.targets.isEmpty()
                     && !this.packet.getCurrentValue()
-                    && e.getHand() == InteractionHand.MAIN_HAND
+                    && e.getHand() == Hand.MAIN_HAND
                     && this.previousSlot != -1
                     && this.silent.getCurrentValue()) {
-                e.setItem(mc.player.getInventory().getItem(this.previousSlot));
+                e.setItem(mc.player.getInventory().getStack(this.previousSlot));
             }
         }
     }
@@ -416,12 +416,12 @@ public class Criticals extends Module {
         if (AlinkManager.onPacketReceive(event)) {
             event.setCancelled(true);
         }
-        if (this.packet.getCurrentValue() && event.getType() == EventType.SEND && event.getPacket() instanceof ServerboundSetCarriedItemPacket carriedItemPacket) {
-            int slot = carriedItemPacket.getSlot();
+        if (this.packet.getCurrentValue() && event.getType() == EventType.SEND && event.getPacket() instanceof UpdateSelectedSlotC2SPacket carriedItemPacket) {
+            int slot = carriedItemPacket.getSelectedSlot();
             if (slot == this.lastSlot && slot != -1) {
                 event.setCancelled(true);
             }
-            this.lastSlot = carriedItemPacket.getSlot();
+            this.lastSlot = carriedItemPacket.getSelectedSlot();
         }
     }
 

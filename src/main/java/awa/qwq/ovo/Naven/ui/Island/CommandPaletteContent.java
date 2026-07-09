@@ -9,20 +9,19 @@ import awa.qwq.ovo.Naven.modules.impl.visual.Island;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
-import com.mojang.blaze3d.platform.InputConstants;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-
-import java.awt.*;
+import java.awt.Color;
+import java.awt.Desktop;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.util.*;
-import java.util.List;
 import java.util.stream.Collectors;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.util.math.MatrixStack;
 
 public class CommandPaletteContent implements IslandContent {
-    private static final Minecraft mc = Minecraft.getInstance();
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
 
     private static CommandPaletteContent instance;
     private boolean eventsRegistered = false;
@@ -92,11 +91,11 @@ public class CommandPaletteContent implements IslandContent {
         }
 
         int key = e.getKey();
-        if (key == InputConstants.KEY_PERIOD) {
-            if (mc.screen != null && !(mc.screen instanceof DummyScreen)) {
+        if (key == InputUtil.GLFW_KEY_PERIOD) {
+            if (mc.currentScreen != null && !(mc.currentScreen instanceof DummyScreen)) {
                 return;
             }
-            if (mc.options != null && mc.options.keyChat.isDown()) {
+            if (mc.options != null && mc.options.chatKey.isPressed()) {
                 return;
             }
             
@@ -104,15 +103,15 @@ public class CommandPaletteContent implements IslandContent {
             if (isOpen) {
                 inputText = new StringBuilder();
                 updateSuggestions();
-                if (mc.mouseHandler != null && mc.mouseHandler.isMouseGrabbed()) {
-                    mc.mouseHandler.releaseMouse();
+                if (mc.mouse != null && mc.mouse.isCursorLocked()) {
+                    mc.mouse.unlockCursor();
                 }
-                if (mc.screen == null) {
+                if (mc.currentScreen == null) {
                     savedScreen = null;
                     mc.setScreen(new DummyScreen());
                 } else {
                     // mc.screen 应该是 DummyScreen，保存它以便之后恢复
-                    savedScreen = mc.screen;
+                    savedScreen = mc.currentScreen;
                 }
             } else {
                 suggestions.clear();
@@ -128,7 +127,7 @@ public class CommandPaletteContent implements IslandContent {
 
         if (isOpen) {
             if (isBindingMode) {
-                if (e.getKey() == InputConstants.KEY_ESCAPE) {
+                if (e.getKey() == InputUtil.GLFW_KEY_ESCAPE) {
                     onKeyForBinding(e);
                 }
                 e.setCancelled(true);
@@ -137,7 +136,7 @@ public class CommandPaletteContent implements IslandContent {
 
             e.setCancelled(true);
 
-            if (e.getKey() == InputConstants.KEY_ESCAPE) {
+            if (e.getKey() == InputUtil.GLFW_KEY_ESCAPE) {
                 isOpen = false;
                 inputText = new StringBuilder();
                 suggestions.clear();
@@ -150,7 +149,7 @@ public class CommandPaletteContent implements IslandContent {
                 return;
             }
 
-            if (e.getKey() == InputConstants.KEY_BACKSPACE) {
+            if (e.getKey() == InputUtil.GLFW_KEY_BACKSPACE) {
                 if (inputText.length() > 0) {
                     inputText.deleteCharAt(inputText.length() - 1);
                     updateSuggestions();
@@ -158,7 +157,7 @@ public class CommandPaletteContent implements IslandContent {
                 return;
             }
 
-            if (e.getKey() == InputConstants.KEY_TAB) {
+            if (e.getKey() == InputUtil.GLFW_KEY_TAB) {
                 if (!suggestions.isEmpty() && selectedSuggestionIndex < suggestions.size()) {
                     String selected = suggestions.get(selectedSuggestionIndex);
                     String command = selected.split(" - ")[0];
@@ -171,7 +170,7 @@ public class CommandPaletteContent implements IslandContent {
                 return;
             }
 
-            if (e.getKey() == InputConstants.KEY_RETURN || e.getKey() == InputConstants.KEY_NUMPADENTER) {
+            if (e.getKey() == InputUtil.GLFW_KEY_ENTER || e.getKey() == InputUtil.GLFW_KEY_KP_ENTER) {
                 long currentTime = System.currentTimeMillis();
                 if (currentTime - lastEnterPressTime < DOUBLE_ENTER_THRESHOLD) {
                     isOpen = false;
@@ -191,13 +190,13 @@ public class CommandPaletteContent implements IslandContent {
                 return;
             }
 
-            if (e.getKey() == InputConstants.KEY_UP) {
+            if (e.getKey() == InputUtil.GLFW_KEY_UP) {
                 if (!suggestions.isEmpty()) {
                     selectedSuggestionIndex = Math.max(0, selectedSuggestionIndex - 1);
                 }
                 return;
             }
-            if (e.getKey() == InputConstants.KEY_DOWN) {
+            if (e.getKey() == InputUtil.GLFW_KEY_DOWN) {
                 if (!suggestions.isEmpty()) {
                     selectedSuggestionIndex = Math.min(suggestions.size() - 1, selectedSuggestionIndex + 1);
                 }
@@ -210,13 +209,13 @@ public class CommandPaletteContent implements IslandContent {
                 return;
             }
             if (e.getKey() >= 65 && e.getKey() <= 90) {
-                boolean isShift = InputConstants.isKeyDown(mc.getWindow().getWindow(), InputConstants.KEY_LSHIFT) || 
-                                InputConstants.isKeyDown(mc.getWindow().getWindow(), InputConstants.KEY_RSHIFT);
+                boolean isShift = InputUtil.isKeyPressed(mc.getWindow().getHandle(), InputUtil.GLFW_KEY_LEFT_SHIFT) || 
+                                InputUtil.isKeyPressed(mc.getWindow().getHandle(), InputUtil.GLFW_KEY_RIGHT_SHIFT);
                 char letter = isShift ? (char)('A' + (e.getKey() - 65)) : (char)('a' + (e.getKey() - 65));
                 handleCharTyped(letter);
                 return;
             }
-            if (e.getKey() == InputConstants.KEY_SPACE) {
+            if (e.getKey() == InputUtil.GLFW_KEY_SPACE) {
                 handleCharTyped(' ');
             }
         }
@@ -417,7 +416,7 @@ public class CommandPaletteContent implements IslandContent {
     
     private boolean isBindingMode = false;
     private Module bindingModule = null;
-    private net.minecraft.client.gui.screens.Screen savedScreen = null;
+    private net.minecraft.client.gui.screen.Screen savedScreen = null;
 
     private static class KeyButton {
         float x, y, width, height;
@@ -444,13 +443,13 @@ public class CommandPaletteContent implements IslandContent {
         inputText = new StringBuilder("bind for " + module.getName());
         buildKeyboardLayout();
 
-        savedScreen = mc.screen;
-        if (mc.screen == null) {
+        savedScreen = mc.currentScreen;
+        if (mc.currentScreen == null) {
             mc.setScreen(new DummyScreen());
         }
 
-        if (mc.mouseHandler != null && mc.mouseHandler.isMouseGrabbed()) {
-            mc.mouseHandler.releaseMouse();
+        if (mc.mouse != null && mc.mouse.isCursorLocked()) {
+            mc.mouse.unlockCursor();
         }
     }
     
@@ -469,18 +468,18 @@ public class CommandPaletteContent implements IslandContent {
                 mc.setScreen(savedScreen);
             }
             savedScreen = null;
-        } else if (mc.screen instanceof DummyScreen) {
+        } else if (mc.currentScreen instanceof DummyScreen) {
             mc.setScreen(null);
         }
 
-        if (mc.screen == null && mc.mouseHandler != null && !mc.mouseHandler.isMouseGrabbed()) {
-            mc.mouseHandler.grabMouse();
+        if (mc.currentScreen == null && mc.mouse != null && !mc.mouse.isCursorLocked()) {
+            mc.mouse.lockCursor();
         }
     }
 
-    private static class DummyScreen extends net.minecraft.client.gui.screens.Screen {
+    private static class DummyScreen extends net.minecraft.client.gui.screen.Screen {
         public DummyScreen() {
-            super(net.minecraft.network.chat.Component.empty());
+            super(net.minecraft.text.Text.empty());
         }
         
         @Override
@@ -489,7 +488,7 @@ public class CommandPaletteContent implements IslandContent {
         }
         
         @Override
-        public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        public void render(DrawContext graphics, int mouseX, int mouseY, float partialTick) {
         }
         
         @Override
@@ -507,124 +506,124 @@ public class CommandPaletteContent implements IslandContent {
         float spacing = 2f;
         float rowY = startY;
 
-        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth, keyHeight, InputConstants.KEY_GRAVE, "~", false));
+        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_GRAVE_ACCENT, "~", false));
         float currentX = startX + keyWidth + spacing;
 
         for (int i = 1; i <= 10; i++) {
-            int keyCode = i == 10 ? InputConstants.KEY_0 : InputConstants.KEY_1 + (i - 1);
+            int keyCode = i == 10 ? InputUtil.GLFW_KEY_0 : InputUtil.GLFW_KEY_1 + (i - 1);
             String label = i == 10 ? "0" : String.valueOf(i);
             keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, keyCode, label, false));
             currentX += keyWidth + spacing;
         }
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputConstants.KEY_MINUS, "- =", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_MINUS, "- =", false));
         currentX += keyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputConstants.KEY_EQUALS, "+ =", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_EQUAL, "+ =", false));
         currentX += keyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 2.3f + spacing * 0.5f, keyHeight, InputConstants.KEY_BACKSPACE, "Backspace", true));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 2.3f + spacing * 0.5f, keyHeight, InputUtil.GLFW_KEY_BACKSPACE, "Backspace", true));
         
         rowY += keyHeight + spacing;
 
-        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth * 1.5f + spacing * 0.5f, keyHeight, InputConstants.KEY_TAB, "Tab", true));
+        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth * 1.5f + spacing * 0.5f, keyHeight, InputUtil.GLFW_KEY_TAB, "Tab", true));
         currentX = startX + keyWidth * 1.5f + spacing * 0.5f + spacing;
 
         String[] letters1 = {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"};
-        int[] keyCodes1 = {InputConstants.KEY_Q, InputConstants.KEY_W, InputConstants.KEY_E, InputConstants.KEY_R, 
-                          InputConstants.KEY_T, InputConstants.KEY_Y, InputConstants.KEY_U, InputConstants.KEY_I, 
-                          InputConstants.KEY_O, InputConstants.KEY_P};
+        int[] keyCodes1 = {InputUtil.GLFW_KEY_Q, InputUtil.GLFW_KEY_W, InputUtil.GLFW_KEY_E, InputUtil.GLFW_KEY_R, 
+                          InputUtil.GLFW_KEY_T, InputUtil.GLFW_KEY_Y, InputUtil.GLFW_KEY_U, InputUtil.GLFW_KEY_I, 
+                          InputUtil.GLFW_KEY_O, InputUtil.GLFW_KEY_P};
         for (int i = 0; i < 10; i++) {
             keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, keyCodes1[i], letters1[i], false));
             currentX += keyWidth + spacing;
         }
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputConstants.KEY_LBRACKET, "[ {", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_LEFT_BRACKET, "[ {", false));
         currentX += keyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputConstants.KEY_RBRACKET, "] }", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_RIGHT_BRACKET, "] }", false));
         currentX += keyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.8f, keyHeight, InputConstants.KEY_BACKSLASH, "| \\", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.8f, keyHeight, InputUtil.GLFW_KEY_BACKSLASH, "| \\", false));
 
         rowY += keyHeight + spacing;
 
-        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth * 1.75f + spacing * 0.75f, keyHeight, InputConstants.KEY_CAPSLOCK, "Caps", true));
+        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth * 1.75f + spacing * 0.75f, keyHeight, InputUtil.GLFW_KEY_CAPS_LOCK, "Caps", true));
         currentX = startX + keyWidth * 1.75f + spacing * 0.75f + spacing;
 
         String[] letters2 = {"A", "S", "D", "F", "G", "H", "J", "K", "L"};
-        int[] keyCodes2 = {InputConstants.KEY_A, InputConstants.KEY_S, InputConstants.KEY_D, InputConstants.KEY_F, 
-                          InputConstants.KEY_G, InputConstants.KEY_H, InputConstants.KEY_J, InputConstants.KEY_K, 
-                          InputConstants.KEY_L};
+        int[] keyCodes2 = {InputUtil.GLFW_KEY_A, InputUtil.GLFW_KEY_S, InputUtil.GLFW_KEY_D, InputUtil.GLFW_KEY_F, 
+                          InputUtil.GLFW_KEY_G, InputUtil.GLFW_KEY_H, InputUtil.GLFW_KEY_J, InputUtil.GLFW_KEY_K, 
+                          InputUtil.GLFW_KEY_L};
         for (int i = 0; i < 9; i++) {
             keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, keyCodes2[i], letters2[i], false));
             currentX += keyWidth + spacing;
         }
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputConstants.KEY_SEMICOLON, "; :", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_SEMICOLON, "; :", false));
         currentX += keyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputConstants.KEY_APOSTROPHE, "' \"", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_APOSTROPHE, "' \"", false));
         currentX += keyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 2.55f + spacing * 0.5f, keyHeight, InputConstants.KEY_RETURN, "Enter", true));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 2.55f + spacing * 0.5f, keyHeight, InputUtil.GLFW_KEY_ENTER, "Enter", true));
         
         rowY += keyHeight + spacing;
 
-        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth * 2.25f + spacing * 1.25f, keyHeight, InputConstants.KEY_LSHIFT, "Shift", true));
+        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth * 2.25f + spacing * 1.25f, keyHeight, InputUtil.GLFW_KEY_LEFT_SHIFT, "Shift", true));
         currentX = startX + keyWidth * 2.25f + spacing * 1.25f + spacing;
 
         String[] letters3 = {"Z", "X", "C", "V", "B", "N", "M"};
-        int[] keyCodes3 = {InputConstants.KEY_Z, InputConstants.KEY_X, InputConstants.KEY_C, InputConstants.KEY_V, 
-                          InputConstants.KEY_B, InputConstants.KEY_N, InputConstants.KEY_M};
+        int[] keyCodes3 = {InputUtil.GLFW_KEY_Z, InputUtil.GLFW_KEY_X, InputUtil.GLFW_KEY_C, InputUtil.GLFW_KEY_V, 
+                          InputUtil.GLFW_KEY_B, InputUtil.GLFW_KEY_N, InputUtil.GLFW_KEY_M};
         for (int i = 0; i < 7; i++) {
             keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, keyCodes3[i], letters3[i], false));
             currentX += keyWidth + spacing;
         }
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputConstants.KEY_COMMA, ", <", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_COMMA, ", <", false));
         currentX += keyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputConstants.KEY_PERIOD, ". >", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_PERIOD, ". >", false));
         currentX += keyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputConstants.KEY_SLASH, "/ ?", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth, keyHeight, InputUtil.GLFW_KEY_SLASH, "/ ?", false));
         currentX += keyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 3.05f + spacing * 1.25f, keyHeight, InputConstants.KEY_RSHIFT, "Shift", true));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 3.05f + spacing * 1.25f, keyHeight, InputUtil.GLFW_KEY_RIGHT_SHIFT, "Shift", true));
         
         rowY += keyHeight + spacing;
 
-        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputConstants.KEY_LCONTROL, "Ctrl", true));
+        keyboardKeys.add(new KeyButton(startX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputUtil.GLFW_KEY_LEFT_CONTROL, "Ctrl", true));
         currentX = startX + keyWidth * 1.25f + spacing * 0.25f + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputConstants.KEY_LWIN, "Win", true));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputUtil.GLFW_KEY_LEFT_SUPER, "Win", true));
         currentX += keyWidth * 1.25f + spacing * 0.25f + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputConstants.KEY_LALT, "Alt", true));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputUtil.GLFW_KEY_LEFT_ALT, "Alt", true));
         currentX += keyWidth * 1.25f + spacing * 0.25f + spacing;
 
         float spaceKeyWidth = keyWidth * 6.5f + spacing * 5.5f;
-        keyboardKeys.add(new KeyButton(currentX, rowY, spaceKeyWidth, keyHeight, InputConstants.KEY_SPACE, "Space", false));
+        keyboardKeys.add(new KeyButton(currentX, rowY, spaceKeyWidth, keyHeight, InputUtil.GLFW_KEY_SPACE, "Space", false));
         currentX += spaceKeyWidth + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputConstants.KEY_RALT, "Alt", true));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputUtil.GLFW_KEY_RIGHT_ALT, "Alt", true));
         currentX += keyWidth * 1.25f + spacing * 0.25f + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputConstants.KEY_RWIN, "Win", true));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputUtil.GLFW_KEY_RIGHT_SUPER, "Win", true));
         currentX += keyWidth * 1.25f + spacing * 0.25f + spacing;
 
         int menuKeyCode = 348;
         keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, menuKeyCode, "Menu", true));
         currentX += keyWidth * 1.25f + spacing * 0.25f + spacing;
 
-        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputConstants.KEY_RCONTROL, "Ctrl", true));
+        keyboardKeys.add(new KeyButton(currentX, rowY, keyWidth * 1.25f + spacing * 0.25f, keyHeight, InputUtil.GLFW_KEY_RIGHT_CONTROL, "Ctrl", true));
     }
     
     @EventTarget
     public void onKeyForBinding(EventKey e) {
         if (isBindingMode && e.isState() && bindingModule != null) {
-            if (e.getKey() == InputConstants.KEY_ESCAPE) {
+            if (e.getKey() == InputUtil.GLFW_KEY_ESCAPE) {
                 isOpen = false;
                 inputText = new StringBuilder();
                 suggestions.clear();
@@ -639,13 +638,13 @@ public class CommandPaletteContent implements IslandContent {
         if (!isBindingMode || !e.isState() || bindingModule == null) return;
 
         if (e.getKey() == 0) {
-            float mouseX = (float) mc.mouseHandler.xpos();
-            float mouseY = (float) mc.mouseHandler.ypos();
+            float mouseX = (float) mc.mouse.getX();
+            float mouseY = (float) mc.mouse.getY();
 
-            int screenWidth = mc.getWindow().getScreenWidth();
-            int screenHeight = mc.getWindow().getScreenHeight();
-            int guiWidth = mc.getWindow().getGuiScaledWidth();
-            int guiHeight = mc.getWindow().getGuiScaledHeight();
+            int screenWidth = mc.getWindow().getWidth();
+            int screenHeight = mc.getWindow().getHeight();
+            int guiWidth = mc.getWindow().getScaledWidth();
+            int guiHeight = mc.getWindow().getScaledHeight();
             float guiMouseX = mouseX * guiWidth / screenWidth;
             float guiMouseY = mouseY * guiHeight / screenHeight;
 
@@ -735,7 +734,7 @@ public class CommandPaletteContent implements IslandContent {
     }
 
     @Override
-    public void render(GuiGraphics graphics, PoseStack stack, float x, float y) {
+    public void render(DrawContext graphics, MatrixStack stack, float x, float y) {
         if (!isOpen) return;
 
         float padding = 12f;
@@ -774,17 +773,17 @@ public class CommandPaletteContent implements IslandContent {
         }
     }
     
-    private void renderKeyboard(GuiGraphics graphics, PoseStack stack, float panelX, float panelY) {
+    private void renderKeyboard(DrawContext graphics, MatrixStack stack, float panelX, float panelY) {
         float keyboardX = panelX + 23;
         float panelContentHeight = 12f * 2 + (float) Fonts.harmony.getHeight(true, 0.4f) + 8f;
         float keyboardY = panelY + panelContentHeight - 15f;
 
-        float mouseX = (float) mc.mouseHandler.xpos();
-        float mouseY = (float) mc.mouseHandler.ypos();
-        int screenWidth = mc.getWindow().getScreenWidth();
-        int screenHeight = mc.getWindow().getScreenHeight();
-        int guiWidth = mc.getWindow().getGuiScaledWidth();
-        int guiHeight = mc.getWindow().getGuiScaledHeight();
+        float mouseX = (float) mc.mouse.getX();
+        float mouseY = (float) mc.mouse.getY();
+        int screenWidth = mc.getWindow().getWidth();
+        int screenHeight = mc.getWindow().getHeight();
+        int guiWidth = mc.getWindow().getScaledWidth();
+        int guiHeight = mc.getWindow().getScaledHeight();
         float guiMouseX = mouseX * guiWidth / screenWidth;
         float guiMouseY = mouseY * guiHeight / screenHeight;
 

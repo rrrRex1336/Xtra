@@ -6,8 +6,8 @@ import awa.qwq.ovo.Naven.commands.CommandInfo;
 import awa.qwq.ovo.Naven.events.api.EventTarget;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventMotion;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.LanguageSelectScreen;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.option.LanguageOptionsScreen;
 
 @CommandInfo(
    name = "language",
@@ -21,7 +21,7 @@ public class CommandLanguage extends Command {
          @EventTarget
          public void onMotion(EventMotion e) {
             if (e.getType() == EventType.PRE) {
-               Minecraft.getInstance().setScreen(new LanguageSelectScreen(null, Minecraft.getInstance().options, Minecraft.getInstance().getLanguageManager()));
+               MinecraftClient.getInstance().setScreen(new LanguageOptionsScreen(null, MinecraftClient.getInstance().options, MinecraftClient.getInstance().getLanguageManager()));
                Naven.getInstance().getEventManager().unregister(this);
             }
          }

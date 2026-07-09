@@ -1,14 +1,13 @@
 package awa.qwq.ovo.Naven.utils.renderer.text;
 
 import awa.qwq.ovo.Naven.utils.renderer.*;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
-
-import net.minecraft.ChatFormatting;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Formatting;
 import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -59,7 +58,7 @@ public class CustomTextRenderer {
    public double getWidth(String text, boolean shadow, double scale) {
       return (this.font.getWidth(text) + (shadow ? 0.5F : 0.0F)) * scale;
    }
-   public double drawString(PoseStack stack, String text, double x, double y, Color color, boolean shadow, double scale) {
+   public double drawString(MatrixStack stack, String text, double x, double y, Color color, boolean shadow, double scale) {
       Color currentColor = color;
       double currentX = x;
       double totalWidth = 0;
@@ -69,10 +68,10 @@ public class CustomTextRenderer {
 
          if (c == '\u00A7' && i + 1 < text.length()) {
             char ctrl = text.charAt(i + 1);
-            ChatFormatting byCode = ChatFormatting.getByCode(ctrl);
+            Formatting byCode = Formatting.byCode(ctrl);
             if (byCode != null && byCode.isColor()) {
-               currentColor = new Color(byCode.getColor());
-            } else if (byCode == ChatFormatting.RESET) {
+               currentColor = new Color(byCode.getColorValue());
+            } else if (byCode == Formatting.RESET) {
                currentColor = color;
             }
 
@@ -91,7 +90,7 @@ public class CustomTextRenderer {
                width = this.font.render(this.mesh, charStr, currentX, y, currentColor, scale, false);
             }
             this.mesh.end();
-            GL.bindTexture(this.font.texture.getId());
+            GL.bindTexture(this.font.texture.getGlId());
             this.mesh.render(stack);
             totalWidth += width;
             currentX += this.font.getWidth(charStr) * scale;
@@ -103,7 +102,7 @@ public class CustomTextRenderer {
       return (this.font.getHeight() + (shadow ? 0.5F : 0.0F)) * scale;
    }
 
-   public double render(PoseStack stack, String text, double x, double y, Color color, boolean shadow, double scale) {
+   public double render(MatrixStack stack, String text, double x, double y, Color color, boolean shadow, double scale) {
       this.mesh.begin();
       double width;
       if (shadow) {
@@ -114,7 +113,7 @@ public class CustomTextRenderer {
       }
 
       this.mesh.end();
-      GL.bindTexture(this.font.texture.getId());
+      GL.bindTexture(this.font.texture.getGlId());
       this.mesh.render(stack);
       return width;
    }

@@ -1,14 +1,14 @@
 package awa.qwq.ovo.Naven.ui.Island;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.util.math.MatrixStack;
 
 public interface IslandContent {
     int getPriority();
 
     boolean shouldDisplay();
 
-    void render(GuiGraphics graphics, PoseStack stack, float x, float y);
+    void render(DrawContext graphics, MatrixStack stack, float x, float y);
 
     float getWidth();
 

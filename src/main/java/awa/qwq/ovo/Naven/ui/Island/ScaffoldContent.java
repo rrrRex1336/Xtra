@@ -6,18 +6,17 @@ import awa.qwq.ovo.Naven.utils.RenderUtils;
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.ItemStack;
-
 import java.awt.*;
 import java.lang.reflect.Field;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.ItemStack;
 
 public class ScaffoldContent implements IslandContent {
-    private static final Minecraft mc = Minecraft.getInstance();
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
     private double bps = 0.0;
     private final SmoothAnimationTimer progressAnimation = new SmoothAnimationTimer(0.0f, 0.3f);
     private String currentTitle = "Scaffold Toggled";
@@ -56,7 +55,7 @@ public class ScaffoldContent implements IslandContent {
 
     private ItemStack getCurrentBlockItem() {
         if (mc.player != null) {
-            ItemStack heldItem = mc.player.getMainHandItem();
+            ItemStack heldItem = mc.player.getMainHandStack();
             if (heldItem.getItem() instanceof BlockItem) {
                 return heldItem;
             }
@@ -66,14 +65,14 @@ public class ScaffoldContent implements IslandContent {
 
     private double speedCalculator() {
         if (mc.player != null) {
-            Player player = mc.player;
+            PlayerEntity player = mc.player;
 
-            double deltaX = player.getX() - player.xo;
-            double deltaZ = player.getZ() - player.zo;
+            double deltaX = player.getX() - player.prevX;
+            double deltaZ = player.getZ() - player.prevZ;
 
             double timerSpeed = 1.0;
             try {
-                Field timerField = Minecraft.class.getDeclaredField("timer");
+                Field timerField = MinecraftClient.class.getDeclaredField("timer");
                 timerField.setAccessible(true);
                 Object timer = timerField.get(mc);
                 Field speedField = timer.getClass().getDeclaredField("timerSpeed");
@@ -100,7 +99,7 @@ public class ScaffoldContent implements IslandContent {
     }
 
     @Override
-    public void render(GuiGraphics graphics, PoseStack stack, float x, float y) {
+    public void render(DrawContext graphics, MatrixStack stack, float x, float y) {
         if (!shouldDisplay()) {
             return;
         }
@@ -121,8 +120,8 @@ public class ScaffoldContent implements IslandContent {
             RenderSystem.enableDepthTest();
             int iconX = (int)(iconBgX + (iconSize - 16) / 2);
             int iconY = (int)(iconBgY + (iconSize - 16) / 2);
-            graphics.renderItem(currentBlock, iconX, iconY);
-            graphics.renderItemDecorations(mc.font, currentBlock, iconX, iconY);
+            graphics.drawItem(currentBlock, iconX, iconY);
+            graphics.drawItemInSlot(mc.textRenderer, currentBlock, iconX, iconY);
 
             RenderSystem.disableDepthTest();
             if (isClutching()) {

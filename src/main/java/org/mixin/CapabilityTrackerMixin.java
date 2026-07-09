@@ -5,22 +5,23 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
 @Mixin(
-   targets = {"com.mojang.blaze3d.platform.GlStateManager$BooleanState"}
+   targets = {"com.mojang.blaze3d.platform.GlStateManager$CapabilityTracker"},
+   remap = false
 )
 public abstract class CapabilityTrackerMixin implements ICapabilityTracker {
-   @Shadow
-   private boolean enabled;
+   @Shadow(remap = false)
+   private boolean state;
 
-   @Shadow
-   public abstract void setEnabled(boolean var1);
+   @Shadow(remap = false)
+   public abstract void setState(boolean var1);
 
    @Override
    public boolean get() {
-      return this.enabled;
+      return this.state;
    }
 
    @Override
    public void set(boolean state) {
-      this.setEnabled(state);
+      this.setState(state);
    }
 }

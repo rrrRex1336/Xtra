@@ -9,14 +9,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+import net.minecraft.client.MinecraftClient;
 import awa.qwq.ovo.Naven.modules.impl.combat.*;
 import awa.qwq.ovo.Naven.modules.impl.misc.*;
 import awa.qwq.ovo.Naven.modules.impl.movement.*;
 import awa.qwq.ovo.Naven.modules.impl.player.*;
 import awa.qwq.ovo.Naven.modules.impl.visual.*;
 import awa.qwq.ovo.Naven.modules.impl.world.*;
-import net.minecraft.client.Minecraft;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -113,6 +112,7 @@ public class ModuleManager {
          new FullBright(),
          new NameProtect(),
          new NoHurtCam(),
+         new NoFOV(),
          new AutoClicker(),
          new AntiBlindness(),
          new AntiNausea(),
@@ -181,7 +181,7 @@ public class ModuleManager {
 
    @EventTarget
    public void onKey(EventKey e) {
-      if (e.isState() && Minecraft.getInstance().screen == null) {
+      if (e.isState() && MinecraftClient.getInstance().currentScreen == null) {
          for (Module module : this.modules) {
             if (module.getKey() == e.getKey()) {
                module.toggle();

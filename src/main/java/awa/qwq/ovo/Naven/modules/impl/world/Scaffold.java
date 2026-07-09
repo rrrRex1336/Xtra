@@ -19,42 +19,7 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.core.Direction.Axis;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.ItemNameBlockItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.AirBlock;
-import net.minecraft.world.level.block.AnvilBlock;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.BushBlock;
-import net.minecraft.world.level.block.ChestBlock;
-import net.minecraft.world.level.block.CraftingTableBlock;
-import net.minecraft.world.level.block.CropBlock;
-import net.minecraft.world.level.block.EnchantmentTableBlock;
-import net.minecraft.world.level.block.EnderChestBlock;
-import net.minecraft.world.level.block.FlowerBlock;
-import net.minecraft.world.level.block.FungusBlock;
-import net.minecraft.world.level.block.FurnaceBlock;
-import net.minecraft.world.level.block.LiquidBlock;
-import net.minecraft.world.level.block.SlabBlock;
-import net.minecraft.world.level.block.SnowLayerBlock;
-import net.minecraft.world.level.block.TallGrassBlock;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import org.lwjgl.glfw.GLFW;
 
 import java.awt.Color;
@@ -64,6 +29,41 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import net.minecraft.block.AirBlock;
+import net.minecraft.block.AnvilBlock;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.ChestBlock;
+import net.minecraft.block.CraftingTableBlock;
+import net.minecraft.block.CropBlock;
+import net.minecraft.block.EnchantingTableBlock;
+import net.minecraft.block.EnderChestBlock;
+import net.minecraft.block.FlowerBlock;
+import net.minecraft.block.FluidBlock;
+import net.minecraft.block.FungusBlock;
+import net.minecraft.block.FurnaceBlock;
+import net.minecraft.block.PlantBlock;
+import net.minecraft.block.ShortPlantBlock;
+import net.minecraft.block.SlabBlock;
+import net.minecraft.block.SnowBlock;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.item.AliasedBlockItem;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Direction.Axis;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.shape.VoxelShape;
 
 @ModuleInfo(
         name = "Scaffold",
@@ -168,9 +168,9 @@ public class Scaffold extends Module {
    private boolean jumpKeyHeld;
    private int lastClutchLayer = Integer.MIN_VALUE;
    private boolean preferUpFace;
-   private Vec3 lastClutchDebugPosition;
+   private Vec3d lastClutchDebugPosition;
    private boolean clutchDebugAnchorActive;
-   private Vec3 clutchDebugAnchorPosition;
+   private Vec3d clutchDebugAnchorPosition;
    private boolean clutchSafeDistanceActive;
    private long lastPlaceGameTick = -1L;
    private float lastMovementYaw;
@@ -191,23 +191,23 @@ public class Scaffold extends Module {
       if (mc.player == null) {
          return;
       }
-      this.oldSlot = mc.player.getInventory().selected;
-      this.rots.set(mc.player.getYRot(), mc.player.getXRot());
-      this.lastRots.set(mc.player.yRotO, mc.player.xRotO);
+      this.oldSlot = mc.player.getInventory().selectedSlot;
+      this.rots.set(mc.player.getYaw(), mc.player.getPitch());
+      this.lastRots.set(mc.player.prevYaw, mc.player.prevPitch);
       this.pos = null;
       this.rotateCount = 0;
       this.placeCount = 0;
       this.reachable = true;
       this.jumpKeyHeld = false;
-      this.lastClutchLayer = mc.player.blockPosition().getY();
+      this.lastClutchLayer = mc.player.getBlockPos().getY();
       this.preferUpFace = false;
-      this.lastClutchDebugPosition = mc.player.position();
+      this.lastClutchDebugPosition = mc.player.getPos();
       this.clutchDebugAnchorActive = false;
       this.clutchDebugAnchorPosition = null;
       this.clutchSafeDistanceActive = false;
       this.lastSneakTicks = 0;
       this.lastPlaceGameTick = -1L;
-      this.lastMovementYaw = mc.player.getYRot();
+      this.lastMovementYaw = mc.player.getYaw();
       this.tellyStopTicks = 0;
       this.useLastTellyMovementYaw = false;
       this.emergencySneakTicks = 0;
@@ -240,12 +240,12 @@ public class Scaffold extends Module {
       if (mc.player == null) {
          return;
       }
-      boolean holdingJump = InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getDefaultKey().getValue());
-      boolean holdingShift = InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyShift.getDefaultKey().getValue());
-      mc.options.keyJump.setDown(holdingJump);
-      mc.options.keyShift.setDown(holdingShift);
-      mc.options.keyUse.setDown(false);
-      mc.player.getInventory().selected = this.oldSlot;
+      boolean holdingJump = InputUtil.isKeyPressed(mc.getWindow().getHandle(), mc.options.jumpKey.getDefaultKey().getCode());
+      boolean holdingShift = InputUtil.isKeyPressed(mc.getWindow().getHandle(), mc.options.sneakKey.getDefaultKey().getCode());
+      mc.options.jumpKey.setPressed(holdingJump);
+      mc.options.sneakKey.setPressed(holdingShift);
+      mc.options.useKey.setPressed(false);
+      mc.player.getInventory().selectedSlot = this.oldSlot;
       this.jumpKeyHeld = false;
       this.lastSneakTicks = 0;
       this.lastPlaceGameTick = -1L;
@@ -264,20 +264,20 @@ public class Scaffold extends Module {
 
    @EventTarget
    public void onMouse(EventMouseClick event) {
-      if (mc.screen == null && (event.getKey() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.getKey() == GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
+      if (mc.currentScreen == null && (event.getKey() == GLFW.GLFW_MOUSE_BUTTON_LEFT || event.getKey() == GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
          event.setCancelled(true);
       }
    }
 
    @EventTarget(1)
    public void onPreRunTick(EventRunTicks event) {
-      if (mc.player == null || mc.level == null || mc.gameMode == null) {
+      if (mc.player == null || mc.world == null || mc.interactionManager == null) {
          return;
       }
 
       if (event.getType() != EventType.PRE) {
          this.updateClutchDebug();
-         if (mc.player.onGround()) {
+         if (mc.player.isOnGround()) {
             this.airTicks = 0;
          } else {
             ++this.airTicks;
@@ -286,17 +286,17 @@ public class Scaffold extends Module {
          return;
       }
 
-      if (mc.screen != null) {
+      if (mc.currentScreen != null) {
          return;
       }
 
       AutoMLG autoMLG = AutoMLG.INSTANCE;
       boolean mlgActive = autoMLG != null && autoMLG.isEnabled() && autoMLG.isMLGActive();
-      boolean holdingValidBlock = isValidStack(mc.player.getMainHandItem()) || isValidStack(mc.player.getOffhandItem());
-      if ((!mlgActive || !holdingValidBlock) && !isValidStack(mc.player.getMainHandItem()) && !isValidStack(mc.player.getOffhandItem())) {
+      boolean holdingValidBlock = isValidStack(mc.player.getMainHandStack()) || isValidStack(mc.player.getOffHandStack());
+      if ((!mlgActive || !holdingValidBlock) && !isValidStack(mc.player.getMainHandStack()) && !isValidStack(mc.player.getOffHandStack())) {
          int slot = findBlockSlot();
-         if (slot != -1 && mc.player.getInventory().selected != slot) {
-            mc.player.getInventory().selected = slot;
+         if (slot != -1 && mc.player.getInventory().selectedSlot != slot) {
+            mc.player.getInventory().selectedSlot = slot;
          }
       }
 
@@ -314,7 +314,7 @@ public class Scaffold extends Module {
          this.useLastTellyMovementYaw = false;
          tellyStopActive = false;
       } else {
-         tellyStopActive = holdingJump && this.tellyStopTicks > 0 && (isOnBlockEdge(0.3F) || !isBlockUnder() || !mc.player.onGround());
+         tellyStopActive = holdingJump && this.tellyStopTicks > 0 && (isOnBlockEdge(0.3F) || !isBlockUnder() || !mc.player.isOnGround());
          this.useLastTellyMovementYaw = tellyStopActive;
          if (this.tellyStopTicks > 0) {
             --this.tellyStopTicks;
@@ -343,12 +343,12 @@ public class Scaffold extends Module {
          ++this.lastSneakTicks;
          if (this.lastSneakTicks == 18) {
             if (mc.player.isSprinting()) {
-               mc.options.keySprint.setDown(false);
+               mc.options.sprintKey.setPressed(false);
                mc.player.setSprinting(false);
             }
-            mc.options.keyShift.setDown(true);
+            mc.options.sneakKey.setPressed(true);
          } else if (this.lastSneakTicks >= 21) {
-            mc.options.keyShift.setDown(false);
+            mc.options.sneakKey.setPressed(false);
             this.lastSneakTicks = 0;
          }
       } else if (this.lastSneakTicks != 0) {
@@ -356,13 +356,13 @@ public class Scaffold extends Module {
       }
 
       if (this.emergencySneakTicks > 0 && --this.emergencySneakTicks == 0 && !(this.vulcan.getCurrentValue() && this.lastSneakTicks >= 18 && this.lastSneakTicks < 21)) {
-         mc.options.keyShift.setDown(InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyShift.getDefaultKey().getValue()));
+         mc.options.sneakKey.setPressed(InputUtil.isKeyPressed(mc.getWindow().getHandle(), mc.options.sneakKey.getDefaultKey().getCode()));
       }
 
       if (this.mode.isCurrentMode("Telly Bridge")) {
-         mc.options.keyJump.setDown(jumpSprintActive && moving || tellyStopActive || holdingJump);
-         if (mc.player.onGround() && (jumpSprintActive && moving || tellyStopActive)) {
-            float yaw = tellyStopActive ? this.lastMovementYaw : mc.player.getYRot();
+         mc.options.jumpKey.setPressed(jumpSprintActive && moving || tellyStopActive || holdingJump);
+         if (mc.player.isOnGround() && (jumpSprintActive && moving || tellyStopActive)) {
+            float yaw = tellyStopActive ? this.lastMovementYaw : mc.player.getYaw();
             this.rots.setX(RotationUtils.rotateToYaw(180.0F, this.rots.getX(), yaw));
             this.lastRots.set(this.rots.getX(), this.rots.getY());
             return;
@@ -375,7 +375,7 @@ public class Scaffold extends Module {
    @EventTarget
    public void onClick(EventClick event) {
       event.setCancelled(true);
-      if (mc.screen != null || mc.player == null || mc.level == null || mc.gameMode == null || this.pos == null) {
+      if (mc.currentScreen != null || mc.player == null || mc.world == null || mc.interactionManager == null || this.pos == null) {
          return;
       }
       if (this.mode.isCurrentMode("Telly Bridge") && this.airTicks < 3.0F && !this.jumpKeyHeld) {
@@ -383,15 +383,15 @@ public class Scaffold extends Module {
       }
 
       reachable = true;
-      if (mc.player.getDeltaMovement().y < -0.1D) {
+      if (mc.player.getVelocity().y < -0.1D) {
          double y = mc.player.getY();
-         double motionY = mc.player.getDeltaMovement().y;
+         double motionY = mc.player.getVelocity().y;
          for (int i = 0; i < 2; ++i) {
             motionY = (motionY - 0.08D) * 0.98D;
             y += motionY;
             if (motionY < 0.0D) {
-               BlockPos below = BlockPos.containing(mc.player.getX(), y - 0.5D, mc.player.getZ());
-               if (!mc.level.isEmptyBlock(below)) {
+               BlockPos below = BlockPos.ofFloored(mc.player.getX(), y - 0.5D, mc.player.getZ());
+               if (!mc.world.isAir(below)) {
                   y = Math.floor(y) + 0.5D;
                   break;
                }
@@ -403,11 +403,11 @@ public class Scaffold extends Module {
       }
 
       boolean clutchDanger = !reachable && this.rotateCount <= 8;
-      Vec3 hitCenter = new Vec3(this.pos.getX() + 0.5D, this.pos.getY(), this.pos.getZ() + 0.5D);
-      if (hitCenter.subtract(mc.player.getEyePosition()).lengthSqr() > (clutchDanger ? 25.0D : 20.25D)) {
+      Vec3d hitCenter = new Vec3d(this.pos.getX() + 0.5D, this.pos.getY(), this.pos.getZ() + 0.5D);
+      if (hitCenter.subtract(mc.player.getEyePos()).lengthSquared() > (clutchDanger ? 25.0D : 20.25D)) {
          return;
       }
-      if ((this.preferUpFace || this.clutchSafeDistanceActive) && this.lastPlaceGameTick == mc.level.getGameTime()) {
+      if ((this.preferUpFace || this.clutchSafeDistanceActive) && this.lastPlaceGameTick == mc.world.getTime()) {
          return;
       }
 
@@ -448,39 +448,39 @@ public class Scaffold extends Module {
          this.skipTickAttempts = 0;
       }
 
-      InteractionHand hand = getPlaceHand();
+      Hand hand = getPlaceHand();
       boolean placed = false;
       if (hand != null) {
          HitResult hit = skippedTick ? RayTraceUtils.rayCast(4.5D, 1.0F, true, placeRotation) : RayTraceUtils.rayCast(1.0F, placeRotation);
          if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK && this.isPlaceHitValid(blockHit, skippedTick)) {
             boolean holdingJump = isJumpHeld();
-            boolean invalidUpHit = blockHit.getDirection() == Direction.UP && !this.preferUpFace && !this.canUseLegitUp() && !mc.player.onGround() && PlayerUtils.movementInput() && !holdingJump && !this.mode.isCurrentMode("Normal") && !skippedTick;
+            boolean invalidUpHit = blockHit.getSide() == Direction.UP && !this.preferUpFace && !this.canUseLegitUp() && !mc.player.isOnGround() && PlayerUtils.movementInput() && !holdingJump && !this.mode.isCurrentMode("Normal") && !skippedTick;
             if (!invalidUpHit) {
                if (skippedTick) {
                   this.rots.set(placeRotation.x, placeRotation.y);
                   RotationManager.setRotations(new Vector2f(placeRotation.x, placeRotation.y));
-                  NetworkUtils.sendPacketNoEvent(new ServerboundMovePlayerPacket.Rot(
+                  NetworkUtils.sendPacketNoEvent(new PlayerMoveC2SPacket.LookAndOnGround(
                           placeRotation.x,
                           placeRotation.y,
-                          mc.player.onGround()
+                          mc.player.isOnGround()
                   ));
                }
 
                if (this.useItemBeforePlace.getCurrentValue() && !this.rotationMode.isCurrentMode("Strict")) {
-                  mc.gameMode.useItem(mc.player, hand);
+                  mc.interactionManager.interactItem(mc.player, hand);
                }
 
-               if (mc.gameMode.useItemOn(mc.player, hand, blockHit) == InteractionResult.SUCCESS) {
+               if (mc.interactionManager.interactBlock(mc.player, hand, blockHit) == ActionResult.SUCCESS) {
                   placed = true;
-                  this.lastPlaceGameTick = mc.level.getGameTime();
+                  this.lastPlaceGameTick = mc.world.getTime();
                   if (this.visualSwing.getCurrentValue()) {
-                     mc.player.swing(hand);
+                     mc.player.swingHand(hand);
                   } else {
-                     NetworkUtils.sendPacket(new ServerboundSwingPacket(hand));
+                     NetworkUtils.sendPacket(new HandSwingC2SPacket(hand));
                   }
 
-                  BlockPos placedPos = blockHit.getBlockPos().relative(blockHit.getDirection());
-                  this.renderedBlocks.add(new RenderedBlock(placedPos, mc.level.getGameTime()));
+                  BlockPos placedPos = blockHit.getBlockPos().offset(blockHit.getSide());
+                  this.renderedBlocks.add(new RenderedBlock(placedPos, mc.world.getTime()));
                   while (this.renderedBlocks.size() > 2) {
                      this.renderedBlocks.remove(0);
                   }
@@ -516,9 +516,9 @@ public class Scaffold extends Module {
          return;
       }
 
-      PoseStack poseStack = event.getPMatrixStack();
-      Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
-      poseStack.pushPose();
+      MatrixStack poseStack = event.getPMatrixStack();
+      Vec3d cameraPos = mc.gameRenderer.getCamera().getPos();
+      poseStack.push();
       poseStack.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
 
       RenderSystem.enableBlend();
@@ -527,7 +527,7 @@ public class Scaffold extends Module {
       RenderSystem.depthMask(false);
 
       for (RenderedBlock block : this.renderedBlocks) {
-         AABB box = new AABB(block.position).inflate(0.002D);
+         Box box = new Box(block.position).expand(0.002D);
          float alpha = block.getAlpha();
          Color color = new Color(67, 87, 227);
          RenderSystem.setShaderColor(color.getRed() / 255.0F, color.getGreen() / 255.0F, color.getBlue() / 255.0F, alpha);
@@ -538,7 +538,7 @@ public class Scaffold extends Module {
       RenderSystem.enableDepthTest();
       RenderSystem.depthMask(true);
       RenderSystem.disableBlend();
-      poseStack.popPose();
+      poseStack.pop();
    }
 
    private Vector2f getPlayerYawRotation() {
@@ -551,7 +551,7 @@ public class Scaffold extends Module {
       }
 
       if (isTower()) {
-         return new Vector2f(mc.player.getYRot(), 90.0F);
+         return new Vector2f(mc.player.getYaw(), 90.0F);
       }
 
       if (rotationMode.isCurrentMode("Strict")) {
@@ -608,39 +608,39 @@ public class Scaffold extends Module {
    private Vector2f getStrictCenterRotation() {
       Direction bestFace = null;
       double bestFaceScore = Double.MAX_VALUE;
-      BlockPos underPlayer = BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.0D, mc.player.getZ());
+      BlockPos underPlayer = BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - 1.0D, mc.player.getZ());
       boolean allowLegitUp = this.canUseLegitUp();
-      boolean avoidUpFace = !allowLegitUp && !this.preferUpFace && this.mode.isCurrentMode("Telly Bridge") && !mc.player.onGround() && PlayerUtils.movementInput() && !isJumpHeld();
-      Vec3 eye = mc.player.getEyePosition();
+      boolean avoidUpFace = !allowLegitUp && !this.preferUpFace && this.mode.isCurrentMode("Telly Bridge") && !mc.player.isOnGround() && PlayerUtils.movementInput() && !isJumpHeld();
+      Vec3d eye = mc.player.getEyePos();
 
       Direction[] faceOrder = new Direction[]{Direction.UP, Direction.WEST, Direction.EAST, Direction.SOUTH, Direction.NORTH};
       for (Direction candidateFace : faceOrder) {
          if (avoidUpFace && candidateFace == Direction.UP) {
             continue;
          }
-         BlockPos placePos = this.pos.relative(candidateFace);
-         if (!mc.level.isEmptyBlock(placePos)) {
+         BlockPos placePos = this.pos.offset(candidateFace);
+         if (!mc.world.isAir(placePos)) {
             continue;
          }
 
-         Vec3 faceCenter = new Vec3(
-                 this.pos.getX() + 0.5D + candidateFace.getStepX() * 0.5D,
-                 this.pos.getY() + 0.5D + candidateFace.getStepY() * 0.5D,
-                 this.pos.getZ() + 0.5D + candidateFace.getStepZ() * 0.5D
+         Vec3d faceCenter = new Vec3d(
+                 this.pos.getX() + 0.5D + candidateFace.getOffsetX() * 0.5D,
+                 this.pos.getY() + 0.5D + candidateFace.getOffsetY() * 0.5D,
+                 this.pos.getZ() + 0.5D + candidateFace.getOffsetZ() * 0.5D
          );
-         Vec3 toHit = faceCenter.subtract(eye);
+         Vec3d toHit = faceCenter.subtract(eye);
          boolean faceVisible;
-         if (toHit.lengthSqr() <= 1.0E-6D) {
+         if (toHit.lengthSquared() <= 1.0E-6D) {
             faceVisible = true;
          } else {
-            Vec3 faceNormal = Vec3.atLowerCornerOf(candidateFace.getNormal()).normalize();
-            faceVisible = toHit.normalize().dot(faceNormal.scale(-1.0D)) >= 0.0D;
+            Vec3d faceNormal = Vec3d.of(candidateFace.getVector()).normalize();
+            faceVisible = toHit.normalize().dotProduct(faceNormal.multiply(-1.0D)) >= 0.0D;
          }
-         if (toHit.lengthSqr() > 20.25D || !faceVisible) {
+         if (toHit.lengthSquared() > 20.25D || !faceVisible) {
             continue;
          }
 
-         double score = placePos.distSqr(underPlayer) + faceCenter.distanceToSqr(eye) * 0.03D;
+         double score = placePos.getSquaredDistance(underPlayer) + faceCenter.squaredDistanceTo(eye) * 0.03D;
          if (this.preferUpFace && candidateFace == Direction.UP) {
             score -= 5.0D;
          } else if (candidateFace == Direction.UP && !isJumpHeld() && !allowLegitUp) {
@@ -660,9 +660,9 @@ public class Scaffold extends Module {
 
       Direction face = bestFace != null ? bestFace : Direction.UP;
       this.strictPlacementFace = face;
-      double x = this.pos.getX() + 0.5D + face.getStepX() * 0.5D;
-      double y = this.pos.getY() + 0.5D + face.getStepY() * 0.5D;
-      double z = this.pos.getZ() + 0.5D + face.getStepZ() * 0.5D;
+      double x = this.pos.getX() + 0.5D + face.getOffsetX() * 0.5D;
+      double y = this.pos.getY() + 0.5D + face.getOffsetY() * 0.5D;
+      double z = this.pos.getZ() + 0.5D + face.getOffsetZ() * 0.5D;
       double jitter = 0.05D;
       if (face.getAxis() != Axis.X) {
          x += MathUtils.getRandomDoubleInRange(-jitter, jitter);
@@ -674,7 +674,7 @@ public class Scaffold extends Module {
          z += MathUtils.getRandomDoubleInRange(-jitter, jitter);
       }
 
-      Vec3 target = new Vec3(x, y, z);
+      Vec3d target = new Vec3d(x, y, z);
       Vector2f targetRotation = RotationUtils.getRotations(target);
       float yawDelta = MathHelper.wrapDegrees(targetRotation.x - this.rots.x);
       float maxStep = this.mode.isCurrentMode("Telly Bridge") ? (this.airTicks <= 1 ? 90.0F : 75.0F) : 180.0F;
@@ -689,8 +689,8 @@ public class Scaffold extends Module {
               && fixedHit.getType() == HitResult.Type.BLOCK
               && this.pos != null
               && fixedBlockHit.getBlockPos().equals(this.pos)
-              && fixedBlockHit.getDirection() != Direction.DOWN
-              && fixedBlockHit.getDirection() == face;
+              && fixedBlockHit.getSide() != Direction.DOWN
+              && fixedBlockHit.getSide() == face;
       if (fixedValid) {
       } else {
           double bestRotationScore = Double.MAX_VALUE;
@@ -707,8 +707,8 @@ public class Scaffold extends Module {
                        || candidateHit.getType() != HitResult.Type.BLOCK
                        || this.pos == null
                        || !candidateBlockHit.getBlockPos().equals(this.pos)
-                       || candidateBlockHit.getDirection() == Direction.DOWN
-                       || candidateBlockHit.getDirection() != face) {
+                       || candidateBlockHit.getSide() == Direction.DOWN
+                       || candidateBlockHit.getSide() != face) {
                   continue;
                }
 
@@ -723,22 +723,22 @@ public class Scaffold extends Module {
    }
 
    private Vector2f getUpFaceRotation() {
-      if (this.pos == null || mc.player == null || mc.level == null) {
+      if (this.pos == null || mc.player == null || mc.world == null) {
          return null;
       }
 
-      if (!isValidBlock(this.pos) || !mc.level.isEmptyBlock(this.pos.relative(Direction.UP))) {
+      if (!isValidBlock(this.pos) || !mc.world.isAir(this.pos.offset(Direction.UP))) {
          return null;
       }
 
-      Vec3 target = new Vec3(this.pos.getX() + 0.5D, this.pos.getY() + 1.0D, this.pos.getZ() + 0.5D);
+      Vec3d target = new Vec3d(this.pos.getX() + 0.5D, this.pos.getY() + 1.0D, this.pos.getZ() + 0.5D);
       Vector2f targetRotation = RotationUtils.getRotations(target);
       Vector2f fixedRotation = RotationUtils.getFixedRotation(targetRotation.x, targetRotation.y, this.rots.x, this.rots.y);
       HitResult fixedHit = RayTraceUtils.rayCast(1.0F, fixedRotation);
       if (fixedHit instanceof BlockHitResult fixedBlockHit
               && fixedHit.getType() == HitResult.Type.BLOCK
               && fixedBlockHit.getBlockPos().equals(this.pos)
-              && fixedBlockHit.getDirection() == Direction.UP) {
+              && fixedBlockHit.getSide() == Direction.UP) {
          this.strictPlacementFace = Direction.UP;
          return fixedRotation;
       }
@@ -747,21 +747,21 @@ public class Scaffold extends Module {
    }
 
    private BlockPos getBlockPos() {
-      BlockPos playerPos = BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.0D, mc.player.getZ());
-      ArrayList<Vec3> positions = new ArrayList<>();
-      HashMap<Vec3, BlockPos> lookup = new HashMap<>();
+      BlockPos playerPos = BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - 1.0D, mc.player.getZ());
+      ArrayList<Vec3d> positions = new ArrayList<>();
+      HashMap<Vec3d, BlockPos> lookup = new HashMap<>();
 
       for (int x = playerPos.getX() - 5; x <= playerPos.getX() + 5; ++x) {
          for (int y = playerPos.getY() - 1; y <= playerPos.getY(); ++y) {
             for (int z = playerPos.getZ() - 5; z <= playerPos.getZ() + 5; ++z) {
                BlockPos check = new BlockPos(x, y, z);
                if (isValidBlock(check)) {
-                  BlockState block = mc.level.getBlockState(check);
-                  VoxelShape shape = block.getShape(mc.level, check);
-                  double ex = MathHelper.clamp(mc.player.getX(), check.getX(), check.getX() + shape.max(Axis.X));
-                  double ey = MathHelper.clamp(mc.player.getY(), check.getY(), check.getY() + shape.max(Axis.Y));
-                  double ez = MathHelper.clamp(mc.player.getZ(), check.getZ(), check.getZ() + shape.max(Axis.Z));
-                  Vec3 vec = new Vec3(ex, ey, ez);
+                  BlockState block = mc.world.getBlockState(check);
+                  VoxelShape shape = block.getOutlineShape(mc.world, check);
+                  double ex = MathHelper.clamp(mc.player.getX(), check.getX(), check.getX() + shape.getMax(Axis.X));
+                  double ey = MathHelper.clamp(mc.player.getY(), check.getY(), check.getY() + shape.getMax(Axis.Y));
+                  double ez = MathHelper.clamp(mc.player.getZ(), check.getZ(), check.getZ() + shape.getMax(Axis.Z));
+                  Vec3d vec = new Vec3d(ex, ey, ez);
                   positions.add(vec);
                   lookup.put(vec, check);
                }
@@ -773,26 +773,26 @@ public class Scaffold extends Module {
          this.preferUpFace = false;
          return null;
       }
-      positions.sort(Comparator.comparingDouble(vec -> mc.player.distanceToSqr(vec.x, vec.y, vec.z)));
+      positions.sort(Comparator.comparingDouble(vec -> mc.player.squaredDistanceTo(vec.x, vec.y, vec.z)));
       BlockPos best = lookup.get(positions.get(0));
-      int currentLayer = mc.player.blockPosition().getY();
+      int currentLayer = mc.player.getBlockPos().getY();
       boolean risingLayer = currentLayer > this.lastClutchLayer;
       boolean preferUp = risingLayer && (isManualJumpHeld() || this.clutchSafeDistanceActive);
-      BlockPos result = isTower() && !preferUp && best.getY() != mc.player.getY() - 1.5D ? BlockPos.containing(mc.player.getX(), mc.player.getY() - 1.5D, mc.player.getZ()) : best;
+      BlockPos result = isTower() && !preferUp && best.getY() != mc.player.getY() - 1.5D ? BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - 1.5D, mc.player.getZ()) : best;
       this.preferUpFace = preferUp;
       this.lastClutchLayer = currentLayer;
       return result;
    }
 
    private void updateClutchDebug() {
-      Vec3 currentPosition = mc.player.position();
+      Vec3d currentPosition = mc.player.getPos();
       if (this.lastClutchDebugPosition == null) {
          this.lastClutchDebugPosition = currentPosition;
          return;
       }
 
       if (currentPosition.y > this.lastClutchDebugPosition.y) {
-         Vec3 currentHorizontalPosition = getHorizontalPosition(currentPosition);
+         Vec3d currentHorizontalPosition = getHorizontalPosition(currentPosition);
          if (!this.clutchDebugAnchorActive) {
             this.clutchDebugAnchorPosition = getHorizontalPosition(this.lastClutchDebugPosition);
             this.clutchDebugAnchorActive = true;
@@ -816,13 +816,13 @@ public class Scaffold extends Module {
       this.lastClutchDebugPosition = currentPosition;
    }
 
-   private Vec3 getHorizontalPosition(Vec3 position) {
-      return new Vec3(position.x, 0.0D, position.z);
+   private Vec3d getHorizontalPosition(Vec3d position) {
+      return new Vec3d(position.x, 0.0D, position.z);
    }
 
    public boolean isValidBlock(BlockPos blockPos) {
-      Block block = mc.level.getBlockState(blockPos).getBlock();
-      return !(block instanceof LiquidBlock) && !(block instanceof AirBlock) && !(block instanceof ChestBlock) && !(block instanceof FurnaceBlock) && !(block instanceof EnderChestBlock) && !(block instanceof TallGrassBlock) && !(block instanceof SnowLayerBlock) && !(block instanceof EnchantmentTableBlock) && !(block instanceof AnvilBlock) && !(block instanceof CraftingTableBlock);
+      Block block = mc.world.getBlockState(blockPos).getBlock();
+      return !(block instanceof FluidBlock) && !(block instanceof AirBlock) && !(block instanceof ChestBlock) && !(block instanceof FurnaceBlock) && !(block instanceof EnderChestBlock) && !(block instanceof ShortPlantBlock) && !(block instanceof SnowBlock) && !(block instanceof EnchantingTableBlock) && !(block instanceof AnvilBlock) && !(block instanceof CraftingTableBlock);
    }
 
    public static boolean isValidStack(ItemStack stack) {
@@ -833,24 +833,24 @@ public class Scaffold extends Module {
          return false;
       }
 
-      String name = stack.getDisplayName().getString();
-      if (name.contains("Click") || name.contains("点击") || stack.getItem() instanceof ItemNameBlockItem) {
+      String name = stack.toHoverableText().getString();
+      if (name.contains("Click") || name.contains("点击") || stack.getItem() instanceof AliasedBlockItem) {
          return false;
       }
 
       Block block = blockItem.getBlock();
-      return !(block instanceof FlowerBlock) && !(block instanceof BushBlock) && !(block instanceof FungusBlock) && !(block instanceof CropBlock) && !(block instanceof SlabBlock) && !blacklistedBlocks.contains(block);
+      return !(block instanceof FlowerBlock) && !(block instanceof PlantBlock) && !(block instanceof FungusBlock) && !(block instanceof CropBlock) && !(block instanceof SlabBlock) && !blacklistedBlocks.contains(block);
    }
 
    public static boolean isOnBlockEdge(float sensitivity) {
-      return mc.player != null && mc.level != null && !mc.level.getCollisions(mc.player, mc.player.getBoundingBox().move(0.0D, -0.5D, 0.0D).inflate(-sensitivity, 0.0D, -sensitivity)).iterator().hasNext();
+      return mc.player != null && mc.world != null && !mc.world.getCollisions(mc.player, mc.player.getBoundingBox().offset(0.0D, -0.5D, 0.0D).expand(-sensitivity, 0.0D, -sensitivity)).iterator().hasNext();
    }
 
    public boolean isBlockUnder() {
-      if (mc.player == null || mc.level == null) {
+      if (mc.player == null || mc.world == null) {
          return false;
       }
-      return mc.level.getBlockState(mc.player.blockPosition().below()).isSolidRender(mc.level, mc.player.blockPosition().below());
+      return mc.world.getBlockState(mc.player.getBlockPos().down()).isOpaqueFullCube(mc.world, mc.player.getBlockPos().down());
    }
 
    public int getBlockCount() {
@@ -859,12 +859,12 @@ public class Scaffold extends Module {
       }
       int totalBlocks = 0;
       for (int i = 0; i < 36; ++i) {
-         ItemStack stack = mc.player.getInventory().getItem(i);
+         ItemStack stack = mc.player.getInventory().getStack(i);
          if (stack.getItem() instanceof BlockItem) {
             totalBlocks += stack.getCount();
          }
       }
-      ItemStack offhandStack = mc.player.getOffhandItem();
+      ItemStack offhandStack = mc.player.getOffHandStack();
       if (offhandStack.getItem() instanceof BlockItem) {
          totalBlocks += offhandStack.getCount();
       }
@@ -872,8 +872,8 @@ public class Scaffold extends Module {
    }
 
    private boolean shouldBuild() {
-      BlockPos playerPos = BlockPos.containing(mc.player.getX(), mc.player.getY() - 0.5D, mc.player.getZ());
-      return mc.level.isEmptyBlock(playerPos) && getPlaceHand() != null;
+      BlockPos playerPos = BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - 0.5D, mc.player.getZ());
+      return mc.world.isAir(playerPos) && getPlaceHand() != null;
    }
 
    private boolean isHitValid(HitResult hit) {
@@ -882,15 +882,15 @@ public class Scaffold extends Module {
       }
       return isValidBlock(blockHit.getBlockPos())
               && isNearbyBlockPos(blockHit.getBlockPos())
-              && blockHit.getDirection() != Direction.DOWN
-              && (this.canUseLegitUp() || this.preferUpFace || blockHit.getDirection() != Direction.UP);
+              && blockHit.getSide() != Direction.DOWN
+              && (this.canUseLegitUp() || this.preferUpFace || blockHit.getSide() != Direction.UP);
    }
 
    private boolean isNearbyBlockPos(BlockPos blockPos) {
       if (this.pos == null) {
          return false;
       }
-      if (!mc.player.onGround()) {
+      if (!mc.player.isOnGround()) {
          return blockPos.equals(this.pos);
       }
       for (int x = this.pos.getX() - 1; x <= this.pos.getX() + 1; ++x) {
@@ -905,7 +905,7 @@ public class Scaffold extends Module {
 
    private boolean isTower() {
       boolean holdingJump = isJumpHeld();
-      return holdingJump && !this.useLastTellyMovementYaw && !mc.options.keyUp.isDown() && !mc.options.keyDown.isDown() && !mc.options.keyLeft.isDown() && !mc.options.keyRight.isDown();
+      return holdingJump && !this.useLastTellyMovementYaw && !mc.options.forwardKey.isPressed() && !mc.options.backKey.isPressed() && !mc.options.leftKey.isPressed() && !mc.options.rightKey.isPressed();
    }
 
    private boolean canUseLegitUp() {
@@ -913,7 +913,7 @@ public class Scaffold extends Module {
    }
 
    private boolean isManualJumpHeld() {
-      return InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getDefaultKey().getValue());
+      return InputUtil.isKeyPressed(mc.getWindow().getHandle(), mc.options.jumpKey.getDefaultKey().getCode());
    }
 
    private boolean isJumpHeld() {
@@ -927,34 +927,34 @@ public class Scaffold extends Module {
    }
 
    private float currentMovementYaw() {
-      float realYaw = mc.player.getYRot();
-      if (mc.options.keyDown.isDown()) {
+      float realYaw = mc.player.getYaw();
+      if (mc.options.backKey.isPressed()) {
          realYaw += 180.0F;
-         if (mc.options.keyLeft.isDown()) {
+         if (mc.options.leftKey.isPressed()) {
             realYaw += 45.0F;
-         } else if (mc.options.keyRight.isDown()) {
+         } else if (mc.options.rightKey.isPressed()) {
             realYaw -= 45.0F;
          }
-      } else if (mc.options.keyUp.isDown()) {
-         if (mc.options.keyLeft.isDown()) {
+      } else if (mc.options.forwardKey.isPressed()) {
+         if (mc.options.leftKey.isPressed()) {
             realYaw -= 45.0F;
-         } else if (mc.options.keyRight.isDown()) {
+         } else if (mc.options.rightKey.isPressed()) {
             realYaw += 45.0F;
          }
-      } else if (mc.options.keyRight.isDown()) {
+      } else if (mc.options.rightKey.isPressed()) {
          realYaw += 90.0F;
-      } else if (mc.options.keyLeft.isDown()) {
+      } else if (mc.options.leftKey.isPressed()) {
          realYaw -= 90.0F;
       }
       return realYaw;
    }
 
-   private InteractionHand getPlaceHand() {
-      if (isValidStack(mc.player.getMainHandItem())) {
-         return InteractionHand.MAIN_HAND;
+   private Hand getPlaceHand() {
+      if (isValidStack(mc.player.getMainHandStack())) {
+         return Hand.MAIN_HAND;
       }
-      if (isValidStack(mc.player.getOffhandItem())) {
-         return InteractionHand.OFF_HAND;
+      if (isValidStack(mc.player.getOffHandStack())) {
+         return Hand.OFF_HAND;
       }
       return null;
    }
@@ -963,26 +963,26 @@ public class Scaffold extends Module {
       if (!skippedTick && this.rotationMode.isCurrentMode("Strict") && this.strictPlacementFace != null) {
          return blockHit.getBlockPos().equals(this.pos)
                  && isValidBlock(blockHit.getBlockPos())
-                 && blockHit.getDirection() != Direction.DOWN
-                 && blockHit.getDirection() == this.strictPlacementFace
+                 && blockHit.getSide() != Direction.DOWN
+                 && blockHit.getSide() == this.strictPlacementFace
                  && !this.isUnsafeRecentSupport(blockHit.getBlockPos())
-                 && mc.level.isEmptyBlock(blockHit.getBlockPos().relative(blockHit.getDirection()));
+                 && mc.world.isAir(blockHit.getBlockPos().offset(blockHit.getSide()));
       }
       if (blockHit.getBlockPos().equals(this.pos)) {
          return isValidBlock(blockHit.getBlockPos())
-                 && blockHit.getDirection() != Direction.DOWN
+                 && blockHit.getSide() != Direction.DOWN
                  && !this.isUnsafeRecentSupport(blockHit.getBlockPos())
-                 && mc.level.isEmptyBlock(blockHit.getBlockPos().relative(blockHit.getDirection()));
+                 && mc.world.isAir(blockHit.getBlockPos().offset(blockHit.getSide()));
       }
-      if (!skippedTick || this.pos == null || !isValidBlock(blockHit.getBlockPos()) || blockHit.getDirection() == Direction.DOWN) {
+      if (!skippedTick || this.pos == null || !isValidBlock(blockHit.getBlockPos()) || blockHit.getSide() == Direction.DOWN) {
          return false;
       }
       if (this.isUnsafeRecentSupport(blockHit.getBlockPos())) {
          return false;
       }
 
-      BlockPos placedPos = blockHit.getBlockPos().relative(blockHit.getDirection());
-      if (!mc.level.isEmptyBlock(placedPos)) {
+      BlockPos placedPos = blockHit.getBlockPos().offset(blockHit.getSide());
+      if (!mc.world.isAir(placedPos)) {
          return false;
       }
 
@@ -996,10 +996,10 @@ public class Scaffold extends Module {
       if (!this.preferUpFace && !this.clutchSafeDistanceActive) {
          return false;
       }
-      if (mc.level == null) {
+      if (mc.world == null) {
          return false;
       }
-      long now = mc.level.getGameTime();
+      long now = mc.world.getTime();
       for (RenderedBlock block : this.renderedBlocks) {
          if (block.position.equals(blockPos) && now - block.placedTick <= 2L) {
             return true;
@@ -1010,7 +1010,7 @@ public class Scaffold extends Module {
 
    private int findBlockSlot() {
       for (int i = 0; i < 9; ++i) {
-         if (isValidStack(mc.player.getInventory().getItem(i))) {
+         if (isValidStack(mc.player.getInventory().getStack(i))) {
             return i;
          }
       }

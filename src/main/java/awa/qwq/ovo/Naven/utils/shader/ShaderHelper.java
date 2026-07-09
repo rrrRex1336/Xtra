@@ -1,12 +1,11 @@
 package awa.qwq.ovo.Naven.utils.shader;
 
 import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.AbstractTexture;
-import net.minecraft.resources.ResourceLocation;
-
 import java.nio.ByteBuffer;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.BufferRenderer;
+import net.minecraft.client.texture.AbstractTexture;
+import net.minecraft.util.Identifier;
 
 import static org.lwjgl.opengl.GL11C.*;
 import static org.lwjgl.opengl.GL12C.GL_UNPACK_IMAGE_HEIGHT;
@@ -26,11 +25,11 @@ public class ShaderHelper {
     public static void bindVertexArray(int vao) {
         GlStateManager._glBindVertexArray(vao);
         try {
-            BufferUploader.class.getDeclaredField("lastImmediateBuffer").set(null, null);
+            BufferRenderer.class.getDeclaredField("lastImmediateBuffer").set(null, null);
         } catch (Throwable e) {
         }
         try {
-            BufferUploader.class.getDeclaredField("field_38982").set(null, null);
+            BufferRenderer.class.getDeclaredField("field_38982").set(null, null);
         } catch (Throwable e) {
         }
 //        BufferRendererAccessor.setCurrentVertexBuffer(null);
@@ -162,9 +161,9 @@ public class ShaderHelper {
         glDisable(GL_LINE_SMOOTH);
     }
 
-    public static void bindTexture(ResourceLocation id) {
-        AbstractTexture texture = Minecraft.getInstance().getTextureManager().getTexture(id);
-        bindTexture(texture.getId(), 0);
+    public static void bindTexture(Identifier id) {
+        AbstractTexture texture = MinecraftClient.getInstance().getTextureManager().getTexture(id);
+        bindTexture(texture.getGlId(), 0);
     }
 
     public static void bindTexture(int i, int slot) {

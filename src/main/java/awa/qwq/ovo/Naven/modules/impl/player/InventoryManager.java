@@ -27,28 +27,28 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
-import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
-import net.minecraft.network.protocol.game.ServerboundInteractPacket;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
-import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
-import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.item.ArmorItem;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.CrossbowItem;
-import net.minecraft.world.item.FishingRodItem;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemNameBlockItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.PickaxeItem;
-import net.minecraft.world.item.ShovelItem;
-import net.minecraft.world.item.SwordItem;
+import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.gui.screen.ingame.InventoryScreen;
+import net.minecraft.item.AliasedBlockItem;
+import net.minecraft.item.ArmorItem;
+import net.minecraft.item.AxeItem;
+import net.minecraft.item.BowItem;
+import net.minecraft.item.CrossbowItem;
+import net.minecraft.item.FishingRodItem;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.item.PickaxeItem;
+import net.minecraft.item.ShovelItem;
+import net.minecraft.item.SwordItem;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.screen.slot.SlotActionType;
 import org.apache.commons.lang3.tuple.Pair;
 
 @ModuleInfo(
@@ -312,15 +312,15 @@ public class InventoryManager extends Module {
          return true;
       } else if (InventoryUtils.isSpear(stack)) {
          return true;
-      } else if (stack.getDisplayName().getString().contains("点击使用")) {
+      } else if (stack.toHoverableText().getString().contains("点击使用")) {
          return true;
       } else if (stack.getItem() instanceof ArmorItem) {
          ArmorItem item = (ArmorItem)stack.getItem();
          float protection = InventoryUtils.getProtection(stack);
-         if (InventoryUtils.getCurrentArmorScore(item.getEquipmentSlot()) >= protection) {
+         if (InventoryUtils.getCurrentArmorScore(item.getSlotType()) >= protection) {
             return false;
          } else {
-            float bestArmor = InventoryUtils.getBestArmorScore(item.getEquipmentSlot());
+            float bestArmor = InventoryUtils.getBestArmorScore(item.getSlotType());
             return !(protection < bestArmor);
          }
       } else if (stack.getItem() instanceof SwordItem) {
@@ -348,27 +348,27 @@ public class InventoryManager extends Module {
       } else if ((stack.getItem() == Items.SNOWBALL || stack.getItem() == Items.EGG) && !InventoryUtils.isWindCharge(stack) && !shouldKeepProjectile()) {
          return false;
       } else {
-         return stack.getItem() instanceof ItemNameBlockItem ? false : InventoryUtils.isCommonItemUseful(stack);
+         return stack.getItem() instanceof AliasedBlockItem ? false : InventoryUtils.isCommonItemUseful(stack);
       }
    }
 
    @EventTarget
    public void onPacket(EventPacket e) {
       if (e.getType() == EventType.SEND) {
-         if (e.getPacket() instanceof ServerboundContainerClosePacket) {
+         if (e.getPacket() instanceof CloseHandledScreenC2SPacket) {
             this.inventoryOpen = false;
          }
 
          if (this.inventoryOpen && !this.inventoryOnly.getCurrentValue()) {
-            if (e.getPacket() instanceof ServerboundMovePlayerPacket) {
+            if (e.getPacket() instanceof PlayerMoveC2SPacket) {
                if (MoveUtils.isMoving()) {
-                  mc.getConnection().send(new ServerboundContainerClosePacket(mc.player.inventoryMenu.containerId));
+                  mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(mc.player.playerScreenHandler.syncId));
                }
-            } else if (e.getPacket() instanceof ServerboundUseItemOnPacket
-               || e.getPacket() instanceof ServerboundUseItemPacket
-               || e.getPacket() instanceof ServerboundInteractPacket
-               || e.getPacket() instanceof ServerboundPlayerActionPacket) {
-               mc.getConnection().send(new ServerboundContainerClosePacket(mc.player.inventoryMenu.containerId));
+            } else if (e.getPacket() instanceof PlayerInteractBlockC2SPacket
+               || e.getPacket() instanceof PlayerInteractItemC2SPacket
+               || e.getPacket() instanceof PlayerInteractEntityC2SPacket
+               || e.getPacket() instanceof PlayerActionC2SPacket) {
+               mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(mc.player.playerScreenHandler.syncId));
             }
          }
       }
@@ -423,7 +423,7 @@ public class InventoryManager extends Module {
    @EventTarget
    public void onMotion(EventMotion e) {
       if (e.getType() == EventType.PRE) {
-         if (!(mc.screen instanceof ClickGUI) && !this.checkConfig()) {
+         if (!(mc.currentScreen instanceof ClickGUI) && !this.checkConfig()) {
             Notification notification = new Notification(
                NotificationLevel.ERROR, "Duplicate slot config in Inventory Manager! Please check your config!", 8000L
             );
@@ -445,13 +445,13 @@ public class InventoryManager extends Module {
 
          if (ContainerStealer.isWorking()
                  || Naven.getInstance().getModuleManager().getModule(Scaffold.class).isEnabled()
-                 || (this.inventoryOnly.getCurrentValue() ? !(mc.screen instanceof InventoryScreen) : (this.noMove.getCurrentValue() ? this.noMoveTicks <= 1 : false))) {
+                 || (this.inventoryOnly.getCurrentValue() ? !(mc.currentScreen instanceof InventoryScreen) : (this.noMove.getCurrentValue() ? this.noMoveTicks <= 1 : false))) {
             this.clickOffHand = false;
             this.releaseSilentNoSprintIfIdle();
             return;
          }
 
-         if (mc.screen instanceof AbstractContainerScreen container && container.getMenu().containerId != mc.player.inventoryMenu.containerId) {
+         if (mc.currentScreen instanceof HandledScreen container && container.getScreenHandler().syncId != mc.player.playerScreenHandler.syncId) {
             this.releaseSilentNoSprintIfIdle();
             return;
          }
@@ -469,28 +469,28 @@ public class InventoryManager extends Module {
                   ArmorItem item = (ArmorItem)stack.getItem();
                   if (!stack.isEmpty()
                      && this.canClickInventory()
-                     && InventoryUtils.getBestArmorScore(item.getEquipmentSlot()) > InventoryUtils.getProtection(stack)) {
+                     && InventoryUtils.getBestArmorScore(item.getSlotType()) > InventoryUtils.getProtection(stack)) {
                      this.prepareSilentNoSprintClick();
-                     mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, 4 + (4 - i), 1, ClickType.THROW, mc.player);
+                     mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, 4 + (4 - i), 1, SlotActionType.THROW, mc.player);
                      this.inventoryOpen = true;
                      this.resetClickTimer();
                   }
                }
             }
 
-            for (int ix = 0; ix < mc.player.getInventory().items.size(); ix++) {
-               ItemStack stack = (ItemStack)mc.player.getInventory().items.get(ix);
+            for (int ix = 0; ix < mc.player.getInventory().main.size(); ix++) {
+               ItemStack stack = (ItemStack)mc.player.getInventory().main.get(ix);
                if (!stack.isEmpty() && stack.getItem() instanceof ArmorItem) {
                   ArmorItem item = (ArmorItem)stack.getItem();
                   float currentItemScore = InventoryUtils.getProtection(stack);
-                  boolean isBestItem = InventoryUtils.getBestArmorScore(item.getEquipmentSlot()) == currentItemScore;
-                  boolean isBetterItem = InventoryUtils.getCurrentArmorScore(item.getEquipmentSlot()) < currentItemScore;
+                  boolean isBestItem = InventoryUtils.getBestArmorScore(item.getSlotType()) == currentItemScore;
+                  boolean isBetterItem = InventoryUtils.getCurrentArmorScore(item.getSlotType()) < currentItemScore;
                   if (isBestItem && isBetterItem && this.canClickInventory()) {
                      this.prepareSilentNoSprintClick();
                      if (ix < 9) {
-                        mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, ix + 36, 0, ClickType.QUICK_MOVE, mc.player);
+                        mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, ix + 36, 0, SlotActionType.QUICK_MOVE, mc.player);
                      } else {
-                        mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, ix, 0, ClickType.QUICK_MOVE, mc.player);
+                        mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, ix, 0, SlotActionType.QUICK_MOVE, mc.player);
                      }
 
                      this.inventoryOpen = true;
@@ -502,24 +502,24 @@ public class InventoryManager extends Module {
 
          if (this.clickOffHand && this.canClickInventory()) {
             this.prepareSilentNoSprintClick();
-            mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, 45, 0, ClickType.PICKUP, mc.player);
+            mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, 45, 0, SlotActionType.PICKUP, mc.player);
             this.inventoryOpen = true;
             this.clickOffHand = false;
             this.resetClickTimer();
          }
 
          if (this.offhandItems.isCurrentMode("Golden Apple")) {
-            ItemStack offHand = (ItemStack)mc.player.getInventory().offhand.get(0);
+            ItemStack offHand = (ItemStack)mc.player.getInventory().offHand.get(0);
             int slot = InventoryUtils.getItemSlot(Items.GOLDEN_APPLE);
             if (slot != -1 && this.canClickInventory()) {
                if (offHand.getItem() == Items.GOLDEN_APPLE) {
-                  ItemStack goldenAppleStack = (ItemStack)mc.player.getInventory().items.get(slot);
+                  ItemStack goldenAppleStack = (ItemStack)mc.player.getInventory().main.get(slot);
                   if (offHand.getCount() + goldenAppleStack.getCount() <= 64) {
                      this.prepareSilentNoSprintClick();
                      if (slot < 9) {
-                        mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, slot + 36, 0, ClickType.PICKUP, mc.player);
+                        mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, slot + 36, 0, SlotActionType.PICKUP, mc.player);
                      } else {
-                        mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, slot, 0, ClickType.PICKUP, mc.player);
+                        mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, slot, 0, SlotActionType.PICKUP, mc.player);
                      }
 
                      this.inventoryOpen = true;
@@ -531,7 +531,7 @@ public class InventoryManager extends Module {
                }
             }
          } else if (this.offhandItems.isCurrentMode("Projectile")) {
-            ItemStack offHand = (ItemStack)mc.player.getInventory().offhand.get(0);
+            ItemStack offHand = (ItemStack)mc.player.getInventory().offHand.get(0);
             ItemStack bestProjectile = InventoryUtils.getBestProjectile();
             if (bestProjectile != null) {
                int slot = InventoryUtils.getItemStackSlot(bestProjectile);
@@ -547,13 +547,13 @@ public class InventoryManager extends Module {
                }
             }
          } else if (this.offhandItems.isCurrentMode("Fishing Rod")) {
-            ItemStack offHand = (ItemStack)mc.player.getInventory().offhand.get(0);
+            ItemStack offHand = (ItemStack)mc.player.getInventory().offHand.get(0);
             int slotx = InventoryUtils.getItemSlot(Items.FISHING_ROD);
             if (slotx != -1 && this.canClickInventory() && offHand.getItem() != Items.FISHING_ROD) {
                this.swapOffHand(slotx);
             }
          } else if (this.offhandItems.isCurrentMode("Block")) {
-            ItemStack offHand = (ItemStack)mc.player.getInventory().offhand.get(0);
+            ItemStack offHand = (ItemStack)mc.player.getInventory().offHand.get(0);
             ItemStack bestBlock = InventoryUtils.getBestBlock();
             if (bestBlock != null) {
                int slotx = InventoryUtils.getItemStackSlot(bestBlock);
@@ -578,7 +578,7 @@ public class InventoryManager extends Module {
 
          if (this.switchBlock.getCurrentValue()) {
             int blockSlot = (int)(this.blockSlot.getCurrentValue() - 1.0F);
-            ItemStack currentBlock = (ItemStack)mc.player.getInventory().items.get(blockSlot);
+            ItemStack currentBlock = (ItemStack)mc.player.getInventory().main.get(blockSlot);
             ItemStack bestBlock = InventoryUtils.getBestBlock();
             if (bestBlock != null
                && (bestBlock.getCount() > currentBlock.getCount() || !Scaffold.isValidStack(currentBlock))
@@ -594,7 +594,7 @@ public class InventoryManager extends Module {
 
          if (this.switchSword.getCurrentValue()) {
             int slotxx = (int)(this.swordSlot.getCurrentValue() - 1.0F);
-            ItemStack currentSword = (ItemStack)mc.player.getInventory().items.get(slotxx);
+            ItemStack currentSword = (ItemStack)mc.player.getInventory().main.get(slotxx);
             ItemStack bestSword = InventoryUtils.getBestSword();
             ItemStack bestShapeAxe = InventoryUtils.getBestShapeAxe();
             if (InventoryUtils.getAxeDamage(bestShapeAxe) > InventoryUtils.getSwordDamage(bestSword)) {
@@ -617,7 +617,7 @@ public class InventoryManager extends Module {
          if (this.switchPickaxe.getCurrentValue()) {
             int slotxxx = (int)(this.pickaxeSlot.getCurrentValue() - 1.0F);
             ItemStack bestPickaxe = InventoryUtils.getBestPickaxe();
-            ItemStack currentPickaxe = (ItemStack)mc.player.getInventory().items.get(slotxxx);
+            ItemStack currentPickaxe = (ItemStack)mc.player.getInventory().main.get(slotxxx);
             if (bestPickaxe != null
                && bestPickaxe.getItem() instanceof PickaxeItem
                && (InventoryUtils.getToolScore(bestPickaxe) > InventoryUtils.getToolScore(currentPickaxe) || !(currentPickaxe.getItem() instanceof PickaxeItem))
@@ -630,7 +630,7 @@ public class InventoryManager extends Module {
          if (this.switchAxe.getCurrentValue()) {
             int slotxxx = (int)(this.axeSlot.getCurrentValue() - 1.0F);
             ItemStack bestAxe = InventoryUtils.getBestAxe();
-            ItemStack currentAxe = (ItemStack)mc.player.getInventory().items.get(slotxxx);
+            ItemStack currentAxe = (ItemStack)mc.player.getInventory().main.get(slotxxx);
             if (bestAxe != null
                && bestAxe.getItem() instanceof AxeItem
                && (InventoryUtils.getToolScore(bestAxe) > InventoryUtils.getToolScore(currentAxe) || !(currentAxe.getItem() instanceof AxeItem))) {
@@ -649,7 +649,7 @@ public class InventoryManager extends Module {
          if (this.switchRod.getCurrentValue() && !this.offhandItems.isCurrentMode("Fishing Rod")) {
             int slotxxx = (int)(this.rodSlot.getCurrentValue() - 1.0F);
             ItemStack bestRod = InventoryUtils.getFishingRod();
-            ItemStack currentRod = (ItemStack)mc.player.getInventory().items.get(slotxxx);
+            ItemStack currentRod = (ItemStack)mc.player.getInventory().main.get(slotxxx);
             if (!(currentRod.getItem() instanceof FishingRodItem)) {
                this.swapItem(slotxxx, bestRod);
             }
@@ -657,7 +657,7 @@ public class InventoryManager extends Module {
 
          if (this.switchBow.getCurrentValue()) {
             int slotxxx = (int)(this.bowSlot.getCurrentValue() - 1.0F);
-            ItemStack currentBow = (ItemStack)mc.player.getInventory().items.get(slotxxx);
+            ItemStack currentBow = (ItemStack)mc.player.getInventory().main.get(slotxxx);
             ItemStack bestBow;
             float bestBowScore;
             float currentBowScore;
@@ -732,11 +732,11 @@ public class InventoryManager extends Module {
          }
 
          if (this.throwItems.getCurrentValue()) {
-            List<Integer> slots = IntStream.range(0, mc.player.getInventory().items.size()).boxed().collect(Collectors.toList());
+            List<Integer> slots = IntStream.range(0, mc.player.getInventory().main.size()).boxed().collect(Collectors.toList());
             Collections.shuffle(slots);
 
             for (Integer slotxxxx : slots) {
-               ItemStack stack = (ItemStack)mc.player.getInventory().items.get(slotxxxx);
+               ItemStack stack = (ItemStack)mc.player.getInventory().main.get(slotxxxx);
                if (!stack.isEmpty() && !this.isItemUseful(stack)) {
                   this.throwItem(stack);
                }
@@ -755,7 +755,7 @@ public class InventoryManager extends Module {
               && !this.inventoryOnly.getCurrentValue()
               && !this.noMove.getCurrentValue()
               && mc.player != null
-              && mc.gameMode != null;
+              && mc.interactionManager != null;
    }
 
    private boolean canManageForSilentNoSprint() {
@@ -770,7 +770,7 @@ public class InventoryManager extends Module {
       } catch (Exception ignored) {
       }
 
-      return !(mc.screen instanceof AbstractContainerScreen container && container.getMenu().containerId != mc.player.inventoryMenu.containerId);
+      return !(mc.currentScreen instanceof HandledScreen container && container.getScreenHandler().syncId != mc.player.playerScreenHandler.syncId);
    }
 
    private boolean shouldHoldSilentNoSprint() {
@@ -837,14 +837,14 @@ public class InventoryManager extends Module {
 
       if (!this.silentNoSprintWasSprinting && !this.silentNoSprintWasKeySprintDown) {
          this.silentNoSprintWasSprinting = mc.player.isSprinting();
-         this.silentNoSprintWasKeySprintDown = mc.options.keySprint.isDown();
+         this.silentNoSprintWasKeySprintDown = mc.options.sprintKey.isPressed();
       }
 
-      mc.options.keySprint.setDown(false);
-      mc.options.toggleSprint().set(false);
+      mc.options.sprintKey.setPressed(false);
+      mc.options.getSprintToggled().setValue(false);
       if (mc.player.isSprinting()) {
-         if (mc.getConnection() != null) {
-            mc.getConnection().send(new ServerboundPlayerCommandPacket(mc.player, ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
+         if (mc.getNetworkHandler() != null) {
+            mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
          }
          mc.player.setSprinting(false);
       }
@@ -858,7 +858,7 @@ public class InventoryManager extends Module {
       }
 
       if (this.silentNoSprintWasKeySprintDown) {
-         mc.options.keySprint.setDown(true);
+         mc.options.sprintKey.setPressed(true);
       }
       if (this.silentNoSprintWasSprinting && this.canResumeSilentSprint()) {
          mc.player.setSprinting(true);
@@ -872,10 +872,10 @@ public class InventoryManager extends Module {
       return mc.player != null
               && MoveUtils.isMoving()
               && mc.player.getHealth() > 0.0F
-              && !mc.player.isInWater()
+              && !mc.player.isTouchingWater()
               && !mc.player.isInLava()
-              && !mc.player.isShiftKeyDown()
-              && !mc.player.isPassenger();
+              && !mc.player.isSneaking()
+              && !mc.player.hasVehicle();
    }
 
    private boolean hasPendingInventoryAction() {
@@ -885,17 +885,17 @@ public class InventoryManager extends Module {
                ItemStack stack = mc.player.getInventory().armor.get(i);
                if (stack.getItem() instanceof ArmorItem item
                        && !stack.isEmpty()
-                       && InventoryUtils.getBestArmorScore(item.getEquipmentSlot()) > InventoryUtils.getProtection(stack)) {
+                       && InventoryUtils.getBestArmorScore(item.getSlotType()) > InventoryUtils.getProtection(stack)) {
                   return true;
                }
             }
 
-            for (int i = 0; i < mc.player.getInventory().items.size(); i++) {
-               ItemStack stack = mc.player.getInventory().items.get(i);
+            for (int i = 0; i < mc.player.getInventory().main.size(); i++) {
+               ItemStack stack = mc.player.getInventory().main.get(i);
                if (!stack.isEmpty() && stack.getItem() instanceof ArmorItem item) {
                   float currentItemScore = InventoryUtils.getProtection(stack);
-                  if (InventoryUtils.getBestArmorScore(item.getEquipmentSlot()) == currentItemScore
-                          && InventoryUtils.getCurrentArmorScore(item.getEquipmentSlot()) < currentItemScore) {
+                  if (InventoryUtils.getBestArmorScore(item.getSlotType()) == currentItemScore
+                          && InventoryUtils.getCurrentArmorScore(item.getSlotType()) < currentItemScore) {
                      return true;
                   }
                }
@@ -911,7 +911,7 @@ public class InventoryManager extends Module {
          }
 
          if (this.throwItems.getCurrentValue()) {
-            for (ItemStack stack : mc.player.getInventory().items) {
+            for (ItemStack stack : mc.player.getInventory().main) {
                if (!stack.isEmpty() && !this.isItemUseful(stack)) {
                   return true;
                }
@@ -925,7 +925,7 @@ public class InventoryManager extends Module {
    }
 
    private boolean hasPendingOffhandAction() {
-      ItemStack offHand = mc.player.getInventory().offhand.get(0);
+      ItemStack offHand = mc.player.getInventory().offHand.get(0);
       if (this.offhandItems.isCurrentMode("Golden Apple")) {
          int slot = InventoryUtils.getItemSlot(Items.GOLDEN_APPLE);
          if (slot == -1) {
@@ -934,7 +934,7 @@ public class InventoryManager extends Module {
          if (offHand.getItem() != Items.GOLDEN_APPLE) {
             return true;
          }
-         ItemStack goldenAppleStack = mc.player.getInventory().items.get(slot);
+         ItemStack goldenAppleStack = mc.player.getInventory().main.get(slot);
          return offHand.getCount() + goldenAppleStack.getCount() <= 64;
       }
 
@@ -972,7 +972,7 @@ public class InventoryManager extends Module {
 
       if (this.switchBlock.getCurrentValue()) {
          int blockSlot = (int)(this.blockSlot.getCurrentValue() - 1.0F);
-         ItemStack currentBlock = mc.player.getInventory().items.get(blockSlot);
+         ItemStack currentBlock = mc.player.getInventory().main.get(blockSlot);
          ItemStack bestBlock = InventoryUtils.getBestBlock();
          if (bestBlock != null
                  && (bestBlock.getCount() > currentBlock.getCount() || !Scaffold.isValidStack(currentBlock))
@@ -987,7 +987,7 @@ public class InventoryManager extends Module {
 
       if (this.switchSword.getCurrentValue()) {
          int slot = (int)(this.swordSlot.getCurrentValue() - 1.0F);
-         ItemStack currentSword = mc.player.getInventory().items.get(slot);
+         ItemStack currentSword = mc.player.getInventory().main.get(slot);
          ItemStack bestSword = InventoryUtils.getBestSword();
          ItemStack bestShapeAxe = InventoryUtils.getBestShapeAxe();
          if (InventoryUtils.getAxeDamage(bestShapeAxe) > InventoryUtils.getSwordDamage(bestSword)) {
@@ -1005,7 +1005,7 @@ public class InventoryManager extends Module {
       if (this.switchPickaxe.getCurrentValue()) {
          int slot = (int)(this.pickaxeSlot.getCurrentValue() - 1.0F);
          ItemStack bestPickaxe = InventoryUtils.getBestPickaxe();
-         ItemStack currentPickaxe = mc.player.getInventory().items.get(slot);
+         ItemStack currentPickaxe = mc.player.getInventory().main.get(slot);
          if (bestPickaxe != null && bestPickaxe.getItem() instanceof PickaxeItem
                  && (InventoryUtils.getToolScore(bestPickaxe) > InventoryUtils.getToolScore(currentPickaxe) || !(currentPickaxe.getItem() instanceof PickaxeItem))
                  && this.shouldSwapItem(slot, bestPickaxe)) {
@@ -1016,7 +1016,7 @@ public class InventoryManager extends Module {
       if (this.switchAxe.getCurrentValue()) {
          int slot = (int)(this.axeSlot.getCurrentValue() - 1.0F);
          ItemStack bestAxe = InventoryUtils.getBestAxe();
-         ItemStack currentAxe = mc.player.getInventory().items.get(slot);
+         ItemStack currentAxe = mc.player.getInventory().main.get(slot);
          if (bestAxe != null && bestAxe.getItem() instanceof AxeItem
                  && (InventoryUtils.getToolScore(bestAxe) > InventoryUtils.getToolScore(currentAxe) || !(currentAxe.getItem() instanceof AxeItem))
                  && this.shouldSwapItem(slot, bestAxe)) {
@@ -1035,7 +1035,7 @@ public class InventoryManager extends Module {
       if (this.switchRod.getCurrentValue() && !this.offhandItems.isCurrentMode("Fishing Rod")) {
          int slot = (int)(this.rodSlot.getCurrentValue() - 1.0F);
          ItemStack bestRod = InventoryUtils.getFishingRod();
-         ItemStack currentRod = mc.player.getInventory().items.get(slot);
+         ItemStack currentRod = mc.player.getInventory().main.get(slot);
          if (bestRod != null && !(currentRod.getItem() instanceof FishingRodItem) && this.shouldSwapItem(slot, bestRod)) {
             return true;
          }
@@ -1078,7 +1078,7 @@ public class InventoryManager extends Module {
       }
 
       int slot = (int)(this.bowSlot.getCurrentValue() - 1.0F);
-      ItemStack currentBow = mc.player.getInventory().items.get(slot);
+      ItemStack currentBow = mc.player.getInventory().main.get(slot);
       ItemStack bestBow = null;
       float bestBowScore = 0.0F;
       float currentBowScore = 0.0F;
@@ -1122,7 +1122,7 @@ public class InventoryManager extends Module {
          return false;
       }
 
-      ItemStack currentSlot = mc.player.getInventory().items.get(targetSlot);
+      ItemStack currentSlot = mc.player.getInventory().main.get(targetSlot);
       return InventoryUtils.isItemValid(currentSlot) && bestItem != currentSlot && InventoryUtils.getItemStackSlot(bestItem) != -1;
    }
 
@@ -1131,7 +1131,7 @@ public class InventoryManager extends Module {
          return false;
       }
 
-      ItemStack currentSlot = mc.player.getInventory().items.get(targetSlot);
+      ItemStack currentSlot = mc.player.getInventory().main.get(targetSlot);
       if (!InventoryUtils.isItemValid(currentSlot)) {
          return false;
       }
@@ -1141,16 +1141,16 @@ public class InventoryManager extends Module {
          return false;
       }
 
-      ItemStack bestItemStack = mc.player.getInventory().items.get(bestItemSlot);
+      ItemStack bestItemStack = mc.player.getInventory().main.get(bestItemSlot);
       return currentSlot.getItem() != item || currentSlot.getItem() == item && currentSlot.getCount() < bestItemStack.getCount();
    }
 
    private void swapOffHand(int slot) {
       this.prepareSilentNoSprintClick();
       if (slot < 9) {
-         mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, slot + 36, 40, ClickType.SWAP, mc.player);
+         mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, slot + 36, 40, SlotActionType.SWAP, mc.player);
       } else {
-         mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, slot, 40, ClickType.SWAP, mc.player);
+         mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, slot, 40, SlotActionType.SWAP, mc.player);
       }
 
       this.inventoryOpen = true;
@@ -1163,9 +1163,9 @@ public class InventoryManager extends Module {
          if (itemSlot != -1) {
             this.prepareSilentNoSprintClick();
             if (itemSlot < 9) {
-               mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, itemSlot + 36, 1, ClickType.THROW, mc.player);
+               mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, itemSlot + 36, 1, SlotActionType.THROW, mc.player);
             } else {
-               mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, itemSlot, 1, ClickType.THROW, mc.player);
+               mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, itemSlot, 1, SlotActionType.THROW, mc.player);
             }
 
             this.inventoryOpen = true;
@@ -1175,15 +1175,15 @@ public class InventoryManager extends Module {
    }
 
    private void swapItem(int targetSlot, ItemStack bestItem) {
-      ItemStack currentSlot = (ItemStack)mc.player.getInventory().items.get(targetSlot);
+      ItemStack currentSlot = (ItemStack)mc.player.getInventory().main.get(targetSlot);
       if (InventoryUtils.isItemValid(currentSlot) && bestItem != currentSlot && this.canClickInventory()) {
          int bestItemSlot = InventoryUtils.getItemStackSlot(bestItem);
          if (bestItemSlot != -1) {
             this.prepareSilentNoSprintClick();
             if (bestItemSlot < 9) {
-               mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, bestItemSlot + 36, targetSlot, ClickType.SWAP, mc.player);
+               mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, bestItemSlot + 36, targetSlot, SlotActionType.SWAP, mc.player);
             } else {
-               mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, bestItemSlot, targetSlot, ClickType.SWAP, mc.player);
+               mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, bestItemSlot, targetSlot, SlotActionType.SWAP, mc.player);
             }
 
             this.inventoryOpen = true;
@@ -1193,17 +1193,17 @@ public class InventoryManager extends Module {
    }
 
    private void swapItem(int targetSlot, Item item) {
-      ItemStack currentSlot = (ItemStack)mc.player.getInventory().items.get(targetSlot);
+      ItemStack currentSlot = (ItemStack)mc.player.getInventory().main.get(targetSlot);
       if (InventoryUtils.isItemValid(currentSlot) && this.canClickInventory()) {
          int bestItemSlot = InventoryUtils.getItemSlot(item);
          if (bestItemSlot != -1) {
-            ItemStack bestItemStack = (ItemStack)mc.player.getInventory().items.get(bestItemSlot);
+            ItemStack bestItemStack = (ItemStack)mc.player.getInventory().main.get(bestItemSlot);
             if (currentSlot.getItem() != item || currentSlot.getItem() == item && currentSlot.getCount() < bestItemStack.getCount()) {
                this.prepareSilentNoSprintClick();
                if (bestItemSlot < 9) {
-                  mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, bestItemSlot + 36, targetSlot, ClickType.SWAP, mc.player);
+                  mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, bestItemSlot + 36, targetSlot, SlotActionType.SWAP, mc.player);
                } else {
-                  mc.gameMode.handleInventoryMouseClick(mc.player.inventoryMenu.containerId, bestItemSlot, targetSlot, ClickType.SWAP, mc.player);
+                  mc.interactionManager.clickSlot(mc.player.playerScreenHandler.syncId, bestItemSlot, targetSlot, SlotActionType.SWAP, mc.player);
                }
 
                this.inventoryOpen = true;

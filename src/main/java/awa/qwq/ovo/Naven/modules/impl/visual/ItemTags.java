@@ -19,20 +19,20 @@ import awa.qwq.ovo.Naven.utils.renderer.text.CustomTextRenderer;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.EggItem;
-import net.minecraft.world.item.EnchantedGoldenAppleItem;
-import net.minecraft.world.item.EndCrystalItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SnowballItem;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.EggItem;
+import net.minecraft.item.EnchantedGoldenAppleItem;
+import net.minecraft.item.EndCrystalItem;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.item.SnowballItem;
 import org.joml.Vector4f;
 
 @ModuleInfo(
@@ -89,8 +89,8 @@ public class ItemTags extends Module {
       .getBooleanValue();
 
    private static String getDisplayName(ItemEntity ent) {
-      ItemStack item = ent.getItem();
-      return item.getDisplayName().getString() + " * " + item.getCount();
+      ItemStack item = ent.getStack();
+      return item.toHoverableText().getString() + " * " + item.getCount();
    }
 
    private boolean isValidItem(ItemStack stack) {
@@ -158,13 +158,13 @@ public class ItemTags extends Module {
    private void updatePositions(float renderPartialTicks) {
       this.entityPositions.clear();
 
-      for (Entity entity : mc.level.entitiesForRendering()) {
+      for (Entity entity : mc.world.getEntities()) {
          if (entity instanceof ItemEntity) {
             ItemEntity itemEntity = (ItemEntity)entity;
-            if (this.isValidItem(itemEntity.getItem())) {
-               double x = MathUtils.interpolate(renderPartialTicks, entity.xo, entity.getX());
-               double y = MathUtils.interpolate(renderPartialTicks, entity.yo, entity.getY()) + (double)entity.getBbHeight() + 0.5;
-               double z = MathUtils.interpolate(renderPartialTicks, entity.zo, entity.getZ());
+            if (this.isValidItem(itemEntity.getStack())) {
+               double x = MathUtils.interpolate(renderPartialTicks, entity.prevX, entity.getX());
+               double y = MathUtils.interpolate(renderPartialTicks, entity.prevY, entity.getY()) + (double)entity.getHeight() + 0.5;
+               double z = MathUtils.interpolate(renderPartialTicks, entity.prevZ, entity.getZ());
                Vector2f vector = ProjectionUtils.project(x, y, z, renderPartialTicks);
                vector.setY(vector.getY() - 2.0F);
                this.entityPositions.put(itemEntity, vector);
@@ -191,19 +191,19 @@ public class ItemTags extends Module {
    @EventTarget
    public void on2DRender(EventRender2D e) {
       try {
-         PoseStack stack = e.getStack();
+         MatrixStack stack = e.getStack();
          this.blurMatrices.clear();
 
          for (ItemEntity ent : this.entityPositions.keySet()) {
             if (ent != null) {
                Vector2f renderPositions = this.entityPositions.get(ent);
-               stack.pushPose();
+               stack.push();
                CustomTextRenderer harmony = Fonts.harmony;
                String str = getDisplayName(ent);
                float allWidth = harmony.getWidth(str, (double)this.scale.getCurrentValue()) + 8.0F;
                this.blurMatrices
                   .add(new Vector4f(renderPositions.x - allWidth / 2.0F, renderPositions.y - 14.0F, renderPositions.x + allWidth / 2.0F, renderPositions.y));
-               if (this.isGodItem(ent.getItem())) {
+               if (this.isGodItem(ent.getStack())) {
                   harmony.render(
                      stack,
                      str,
@@ -225,7 +225,7 @@ public class ItemTags extends Module {
                   );
                }
 
-               stack.popPose();
+               stack.pop();
             }
          }
       } catch (Exception var9) {

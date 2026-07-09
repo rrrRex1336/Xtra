@@ -1,35 +1,35 @@
 package org.mixin.accessors;
 
-import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
+import net.minecraft.network.packet.s2c.play.EntityS2CPacket;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin({ClientboundMoveEntityPacket.class})
+@Mixin({EntityS2CPacket.class})
 public interface ClientboundMoveEntityPacketAccessor {
-   @Accessor("entityId")
+   @Accessor("id")
    int getEntityId();
 
-   @Accessor("xa")
+   @Accessor("deltaX")
    short getXa();
 
-   @Accessor("ya")
+   @Accessor("deltaY")
    short getYa();
 
-   @Accessor("za")
+   @Accessor("deltaZ")
    short getZa();
 
-   @Accessor("yRot")
+   @Accessor("yaw")
    byte getYRot();
 
-   @Accessor("xRot")
+   @Accessor("pitch")
    byte getXRot();
 
    @Accessor("onGround")
    boolean getOnGround();
 
-   @Accessor("hasRot")
+   @Accessor("rotate")
    boolean getHasRot();
 
-   @Accessor("hasPos")
+   @Accessor("positionChanged")
    boolean getHasPos();
 }

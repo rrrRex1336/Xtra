@@ -19,9 +19,9 @@ import java.util.Comparator;
 import java.util.Optional;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.projectile.Fireball;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.projectile.AbstractFireballEntity;
+import net.minecraft.util.Hand;
 
 @ModuleInfo(
    name = "AntiFireball",
@@ -42,7 +42,7 @@ public class AntiFireball extends Module {
       .build()
       .getFloatValue();
 
-   private Fireball pendingFireball = null;
+   private AbstractFireballEntity pendingFireball = null;
    private Vector2f fireballRotation = null;
 
    @EventTarget
@@ -66,13 +66,13 @@ public class AntiFireball extends Module {
          return;
       }
 
-      Optional<Fireball> fireball = findFireball();
+      Optional<AbstractFireballEntity> fireball = findFireball();
       if (fireball.isEmpty()) {
          resetRotation();
          return;
       }
 
-      Fireball entity = fireball.get();
+      AbstractFireballEntity entity = fireball.get();
       this.fireballRotation = getRotationToFireball(entity);
       RotationManager.setRotations(this.fireballRotation);
       RotationManager.active = true;
@@ -104,25 +104,25 @@ public class AntiFireball extends Module {
 
    private boolean canWork() {
       return mc.player != null
-         && mc.level != null
-         && mc.gameMode != null
+         && mc.world != null
+         && mc.interactionManager != null
          && !Naven.getInstance().getModuleManager().getModule(LongJump.class).isEnabled();
    }
 
-   private Optional<Fireball> findFireball() {
-      Stream<Entity> stream = StreamSupport.stream(mc.level.entitiesForRendering().spliterator(), false);
-      return stream.filter(entity -> entity instanceof Fireball
+   private Optional<AbstractFireballEntity> findFireball() {
+      Stream<Entity> stream = StreamSupport.stream(mc.world.getEntities().spliterator(), false);
+      return stream.filter(entity -> entity instanceof AbstractFireballEntity
             && !entity.isRemoved()
             && mc.player.distanceTo(entity) <= this.range.getCurrentValue())
-         .map(entity -> (Fireball)entity)
+         .map(entity -> (AbstractFireballEntity)entity)
          .min(Comparator.comparingDouble(entity -> mc.player.distanceTo(entity)));
    }
 
-   private Vector2f getRotationToFireball(Fireball fireball) {
-      return RotationUtils.getRotations(mc.player.getEyePosition(1.0F), fireball.getBoundingBox().getCenter()).toVec2f();
+   private Vector2f getRotationToFireball(AbstractFireballEntity fireball) {
+      return RotationUtils.getRotations(mc.player.getCameraPosVec(1.0F), fireball.getBoundingBox().getCenter()).toVec2f();
    }
 
-   private void attackFireball(Fireball fireball) {
+   private void attackFireball(AbstractFireballEntity fireball) {
       if (fireball.isRemoved() || mc.player.distanceTo(fireball) > this.range.getCurrentValue()) {
          return;
       }
@@ -132,8 +132,8 @@ public class AntiFireball extends Module {
          RotationManager.active = true;
       }
 
-      mc.gameMode.attack(mc.player, fireball);
-      mc.player.swing(InteractionHand.MAIN_HAND);
+      mc.interactionManager.attackEntity(mc.player, fireball);
+      mc.player.swingHand(Hand.MAIN_HAND);
    }
 
    private void resetRotation() {

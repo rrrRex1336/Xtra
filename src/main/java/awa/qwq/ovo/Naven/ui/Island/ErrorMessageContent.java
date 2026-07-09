@@ -1,15 +1,13 @@
 package awa.qwq.ovo.Naven.ui.Island;
 
 import awa.qwq.ovo.Naven.utils.renderer.Fonts;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-
-
 import java.awt.*;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.util.math.MatrixStack;
 
 public class ErrorMessageContent implements IslandContent {
-    private static final Minecraft mc = Minecraft.getInstance();
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
     private static ErrorMessageContent instance;
     
     private String errorMessage = "";
@@ -57,7 +55,7 @@ public class ErrorMessageContent implements IslandContent {
     }
     
     @Override
-    public void render(GuiGraphics graphics, PoseStack stack, float x, float y) {
+    public void render(DrawContext graphics, MatrixStack stack, float x, float y) {
         if (errorMessage.isEmpty()) {
             return;
         }

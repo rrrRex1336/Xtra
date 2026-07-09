@@ -20,14 +20,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
-
-import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
-import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
-import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
-import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
-import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Action;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.GameType;
+import net.minecraft.entity.Entity;
+import net.minecraft.network.packet.s2c.play.EntitiesDestroyS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityAnimationS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntitySpawnS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket.Action;
+import net.minecraft.world.GameMode;
 
 @ModuleInfo(
    name = "AntiBot",
@@ -53,9 +52,9 @@ public class AntiBots extends Module {
       if (module.respawnTimeValue.getCurrentValue() < 1.0F) {
          return false;
       } else {
-         return !respawnTime.containsKey(entity.getUUID())
+         return !respawnTime.containsKey(entity.getUuid())
                  ? false
-                 : (float)(System.currentTimeMillis() - respawnTime.get(entity.getUUID())) < module.respawnTimeValue.getCurrentValue();
+                 : (float)(System.currentTimeMillis() - respawnTime.get(entity.getUuid())) < module.respawnTimeValue.getCurrentValue();
       }
    }
 
@@ -65,21 +64,21 @@ public class AntiBots extends Module {
 
    @EventTarget
    public void bedWarsBot(EventPacket e) {
-      if (e.getType() == EventType.RECEIVE && mc.level != null) {
-         if (e.getPacket() instanceof ClientboundPlayerInfoUpdatePacket) {
-            ClientboundPlayerInfoUpdatePacket packet = (ClientboundPlayerInfoUpdatePacket)e.getPacket();
-            if (packet.actions().contains(Action.ADD_PLAYER)) {
-               for (net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
+      if (e.getType() == EventType.RECEIVE && mc.world != null) {
+         if (e.getPacket() instanceof PlayerListS2CPacket) {
+            PlayerListS2CPacket packet = (PlayerListS2CPacket)e.getPacket();
+            if (packet.getActions().contains(Action.ADD_PLAYER)) {
+               for (net.minecraft.network.packet.s2c.play.PlayerListS2CPacket.Entry entry : packet.getEntries()) {
                   GameProfile profile = entry.profile();
                   UUID id = profile.getId();
                   respawnTime.put(id, System.currentTimeMillis());
                }
             }
-         } else if (e.getPacket() instanceof ClientboundAnimatePacket) {
-            ClientboundAnimatePacket packet = (ClientboundAnimatePacket)e.getPacket();
-            Entity entity = mc.level.getEntity(packet.getId());
-            if (entity != null && packet.getAction() == 0 && respawnTime.containsKey(entity.getUUID())) {
-               respawnTime.remove(entity.getUUID());
+         } else if (e.getPacket() instanceof EntityAnimationS2CPacket) {
+            EntityAnimationS2CPacket packet = (EntityAnimationS2CPacket)e.getPacket();
+            Entity entity = mc.world.getEntityById(packet.getId());
+            if (entity != null && packet.getAnimationId() == 0 && respawnTime.containsKey(entity.getUuid())) {
+               respawnTime.remove(entity.getUuid());
             }
          }
       }
@@ -108,28 +107,28 @@ public class AntiBots extends Module {
    @EventTarget
    public void onPacket(EventPacket e) {
       if (e.getType() == EventType.RECEIVE) {
-         if (e.getPacket() instanceof ClientboundPlayerInfoUpdatePacket) {
-            ClientboundPlayerInfoUpdatePacket packet = (ClientboundPlayerInfoUpdatePacket)e.getPacket();
-            if (packet.actions().contains(Action.ADD_PLAYER)) {
-               for (ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
-                  if (entry.displayName() != null && entry.displayName().getSiblings().isEmpty() && entry.gameMode() == GameType.SURVIVAL) {
+         if (e.getPacket() instanceof PlayerListS2CPacket) {
+            PlayerListS2CPacket packet = (PlayerListS2CPacket)e.getPacket();
+            if (packet.getActions().contains(Action.ADD_PLAYER)) {
+               for (PlayerListS2CPacket.Entry entry : packet.getEntries()) {
+                  if (entry.displayName() != null && entry.displayName().getSiblings().isEmpty() && entry.gameMode() == GameMode.SURVIVAL) {
                      UUID uuid = entry.profile().getId();
                      uuids.put(uuid, System.currentTimeMillis());
                      uuidDisplayNames.put(uuid, entry.displayName().getString());
                   }
                }
             }
-         } else if (e.getPacket() instanceof ClientboundAddEntityPacket) {
-            ClientboundAddEntityPacket packet = (ClientboundAddEntityPacket)e.getPacket();
-            if (uuids.containsKey(packet.getUUID())) {
-               String displayName = uuidDisplayNames.get(packet.getUUID());
+         } else if (e.getPacket() instanceof EntitySpawnS2CPacket) {
+            EntitySpawnS2CPacket packet = (EntitySpawnS2CPacket)e.getPacket();
+            if (uuids.containsKey(packet.getUuid())) {
+               String displayName = uuidDisplayNames.get(packet.getUuid());
                ChatUtils.addChatMessage("Bot Detected! (" + displayName + ")");
                entityIdDisplayNames.put(packet.getId(), displayName);
-               uuids.remove(packet.getUUID());
+               uuids.remove(packet.getUuid());
                ids.add(packet.getId());
             }
-         } else if (e.getPacket() instanceof ClientboundRemoveEntitiesPacket) {
-            ClientboundRemoveEntitiesPacket packet = (ClientboundRemoveEntitiesPacket)e.getPacket();
+         } else if (e.getPacket() instanceof EntitiesDestroyS2CPacket) {
+            EntitiesDestroyS2CPacket packet = (EntitiesDestroyS2CPacket)e.getPacket();
             IntListIterator var9 = packet.getEntityIds().iterator();
 
             while (var9.hasNext()) {

@@ -1,42 +1,42 @@
 package awa.qwq.ovo.Naven.viaversionfix.items.mace;
 
-import net.minecraft.world.item.Tier;
-import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.block.Blocks;
+import net.minecraft.item.ToolMaterial;
+import net.minecraft.recipe.Ingredient;
 
-public final class MaceTier implements Tier {
+public final class MaceTier implements ToolMaterial {
    public static final MaceTier INSTANCE = new MaceTier();
 
    private MaceTier() {
    }
 
    @Override
-   public int getUses() {
+   public int getDurability() {
       return 500;
    }
 
    @Override
-   public float getSpeed() {
+   public float getMiningSpeedMultiplier() {
       return 6.0F;
    }
 
    @Override
-   public float getAttackDamageBonus() {
+   public float getAttackDamage() {
       return 0.0F;
    }
 
    @Override
-   public int getLevel() {
+   public int getMiningLevel() {
       return 1;
    }
 
    @Override
-   public int getEnchantmentValue() {
+   public int getEnchantability() {
       return 14;
    }
 
    @Override
    public Ingredient getRepairIngredient() {
-      return Ingredient.of(Blocks.IRON_BLOCK);
+      return Ingredient.ofItems(Blocks.IRON_BLOCK);
    }
 }

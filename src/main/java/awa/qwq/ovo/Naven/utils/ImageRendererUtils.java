@@ -1,13 +1,12 @@
 package awa.qwq.ovo.Naven.utils;
 
-import com.mojang.blaze3d.platform.NativeImage;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.resources.ResourceManager;
-
 import java.io.IOException;
 import java.io.InputStream;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.texture.NativeImage;
+import net.minecraft.resource.ResourceManager;
+import net.minecraft.util.Identifier;
 
 public class ImageRendererUtils {
 
@@ -15,9 +14,9 @@ public class ImageRendererUtils {
     private int height;
     private int[] pixels;
 
-    public ImageRendererUtils(ResourceLocation location) {
+    public ImageRendererUtils(Identifier location) {
         try {
-            ResourceManager resourceManager = Minecraft.getInstance().getResourceManager();
+            ResourceManager resourceManager = MinecraftClient.getInstance().getResourceManager();
             try (InputStream inputStream = resourceManager.open(location)) {
                 NativeImage image = NativeImage.read(inputStream);
                 this.width = image.getWidth();
@@ -26,7 +25,7 @@ public class ImageRendererUtils {
 
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
-                        pixels[y * width + x] = image.getPixelRGBA(x, y);
+                        pixels[y * width + x] = image.getColor(x, y);
                     }
                 }
                 image.close();
@@ -51,7 +50,7 @@ public class ImageRendererUtils {
      * 用 GuiGraphics.fill 手动绘制每个像素
      * 完全绕过纹理缩放，直接画点
      */
-    public void render(GuiGraphics guiGraphics, int x, int y) {
+    public void render(DrawContext guiGraphics, int x, int y) {
         if (pixels.length == 0) return;
 
         for (int py = 0; py < height; py++) {

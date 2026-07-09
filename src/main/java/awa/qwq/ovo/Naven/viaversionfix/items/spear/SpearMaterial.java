@@ -1,21 +1,21 @@
 package awa.qwq.ovo.Naven.viaversionfix.items.spear;
 
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.Rarity;
-import net.minecraft.world.item.Tier;
-import net.minecraft.world.item.Tiers;
-import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.item.Item;
+import net.minecraft.item.Items;
+import net.minecraft.item.ToolMaterial;
+import net.minecraft.item.ToolMaterials;
+import net.minecraft.recipe.Ingredient;
+import net.minecraft.util.Identifier;
+import net.minecraft.util.Rarity;
 
 public enum SpearMaterial {
-   WOODEN("wooden_spear", Tiers.WOOD, true, 0.65F, 0.7F, 0.75F, 5.0F, 14.0F, 10.0F, 5.1F, 15.0F, 4.6F),
-   STONE("stone_spear", Tiers.STONE, false, 0.75F, 0.82F, 0.7F, 4.5F, 13.0F, 9.0F, 5.1F, 13.75F, 4.6F),
+   WOODEN("wooden_spear", ToolMaterials.WOOD, true, 0.65F, 0.7F, 0.75F, 5.0F, 14.0F, 10.0F, 5.1F, 15.0F, 4.6F),
+   STONE("stone_spear", ToolMaterials.STONE, false, 0.75F, 0.82F, 0.7F, 4.5F, 13.0F, 9.0F, 5.1F, 13.75F, 4.6F),
    COPPER("copper_spear", new CopperTier(), false, 0.85F, 0.82F, 0.65F, 4.0F, 12.0F, 8.25F, 5.1F, 12.5F, 4.6F),
-   IRON("iron_spear", Tiers.IRON, false, 0.95F, 0.95F, 0.6F, 2.5F, 11.0F, 6.75F, 5.1F, 11.25F, 4.6F),
-   GOLDEN("golden_spear", Tiers.GOLD, false, 0.95F, 0.7F, 0.7F, 3.5F, 13.0F, 8.5F, 5.1F, 13.75F, 4.6F),
-   DIAMOND("diamond_spear", Tiers.DIAMOND, false, 1.05F, 1.075F, 0.5F, 3.0F, 10.0F, 6.5F, 5.1F, 10.0F, 4.6F),
-   NETHERITE("netherite_spear", Tiers.NETHERITE, false, 1.15F, 1.2F, 0.4F, 2.5F, 9.0F, 5.5F, 5.1F, 8.75F, 4.6F);
+   IRON("iron_spear", ToolMaterials.IRON, false, 0.95F, 0.95F, 0.6F, 2.5F, 11.0F, 6.75F, 5.1F, 11.25F, 4.6F),
+   GOLDEN("golden_spear", ToolMaterials.GOLD, false, 0.95F, 0.7F, 0.7F, 3.5F, 13.0F, 8.5F, 5.1F, 13.75F, 4.6F),
+   DIAMOND("diamond_spear", ToolMaterials.DIAMOND, false, 1.05F, 1.075F, 0.5F, 3.0F, 10.0F, 6.5F, 5.1F, 10.0F, 4.6F),
+   NETHERITE("netherite_spear", ToolMaterials.NETHERITE, false, 1.15F, 1.2F, 0.4F, 2.5F, 9.0F, 5.5F, 5.1F, 8.75F, 4.6F);
 
    public static final float MIN_ATTACK_RANGE = 2.0F;
    public static final float MAX_ATTACK_RANGE = 4.5F;
@@ -25,7 +25,7 @@ public enum SpearMaterial {
    public static final float FORWARD_MOVEMENT = 0.38F;
 
    private final String id;
-   private final Tier tier;
+   private final ToolMaterial tier;
    private final boolean wood;
    private final float swingDurationSeconds;
    private final float damageMultiplier;
@@ -39,7 +39,7 @@ public enum SpearMaterial {
 
    SpearMaterial(
       String id,
-      Tier tier,
+      ToolMaterial tier,
       boolean wood,
       float swingDurationSeconds,
       float damageMultiplier,
@@ -73,11 +73,11 @@ public enum SpearMaterial {
       return "viaversionfix/items/spear/" + this.id;
    }
 
-   public ResourceLocation itemId(String modId) {
-      return new ResourceLocation(modId, this.itemPath());
+   public Identifier itemId(String modId) {
+      return new Identifier(modId, this.itemPath());
    }
 
-   public Tier tier() {
+   public ToolMaterial tier() {
       return this.tier;
    }
 
@@ -94,7 +94,7 @@ public enum SpearMaterial {
    }
 
    public float attackDamageBonus() {
-      return this.tier.getAttackDamageBonus();
+      return this.tier.getAttackDamage();
    }
 
    public float attackSpeedModifier() {
@@ -188,35 +188,35 @@ public enum SpearMaterial {
       return (int)(seconds * 20.0F);
    }
 
-   private static final class CopperTier implements Tier {
+   private static final class CopperTier implements ToolMaterial {
       @Override
-      public int getUses() {
+      public int getDurability() {
          return 190;
       }
 
       @Override
-      public float getSpeed() {
+      public float getMiningSpeedMultiplier() {
          return 5.0F;
       }
 
       @Override
-      public float getAttackDamageBonus() {
+      public float getAttackDamage() {
          return 1.0F;
       }
 
       @Override
-      public int getLevel() {
+      public int getMiningLevel() {
          return 1;
       }
 
       @Override
-      public int getEnchantmentValue() {
+      public int getEnchantability() {
          return 13;
       }
 
       @Override
       public Ingredient getRepairIngredient() {
-         return Ingredient.of(Items.COPPER_INGOT);
+         return Ingredient.ofItems(Items.COPPER_INGOT);
       }
    }
 }

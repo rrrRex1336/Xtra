@@ -5,12 +5,12 @@ import awa.qwq.ovo.Naven.events.api.types.EventType;
 import awa.qwq.ovo.Naven.events.impl.EventGlobalPacket;
 import awa.qwq.ovo.Naven.utils.NetworkUtils;
 import awa.qwq.ovo.Naven.utils.SkipTicks;
+import net.minecraft.network.ClientConnection;
+import net.minecraft.network.PacketCallbacks;
+import net.minecraft.network.listener.PacketListener;
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import org.mixin.accessors.ConnectionAccessor;
-import net.minecraft.network.Connection;
-import net.minecraft.network.PacketListener;
-import net.minecraft.network.PacketSendListener;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,21 +18,21 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin({Connection.class})
+@Mixin({ClientConnection.class})
 public abstract class MixinConnection {
 
    @Shadow
-   private static <T extends PacketListener> void genericsFtw(Packet<T> pPacket, PacketListener pListener) {
+   private static <T extends PacketListener> void handlePacket(Packet<T> pPacket, PacketListener pListener) {
    }
 
    @Inject(method = "send", at = @At("HEAD"), cancellable = true)
    private void onSendPacket(Packet<?> packet, CallbackInfo ci) {
-      if (packet instanceof ServerboundMovePlayerPacket) {
+      if (packet instanceof PlayerMoveC2SPacket) {
          if (SkipTicks.isSendingStuckPacket.get()) {
             return;
          }
          if (SkipTicks.isActive() && SkipTicks.positionUpdate) {
-            if (packet instanceof ServerboundMovePlayerPacket.Rot) {
+            if (packet instanceof PlayerMoveC2SPacket.LookAndOnGround) {
                return;
             }
             ci.cancel();
@@ -41,29 +41,29 @@ public abstract class MixinConnection {
    }
 
    @Redirect(
-           method = {"channelRead0(Lio/netty/channel/ChannelHandlerContext;Lnet/minecraft/network/protocol/Packet;)V"},
+           method = {"channelRead0(Lio/netty/channel/ChannelHandlerContext;Lnet/minecraft/network/packet/Packet;)V"},
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/network/Connection;genericsFtw(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketListener;)V"
+                   target = "Lnet/minecraft/network/ClientConnection;handlePacket(Lnet/minecraft/network/packet/Packet;Lnet/minecraft/network/listener/PacketListener;)V"
            )
    )
-   private void onGenericsFtw(Packet<?> pPacket, PacketListener pListener) {
+   private void onHandlePacket(Packet<?> pPacket, PacketListener pListener) {
       EventGlobalPacket event = new EventGlobalPacket(EventType.RECEIVE, pPacket);
       Naven.getInstance().getEventManager().call(event);
 
       if (!event.isCancelled()) {
-         genericsFtw(event.getPacket(), pListener);
+         handlePacket(event.getPacket(), pListener);
       }
    }
 
    @Redirect(
-           method = {"send(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketSendListener;Z)V"},  // 注意方法签名
+           method = {"send(Lnet/minecraft/network/packet/Packet;Lnet/minecraft/network/PacketCallbacks;Z)V"},  // 注意方法签名
            at = @At(
                    value = "INVOKE",
-                   target = "Lnet/minecraft/network/Connection;sendPacket(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketSendListener;Z)V"
+                   target = "Lnet/minecraft/network/ClientConnection;sendImmediately(Lnet/minecraft/network/packet/Packet;Lnet/minecraft/network/PacketCallbacks;Z)V"
            )
    )
-   private void onSend(Connection instance, Packet<?> pInPacket, PacketSendListener pFutureListeners, boolean flush) {
+   private void onSend(ClientConnection instance, Packet<?> pInPacket, PacketCallbacks pFutureListeners, boolean flush) {
       if (NetworkUtils.passthroughsPackets.contains(pInPacket)) {
          NetworkUtils.passthroughsPackets.remove(pInPacket);
          ((ConnectionAccessor) instance).invokeSendPacket(pInPacket, pFutureListeners, flush);

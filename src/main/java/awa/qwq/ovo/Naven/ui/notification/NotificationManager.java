@@ -5,10 +5,10 @@ import awa.qwq.ovo.Naven.events.impl.EventRender2D;
 import awa.qwq.ovo.Naven.events.impl.EventShader;
 import awa.qwq.ovo.Naven.utils.DragManager;
 import awa.qwq.ovo.Naven.utils.SmoothAnimationTimer;
-import com.mojang.blaze3d.platform.Window;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.util.Window;
 
 public class NotificationManager {
    private final List<Notification> notifications = new CopyOnWriteArrayList<>();
@@ -29,9 +29,9 @@ public class NotificationManager {
       for (Notification notification : this.notifications) {
          SmoothAnimationTimer widthTimer = notification.getWidthTimer();
          SmoothAnimationTimer heightTimer = notification.getHeightTimer();
-         Window window = Minecraft.getInstance().getWindow();
+         Window window = MinecraftClient.getInstance().getWindow();
          notification.renderShader(
-            e.getStack(), (float)window.getGuiScaledWidth() - widthTimer.value + 2.0F + offsets[0], (float)window.getGuiScaledHeight() - heightTimer.value + offsets[1]
+            e.getStack(), (float)window.getScaledWidth() - widthTimer.value + 2.0F + offsets[0], (float)window.getScaledHeight() - heightTimer.value + offsets[1]
          );
       }
    }
@@ -50,9 +50,9 @@ public class NotificationManager {
          totalHeight += notification.getHeight();
       }
 
-      Window window = Minecraft.getInstance().getWindow();
-      float baseX = (float) window.getGuiScaledWidth() - maxWidth + 2.0F;
-      float baseY = (float) window.getGuiScaledHeight() - totalHeight;
+      Window window = MinecraftClient.getInstance().getWindow();
+      float baseX = (float) window.getScaledWidth() - maxWidth + 2.0F;
+      float baseY = (float) window.getScaledHeight() - totalHeight;
       if (dragManager != null) {
          dragManager.update(baseX, baseY, maxWidth, totalHeight);
       }
@@ -60,7 +60,7 @@ public class NotificationManager {
       float yOffset = dragManager == null ? 0.0F : dragManager.getY(baseY) - baseY;
 
       for (Notification notification : this.notifications) {
-         e.getStack().pushPose();
+         e.getStack().push();
          float width = notification.getWidth();
          height += notification.getHeight();
          SmoothAnimationTimer widthTimer = notification.getWidthTimer();
@@ -79,8 +79,8 @@ public class NotificationManager {
 
          widthTimer.update(true);
          heightTimer.update(true);
-         notification.render(e.getStack(), (float)window.getGuiScaledWidth() - widthTimer.value + 2.0F + xOffset, (float)window.getGuiScaledHeight() - heightTimer.value + yOffset);
-         e.getStack().popPose();
+         notification.render(e.getStack(), (float)window.getScaledWidth() - widthTimer.value + 2.0F + xOffset, (float)window.getScaledHeight() - heightTimer.value + yOffset);
+         e.getStack().pop();
       }
    }
 
@@ -96,9 +96,9 @@ public class NotificationManager {
          totalHeight += notification.getHeight();
       }
 
-      Window window = Minecraft.getInstance().getWindow();
-      float baseX = (float) window.getGuiScaledWidth() - maxWidth + 2.0F;
-      float baseY = (float) window.getGuiScaledHeight() - totalHeight;
+      Window window = MinecraftClient.getInstance().getWindow();
+      float baseX = (float) window.getScaledWidth() - maxWidth + 2.0F;
+      float baseY = (float) window.getScaledHeight() - totalHeight;
       return new float[]{dragManager.getX(baseX) - baseX, dragManager.getY(baseY) - baseY};
    }
 }

@@ -2,7 +2,7 @@ package org.mixin;
 
 import awa.qwq.ovo.Naven.Naven;
 import awa.qwq.ovo.Naven.modules.impl.visual.ViewClip;
-import net.minecraft.client.Camera;
+import net.minecraft.client.render.Camera;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class MixinCamera {
    @Inject(
       at = {@At("HEAD")},
-      method = {"getMaxZoom"},
+      method = {"clipToSpace"},
       cancellable = true
    )
    private void getMaxZoom(double pStartingDistance, CallbackInfoReturnable<Double> cir) {

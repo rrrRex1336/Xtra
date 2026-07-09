@@ -1,8 +1,8 @@
 package awa.qwq.ovo.Naven.utils;
 
-import net.minecraft.network.protocol.Packet;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import net.minecraft.network.packet.Packet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;

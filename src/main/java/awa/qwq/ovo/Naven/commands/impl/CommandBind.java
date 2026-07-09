@@ -8,8 +8,8 @@ import awa.qwq.ovo.Naven.events.impl.EventKey;
 import awa.qwq.ovo.Naven.exceptions.NoSuchModuleException;
 import awa.qwq.ovo.Naven.modules.Module;
 import awa.qwq.ovo.Naven.utils.ChatUtils;
-import com.mojang.blaze3d.platform.InputConstants;
-import com.mojang.blaze3d.platform.InputConstants.Key;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.util.InputUtil.Key;
 
 @CommandInfo(
    name = "bind",
@@ -36,8 +36,8 @@ public class CommandBind extends Command {
                   public void onKey(EventKey e) {
                      if (e.isState()) {
                         module.setKey(e.getKey());
-                        Key key = InputConstants.getKey(e.getKey(), 0);
-                        String keyName = key.getDisplayName().getString().toUpperCase();
+                        Key key = InputUtil.fromKeyCode(e.getKey(), 0);
+                        String keyName = key.getLocalizedText().getString().toUpperCase();
                         ChatUtils.addChatMessage("Bound " + moduleName + " to " + keyName + ".");
                         Naven.getInstance().getEventManager().unregister(this);
                         Naven.getInstance().getFileManager().save();
@@ -58,13 +58,13 @@ public class CommandBind extends Command {
             Module module = Naven.getInstance().getModuleManager().getModule(moduleName);
             if (module != null) {
                if (keyName.equalsIgnoreCase("none")) {
-                  module.setKey(InputConstants.UNKNOWN.getValue());
+                  module.setKey(InputUtil.UNKNOWN_KEY.getCode());
                   ChatUtils.addChatMessage("Unbound " + moduleName + ".");
                   Naven.getInstance().getFileManager().save();
                } else {
-                  Key key = InputConstants.getKey("key.keyboard." + keyName.toLowerCase());
-                  if (key != InputConstants.UNKNOWN) {
-                     module.setKey(key.getValue());
+                  Key key = InputUtil.fromTranslationKey("key.keyboard." + keyName.toLowerCase());
+                  if (key != InputUtil.UNKNOWN_KEY) {
+                     module.setKey(key.getCode());
                      ChatUtils.addChatMessage("Bound " + moduleName + " to " + keyName.toUpperCase() + ".");
                      Naven.getInstance().getFileManager().save();
                   } else {
@@ -113,7 +113,7 @@ public class CommandBind extends Command {
    }
 
    private boolean isBoundKey(int keyCode) {
-      return keyCode != 0 && keyCode != InputConstants.UNKNOWN.getValue();
+      return keyCode != 0 && keyCode != InputUtil.UNKNOWN_KEY.getCode();
    }
 
    private String getKeyName(int keyCode) {
@@ -126,7 +126,7 @@ public class CommandBind extends Command {
          };
       }
 
-      Key key = InputConstants.getKey(keyCode, 0);
-      return key.getDisplayName().getString().toUpperCase();
+      Key key = InputUtil.fromKeyCode(keyCode, 0);
+      return key.getLocalizedText().getString().toUpperCase();
    }
 }

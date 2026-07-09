@@ -21,7 +21,7 @@ import java.nio.file.Path;
 
 public class VerifyClient {
     private static final Logger LOGGER = LogManager.getLogger("VerifyClient");
-    private static final String API_BASE  = "http://neko.antichest.pw/api/index.php?route=";
+    private static final String API_BASE  = "https://neko.antichest.pw/api/index.php?route=";
     private static final String ENDPOINT  = API_BASE + "/verify";
     private static final String WL_START  = API_BASE + "/web-login/start";
     private static final String WL_POLL   = API_BASE + "/web-login/poll";

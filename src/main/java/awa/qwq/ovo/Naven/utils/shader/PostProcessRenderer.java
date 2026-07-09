@@ -1,12 +1,12 @@
 package awa.qwq.ovo.Naven.utils.shader;
 
 import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.vertex.PoseStack;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL15C;
 import org.lwjgl.opengl.GL32C;
 
 import java.nio.ByteBuffer;
+import net.minecraft.client.util.math.MatrixStack;
 
 import static org.lwjgl.opengl.GL11C.GL_FLOAT;
 import static org.lwjgl.opengl.GL11C.GL_UNSIGNED_INT;
@@ -16,7 +16,7 @@ import static org.lwjgl.system.MemoryUtil.*;
 public class PostProcessRenderer {
 
     private static final Mesh mesh = new Mesh();
-    private static final PoseStack matrices = new PoseStack();
+    private static final MatrixStack matrices = new MatrixStack();
 
     static {
         mesh.begin();
@@ -140,13 +140,13 @@ public class PostProcessRenderer {
             building = false;
         }
 
-        public void beginRender(PoseStack matrices) {
+        public void beginRender(MatrixStack matrices) {
             ShaderHelper.disableCull();
 
             beganRendering = true;
         }
 
-        public void render(PoseStack matrices) {
+        public void render(MatrixStack matrices) {
             if (building)
                 end();
 

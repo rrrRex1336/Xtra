@@ -10,13 +10,12 @@ import awa.qwq.ovo.Naven.utils.DragManager;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.DrawContext;
 
 @ModuleInfo(name = "IRCChat", description = "Displays IRC messages in a separate HUD.", category = Category.VISUAL)
 public class IrcChatHUD extends Module {
@@ -82,14 +81,14 @@ public class IrcChatHUD extends Module {
 
    @EventTarget
    public void onRender(EventRender2D event) {
-      Minecraft mc = Minecraft.getInstance();
-      if (mc == null || mc.font == null) {
+      MinecraftClient mc = MinecraftClient.getInstance();
+      if (mc == null || mc.textRenderer == null) {
          return;
       }
 
-      GuiGraphics graphics = event.getGuiGraphics();
+      DrawContext graphics = event.getGuiGraphics();
       float baseX = 8.0F;
-      float baseY = graphics.guiHeight() - this.height.getCurrentValue() - 48.0F;
+      float baseY = graphics.getScaledWindowHeight() - this.height.getCurrentValue() - 48.0F;
       float w = this.width.getCurrentValue();
       float h = this.height.getCurrentValue();
       this.dragManager.update(baseX, baseY, w, h);
@@ -98,15 +97,15 @@ public class IrcChatHUD extends Module {
 
       graphics.fill((int) x, (int) y, (int) (x + w), (int) (y + h), 0x88000000);
       graphics.fill((int) x, (int) y, (int) (x + w), (int) (y + 12.0F), 0xAA1B1B1B);
-      graphics.drawString(mc.font, "IRC Chat", (int) x + 4, (int) y + 3, 0xFF55FFFF, this.shadow.getCurrentValue());
+      graphics.drawText(mc.textRenderer, "IRC Chat", (int) x + 4, (int) y + 3, 0xFF55FFFF, this.shadow.getCurrentValue());
 
-      List<String> lines = wrappedLines(mc.font, (int) (w - 8.0F));
+      List<String> lines = wrappedLines(mc.textRenderer, (int) (w - 8.0F));
       int maxLines = Math.max(1, ((int) h - 18) / 10);
       int end = Math.max(0, lines.size() - scrollOffset);
       int start = Math.max(0, end - maxLines);
       int drawY = (int) y + 16;
       for (int i = start; i < end; i++) {
-         graphics.drawString(mc.font, lines.get(i), (int) x + 4, drawY, 0xFFFFFFFF, this.shadow.getCurrentValue());
+         graphics.drawText(mc.textRenderer, lines.get(i), (int) x + 4, drawY, 0xFFFFFFFF, this.shadow.getCurrentValue());
          drawY += 10;
       }
 
@@ -119,7 +118,7 @@ public class IrcChatHUD extends Module {
       }
    }
 
-   private static List<String> wrappedLines(Font font, int width) {
+   private static List<String> wrappedLines(TextRenderer font, int width) {
       List<String> result = new ArrayList<>();
       for (String message : MESSAGES) {
          wrap(font, message, width, result);
@@ -127,7 +126,7 @@ public class IrcChatHUD extends Module {
       return result;
    }
 
-   private static void wrap(Font font, String text, int width, List<String> out) {
+   private static void wrap(TextRenderer font, String text, int width, List<String> out) {
       StringBuilder line = new StringBuilder();
       String activeColor = "";
       for (int i = 0; i < text.length(); i++) {
@@ -139,7 +138,7 @@ public class IrcChatHUD extends Module {
          }
 
          String next = line.toString() + c;
-         if (font.width(next) > width && line.length() > 0) {
+         if (font.getWidth(next) > width && line.length() > 0) {
             out.add(line.toString());
             line.setLength(0);
             line.append(activeColor).append(c);

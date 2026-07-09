@@ -14,8 +14,6 @@ import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
 import awa.qwq.ovo.Naven.values.impl.StringValue;
-import com.mojang.blaze3d.platform.InputConstants;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,13 +21,15 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.text.Text;
 
 public class AkarinClickGUI extends Screen {
-   private static final Minecraft mc = Minecraft.getInstance();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
    private static final float PANEL_RADIUS = 8.0F;
    private static final float CARD_RADIUS = 4.0F;
    private static final float CONTROL_RADIUS = 3.0F;
@@ -71,7 +71,7 @@ public class AkarinClickGUI extends Screen {
    private ModeOverlay modeOverlay;
 
    public AkarinClickGUI() {
-      super(Component.nullToEmpty("Akarin"));
+      super(Text.of("Akarin"));
    }
 
    @Override
@@ -95,19 +95,19 @@ public class AkarinClickGUI extends Screen {
    }
 
    @Override
-   public void onClose() {
+   public void close() {
       rememberState();
       Naven.getInstance().getFileManager().save();
-      super.onClose();
+      super.close();
    }
 
    @Override
-   public boolean isPauseScreen() {
+   public boolean shouldPause() {
       return false;
    }
 
    @Override
-   public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+   public void render(DrawContext graphics, int mouseX, int mouseY, float partialTick) {
       computeLayout();
       renderBackdrop(graphics);
       renderPanel(graphics, mouseX, mouseY, 1.0F);
@@ -166,7 +166,7 @@ public class AkarinClickGUI extends Screen {
    @Override
    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
       if (this.bindingModule != null) {
-         if (keyCode == InputConstants.KEY_ESCAPE) {
+         if (keyCode == InputUtil.GLFW_KEY_ESCAPE) {
             this.bindingModule.setKey(0);
          } else {
             this.bindingModule.setKey(keyCode);
@@ -177,11 +177,11 @@ public class AkarinClickGUI extends Screen {
       }
 
       if (this.editingString != null) {
-         if (keyCode == InputConstants.KEY_ESCAPE || keyCode == InputConstants.KEY_RETURN || keyCode == InputConstants.KEY_NUMPADENTER) {
-            commitEditingString(keyCode != InputConstants.KEY_ESCAPE);
+         if (keyCode == InputUtil.GLFW_KEY_ESCAPE || keyCode == InputUtil.GLFW_KEY_ENTER || keyCode == InputUtil.GLFW_KEY_KP_ENTER) {
+            commitEditingString(keyCode != InputUtil.GLFW_KEY_ESCAPE);
             return true;
          }
-         if (keyCode == InputConstants.KEY_BACKSPACE && !this.editingStringText.isEmpty()) {
+         if (keyCode == InputUtil.GLFW_KEY_BACKSPACE && !this.editingStringText.isEmpty()) {
             this.editingStringText = this.editingStringText.substring(0, this.editingStringText.length() - 1);
             return true;
          }
@@ -199,8 +199,8 @@ public class AkarinClickGUI extends Screen {
       return super.charTyped(codePoint, modifiers);
    }
 
-   private void renderPanel(GuiGraphics graphics, int mouseX, int mouseY, float alpha) {
-      PoseStack stack = graphics.pose();
+   private void renderPanel(DrawContext graphics, int mouseX, int mouseY, float alpha) {
+      MatrixStack stack = graphics.getMatrices();
       roundedRect(stack, this.panel.x, this.panel.y, this.panel.width, this.panel.height, PANEL_RADIUS, alpha(SURFACE, alpha));
       rect(stack, this.panel.x, this.panel.y + HEADER_HEIGHT - 1.0F, this.panel.width, 1.0F, alpha(0xFF222226, alpha));
       renderTabs(graphics, mouseX, mouseY, alpha);
@@ -234,8 +234,8 @@ public class AkarinClickGUI extends Screen {
       }
    }
 
-   private void renderTabs(GuiGraphics graphics, int mouseX, int mouseY, float alpha) {
-      PoseStack stack = graphics.pose();
+   private void renderTabs(DrawContext graphics, int mouseX, int mouseY, float alpha) {
+      MatrixStack stack = graphics.getMatrices();
       String icon = FontIcons.CLIENT;
       float iconScale = 0.48F;
       float iconWidth = Fonts.icons.getWidth(icon, iconScale);
@@ -270,13 +270,13 @@ public class AkarinClickGUI extends Screen {
       }
    }
 
-   private void renderCards(GuiGraphics graphics, Category category, int mouseX, int mouseY, float alpha, float visibleScroll, float xOffset) {
+   private void renderCards(DrawContext graphics, Category category, int mouseX, int mouseY, float alpha, float visibleScroll, float xOffset) {
       float columnWidth = (this.viewport.width - COLUMN_GAP - 6.0F) * 0.5F;
       float leftY = this.viewport.y - visibleScroll;
       float rightY = leftY;
 
-      graphics.pose().pushPose();
-      graphics.pose().translate(xOffset, 0.0F, 0.0F);
+      graphics.getMatrices().push();
+      graphics.getMatrices().translate(xOffset, 0.0F, 0.0F);
       for (Module module : modules(category)) {
          float cardHeight = moduleHeight(module);
          boolean left = leftY <= rightY;
@@ -289,11 +289,11 @@ public class AkarinClickGUI extends Screen {
             rightY += cardHeight + CARD_GAP;
          }
       }
-      graphics.pose().popPose();
+      graphics.getMatrices().pop();
    }
 
-   private void renderModuleCard(GuiGraphics graphics, Module module, Rect card, float mouseX, float mouseY, float alpha, float xOffset) {
-      PoseStack stack = graphics.pose();
+   private void renderModuleCard(DrawContext graphics, Module module, Rect card, float mouseX, float mouseY, float alpha, float xOffset) {
+      MatrixStack stack = graphics.getMatrices();
       SmoothAnimationTimer expandTimer = moduleAnimation(module);
       float expand = easeOut(expandTimer.value);
       boolean hovered = card.contains(mouseX, mouseY);
@@ -337,8 +337,8 @@ public class AkarinClickGUI extends Screen {
       graphics.disableScissor();
    }
 
-   private void renderValue(GuiGraphics graphics, Value value, Rect row, float mouseX, float mouseY, float alpha) {
-      PoseStack stack = graphics.pose();
+   private void renderValue(DrawContext graphics, Value value, Rect row, float mouseX, float mouseY, float alpha) {
+      MatrixStack stack = graphics.getMatrices();
       if (value.getValueType() == ValueType.BOOLEAN) {
          BooleanValue boolValue = value.getBooleanValue();
          drawTextInRect(stack, boolValue.getName(), new Rect(row.x, row.y, row.width - 24.0F, SETTING_HEIGHT), TEXT, alpha, 0.34F);
@@ -354,7 +354,7 @@ public class AkarinClickGUI extends Screen {
       }
    }
 
-   private void renderFloatValue(PoseStack stack, FloatValue floatValue, Rect row, float alpha) {
+   private void renderFloatValue(MatrixStack stack, FloatValue floatValue, Rect row, float alpha) {
       drawText(stack, floatValue.getName(), row.x, row.y + 3.0F, TEXT, alpha, 0.34F);
       String value = formatFloat(floatValue.getCurrentValue());
       Rect valueRect = numberField(row);
@@ -367,7 +367,7 @@ public class AkarinClickGUI extends Screen {
       roundedRect(stack, knobX - 2.0F, slider.y - 1.0F, 5.0F, 5.0F, CONTROL_RADIUS, alpha(0xFFE6E6E8, alpha));
    }
 
-   private void renderModeValue(PoseStack stack, ModeValue modeValue, Rect row, float alpha) {
+   private void renderModeValue(MatrixStack stack, ModeValue modeValue, Rect row, float alpha) {
       drawTextInRect(stack, modeValue.getName(), new Rect(row.x, row.y, row.width - 92.0F, SETTING_HEIGHT), TEXT, alpha, 0.34F);
       Rect dropdown = modeDropdown(row);
       roundedRect(stack, dropdown.x, dropdown.y, dropdown.width, dropdown.height, 4.0F, alpha(0xFF2A2A2D, alpha));
@@ -376,7 +376,7 @@ public class AkarinClickGUI extends Screen {
       drawTextInRect(stack, this.expandedMode == modeValue ? "^" : "v", new Rect(dropdown.right() - 12.0F, dropdown.y, 8.0F, dropdown.height), MUTED, alpha, 0.30F);
    }
 
-   private void renderAddonsValue(PoseStack stack, AddonsValue addonsValue, Rect row, float alpha) {
+   private void renderAddonsValue(MatrixStack stack, AddonsValue addonsValue, Rect row, float alpha) {
       drawText(stack, addonsValue.getName(), row.x, row.y + 3.0F, TEXT, alpha, 0.34F);
       float y = row.y + 28.0F;
       String[] values = addonsValue.getValues();
@@ -391,7 +391,7 @@ public class AkarinClickGUI extends Screen {
       }
    }
 
-   private void renderStringValue(PoseStack stack, StringValue stringValue, Rect row, float alpha) {
+   private void renderStringValue(MatrixStack stack, StringValue stringValue, Rect row, float alpha) {
       drawTextInRect(stack, stringValue.getName(), new Rect(row.x, row.y, row.width - 120.0F, SETTING_HEIGHT), TEXT, alpha, 0.34F);
       String raw = this.editingString == stringValue
               ? this.editingStringText + ((System.currentTimeMillis() / 450L) % 2L == 0L ? "_" : "")
@@ -404,17 +404,17 @@ public class AkarinClickGUI extends Screen {
       drawTextInRect(stack, clip(raw, field.width - 8.0F, 0.30F), new Rect(field.x + 5.0F, field.y, field.width - 10.0F, field.height), this.editingString == stringValue ? TEXT : MUTED, alpha, 0.30F);
    }
 
-   private void renderModeOverlay(GuiGraphics graphics) {
+   private void renderModeOverlay(DrawContext graphics) {
       if (this.modeOverlay == null) {
          return;
       }
-      graphics.pose().pushPose();
-      graphics.pose().translate(this.modeOverlay.xOffset, 0.0F, 0.0F);
-      renderModeOptions(graphics.pose(), this.modeOverlay.value, this.modeOverlay.row, this.modeOverlay.mouseX, this.modeOverlay.mouseY, this.modeOverlay.alpha);
-      graphics.pose().popPose();
+      graphics.getMatrices().push();
+      graphics.getMatrices().translate(this.modeOverlay.xOffset, 0.0F, 0.0F);
+      renderModeOptions(graphics.getMatrices(), this.modeOverlay.value, this.modeOverlay.row, this.modeOverlay.mouseX, this.modeOverlay.mouseY, this.modeOverlay.alpha);
+      graphics.getMatrices().pop();
    }
 
-   private void renderModeOptions(PoseStack stack, ModeValue modeValue, Rect row, float mouseX, float mouseY, float alpha) {
+   private void renderModeOptions(MatrixStack stack, ModeValue modeValue, Rect row, float mouseX, float mouseY, float alpha) {
       Rect bounds = modeOptionsBounds(modeValue, row);
       float open = easeOut(modeAnimation(modeValue).value);
       float visibleHeight = bounds.height * open;
@@ -442,12 +442,12 @@ public class AkarinClickGUI extends Screen {
       }
    }
 
-   private void renderBindingOverlay(GuiGraphics graphics, float alpha) {
+   private void renderBindingOverlay(DrawContext graphics, float alpha) {
       if (this.bindingModule == null) {
          return;
       }
 
-      PoseStack stack = graphics.pose();
+      MatrixStack stack = graphics.getMatrices();
       rect(stack, this.panel.x, this.panel.y, this.panel.width, this.panel.height, alpha(0x99000000, alpha));
       String line1 = "Press a key to bind " + this.bindingModule.getName();
       String line2 = "ESC clears, mouse side buttons are supported";
@@ -689,11 +689,11 @@ public class AkarinClickGUI extends Screen {
       this.viewport = new Rect(this.panel.x + 14.0F, this.panel.y + 44.0F, this.panel.width - 28.0F, this.panel.height - 58.0F);
    }
 
-   private void renderBackdrop(GuiGraphics graphics) {
-      rect(graphics.pose(), 0.0F, 0.0F, this.width, this.height, 0x66000000);
+   private void renderBackdrop(DrawContext graphics) {
+      rect(graphics.getMatrices(), 0.0F, 0.0F, this.width, this.height, 0x66000000);
    }
 
-   private void renderScrollbar(PoseStack stack, float visibleScroll, float maxScroll, float contentHeight, float alpha) {
+   private void renderScrollbar(MatrixStack stack, float visibleScroll, float maxScroll, float contentHeight, float alpha) {
       if (maxScroll <= 0.5F || contentHeight <= 0.0F) {
          return;
       }
@@ -936,13 +936,13 @@ public class AkarinClickGUI extends Screen {
    }
 
    private String compactKeyName(int keyCode) {
-      if (keyCode == 0 || keyCode == InputConstants.UNKNOWN.getValue()) {
+      if (keyCode == 0 || keyCode == InputUtil.UNKNOWN_KEY.getCode()) {
          return "NONE";
       }
       if (keyCode < 0) {
          return "M" + Math.abs(keyCode);
       }
-      String text = InputConstants.getKey(keyCode, 0).getDisplayName().getString();
+      String text = InputUtil.fromKeyCode(keyCode, 0).getLocalizedText().getString();
       if (text == null || text.isBlank()) {
          return "KEY" + keyCode;
       }
@@ -976,7 +976,7 @@ public class AkarinClickGUI extends Screen {
       return result + suffix;
    }
 
-   private void renderSwitch(PoseStack stack, Module module, Rect rect, float alpha) {
+   private void renderSwitch(MatrixStack stack, Module module, Rect rect, float alpha) {
       float enabled = easeOut(switchAnimation(module).value);
       int track = mix(0xFF303033, accent(), enabled);
       roundedRect(stack, rect.x, rect.y, rect.width, rect.height, rect.height * 0.5F, alpha(track, alpha));
@@ -985,7 +985,7 @@ public class AkarinClickGUI extends Screen {
       roundedRect(stack, knobX, rect.y + 2.0F, knobSize, knobSize, knobSize * 0.5F, alpha(0xFFE6E6E8, alpha));
    }
 
-   private void renderCheckbox(PoseStack stack, Rect rect, boolean enabled, float alpha) {
+   private void renderCheckbox(MatrixStack stack, Rect rect, boolean enabled, float alpha) {
       roundedRect(stack, rect.x, rect.y, rect.width, rect.height, CONTROL_RADIUS, alpha(enabled ? accent() : 0xFF303033, alpha));
       roundedOutline(stack, rect.x, rect.y, rect.width, rect.height, CONTROL_RADIUS, alpha(enabled ? 0x66FFFFFF : 0x44FFFFFF, alpha));
       if (enabled) {
@@ -1005,19 +1005,19 @@ public class AkarinClickGUI extends Screen {
       }
    }
 
-   private void drawText(PoseStack stack, String text, float x, float y, int color, float alpha, float scale) {
+   private void drawText(MatrixStack stack, String text, float x, float y, int color, float alpha, float scale) {
       if (text == null || text.isEmpty()) {
          return;
       }
       Fonts.opensans.render(stack, text, x, y, new Color(alpha(color, alpha), true), false, scale);
    }
 
-   private void drawTextInRect(PoseStack stack, String text, Rect rect, int color, float alpha, float scale) {
+   private void drawTextInRect(MatrixStack stack, String text, Rect rect, int color, float alpha, float scale) {
       float y = rect.y + (rect.height - textHeight(scale)) * 0.5F;
       drawText(stack, text, rect.x, y, color, alpha, scale);
    }
 
-   private void drawCenteredText(PoseStack stack, String text, Rect rect, int color, float alpha, float scale) {
+   private void drawCenteredText(MatrixStack stack, String text, Rect rect, int color, float alpha, float scale) {
       float x = rect.x + (rect.width - textWidth(text, scale)) * 0.5F;
       float y = rect.y + (rect.height - textHeight(scale)) * 0.5F - 1.0F;
       drawText(stack, text, x, y, color, alpha, scale);
@@ -1034,21 +1034,21 @@ public class AkarinClickGUI extends Screen {
       return (float)Fonts.opensans.getHeight(false, scale);
    }
 
-   private void rect(PoseStack stack, float x, float y, float width, float height, int color) {
+   private void rect(MatrixStack stack, float x, float y, float width, float height, int color) {
       if ((color >>> 24) == 0 || width <= 0.0F || height <= 0.0F) {
          return;
       }
       RenderUtils.fill(stack, x, y, x + width, y + height, color);
    }
 
-   private void roundedRect(PoseStack stack, float x, float y, float width, float height, float radius, int color) {
+   private void roundedRect(MatrixStack stack, float x, float y, float width, float height, float radius, int color) {
       if ((color >>> 24) == 0 || width <= 0.0F || height <= 0.0F) {
          return;
       }
       RenderUtils.drawRoundedRect(stack, x, y, width, height, radius, color);
    }
 
-   private void roundedOutline(PoseStack stack, float x, float y, float width, float height, float radius, int color) {
+   private void roundedOutline(MatrixStack stack, float x, float y, float width, float height, float radius, int color) {
       if ((color >>> 24) == 0 || width <= 1.0F || height <= 1.0F) {
          return;
       }

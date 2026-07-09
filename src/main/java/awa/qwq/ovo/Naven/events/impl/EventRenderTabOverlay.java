@@ -2,21 +2,21 @@ package awa.qwq.ovo.Naven.events.impl;
 
 import awa.qwq.ovo.Naven.events.api.events.Event;
 import awa.qwq.ovo.Naven.events.api.types.EventType;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
 
 public class EventRenderTabOverlay implements Event {
    private EventType type;
-   private Component component;
+   private Text component;
    @Nullable
-   private PlayerInfo playerInfo;
+   private PlayerListEntry playerInfo;
 
    public void setType(EventType type) {
       this.type = type;
    }
 
-   public void setComponent(Component component) {
+   public void setComponent(Text component) {
       this.component = component;
    }
 
@@ -24,15 +24,15 @@ public class EventRenderTabOverlay implements Event {
       return this.type;
    }
 
-   public Component getComponent() {
+   public Text getComponent() {
       return this.component;
    }
 
-   public @Nullable PlayerInfo getPlayerInfo() {
+   public @Nullable PlayerListEntry getPlayerInfo() {
       return playerInfo;
    }
 
-   public EventRenderTabOverlay(EventType type, Component component, PlayerInfo playerInfo) {
+   public EventRenderTabOverlay(EventType type, Text component, PlayerListEntry playerInfo) {
       this.type = type;
       this.component = component;
       this.playerInfo = playerInfo;

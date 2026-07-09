@@ -1,16 +1,16 @@
 package awa.qwq.ovo.Naven.utils.renderer;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import java.nio.ByteBuffer;
-import net.minecraft.client.Minecraft;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.math.Vec3d;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.system.MemoryUtil;
 
 public class Mesh {
-   private static final Minecraft mc = Minecraft.getInstance();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
    public boolean depthTest = false;
    public double alpha = 1.0;
    private final DrawMode drawMode;
@@ -172,7 +172,7 @@ public class Mesh {
       }
    }
 
-   public void beginRender(PoseStack matrices) {
+   public void beginRender(MatrixStack matrices) {
       if (this.depthTest) {
          GL.enableDepth();
       } else {
@@ -183,14 +183,14 @@ public class Mesh {
       GL.disableCull();
       GL.enableLineSmooth();
       if (matrices != null || this.rendering3D) {
-         PoseStack matrixStack = RenderSystem.getModelViewStack();
-         matrixStack.pushPose();
+         MatrixStack matrixStack = RenderSystem.getModelViewStack();
+         matrixStack.push();
          if (matrices != null) {
-            matrixStack.mulPoseMatrix(matrices.last().pose());
+            matrixStack.multiplyPositionMatrix(matrices.peek().getPositionMatrix());
          }
 
          if (this.rendering3D) {
-            Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
+            Vec3d cameraPos = mc.gameRenderer.getCamera().getPos();
             matrixStack.translate(0.0, -cameraPos.y, 0.0);
          }
 
@@ -201,7 +201,7 @@ public class Mesh {
       this.beganRendering = true;
    }
 
-   public void render(PoseStack matrices) {
+   public void render(MatrixStack matrices) {
       if (this.building) {
          this.end();
       }
@@ -225,7 +225,7 @@ public class Mesh {
 
    public void endRender() {
       if (this.modelViewPushed) {
-         RenderSystem.getModelViewStack().popPose();
+         RenderSystem.getModelViewStack().pop();
          RenderSystem.applyModelViewMatrix();
          this.modelViewPushed = false;
       }

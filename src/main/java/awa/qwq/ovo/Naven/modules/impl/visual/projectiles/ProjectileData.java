@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.modules.impl.visual.projectiles;
 
 import java.awt.Color;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.entity.Entity;
 
 public interface ProjectileData {
    Color getColor(Object var1);

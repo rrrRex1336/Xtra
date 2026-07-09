@@ -1,6 +1,6 @@
 package awa.qwq.ovo.Naven.utils;
 
-import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.packet.Packet;
 
 public class PacketSnapshot {
     public Packet<?> packet;

@@ -27,14 +27,14 @@ import awa.qwq.ovo.Naven.modules.impl.world.Scaffold;
 import awa.qwq.ovo.Naven.modules.impl.world.Surround;
 import awa.qwq.ovo.Naven.utils.MoveUtils;
 import awa.qwq.ovo.Naven.utils.Vector2f;
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.PosRot;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.Full;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class RotationManager {
    private static final Logger log = LogManager.getLogger(RotationManager.class);
-   private static final Minecraft mc = Minecraft.getInstance();
+   private static final MinecraftClient mc = MinecraftClient.getInstance();
    public static Vector2f rotations;
    public static Vector2f lastRotations;
    public static Vector2f animationRotation;
@@ -84,7 +84,7 @@ public class RotationManager {
                Vector2f lookAtRotation = autoMLG.calculateLookAt(autoMLG.above);
                setRotations(lookAtRotation);
             } else {
-               setRotations(new Vector2f(mc.player.getYRot(), 90.0F));
+               setRotations(new Vector2f(mc.player.getYaw(), 90.0F));
             }
          } else if (autoThrow != null && autoThrow.isEnabled() && autoThrow.rotationSet > 0 && autoThrow.targetRotations != null) {
             setRotations(autoThrow.targetRotations);
@@ -147,7 +147,7 @@ public class RotationManager {
       float randomSpeed = minSpeed + (float) (Math.random() * (maxSpeed - minSpeed));
 
       Vector2f targetRot = new Vector2f(killAura.rotation.x, killAura.rotation.y);
-      Vector2f currentRot = new Vector2f(mc.player.getYRot(), mc.player.getXRot());
+      Vector2f currentRot = new Vector2f(mc.player.getYaw(), mc.player.getPitch());
 
       float yawOffset = (float) ((Math.random() - 0.5) * killAura.randomYawOffset.getCurrentValue());
       float pitchOffset = (float) ((Math.random() - 0.5) * killAura.randomPitchOffset.getCurrentValue());
@@ -194,7 +194,7 @@ public class RotationManager {
    public void onPre(EventMotion e) {
       if (e.getType() == EventType.PRE) {
          if (rotations == null || lastRotations == null) {
-            rotations = lastRotations = new Vector2f(mc.player.getYRot(), mc.player.getXRot());
+            rotations = lastRotations = new Vector2f(mc.player.getYaw(), mc.player.getPitch());
          }
 
          lastAnimationRotation = animationRotation;
@@ -289,8 +289,8 @@ public class RotationManager {
    @EventTarget(0)
    public void onPositionItem(EventPositionItem e) {
       if (active && rotations != null) {
-         PosRot packet = (PosRot)e.getPacket();
-         PosRot newPacket = new PosRot(packet.getX(0.0), packet.getY(0.0), packet.getZ(0.0), rotations.getX(), rotations.getY(), packet.isOnGround());
+         Full packet = (Full)e.getPacket();
+         Full newPacket = new Full(packet.getX(0.0), packet.getY(0.0), packet.getZ(0.0), rotations.getX(), rotations.getY(), packet.isOnGround());
          e.setPacket(newPacket);
       }
    }

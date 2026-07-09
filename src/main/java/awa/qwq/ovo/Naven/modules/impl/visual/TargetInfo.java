@@ -22,16 +22,16 @@ import awa.qwq.ovo.Naven.utils.renderer.text.CustomTextRenderer;
 import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import java.util.Locale;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
-import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.renderer.entity.LivingEntityRenderer;
-import net.minecraft.world.entity.player.PlayerModelPart;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.client.gui.PlayerSkinDrawer;
+import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.client.render.entity.LivingEntityRenderer;
+import net.minecraft.client.render.entity.PlayerModelPart;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.hit.EntityHitResult;
 import org.joml.Vector4f;
 
 @ModuleInfo(name = "TargetInfo", description = "Display your target info.", category = Category.VISUAL)
@@ -122,9 +122,9 @@ public class TargetInfo extends Module {
         }
 
         living = renderTarget;
-        event.getStack().pushPose();
-        float baseX = mc.getWindow().getGuiScaledWidth() / 2.0F + 10.0F;
-        float baseY = mc.getWindow().getGuiScaledHeight() / 2.0F + 10.0F;
+        event.getStack().push();
+        float baseX = mc.getWindow().getScaledWidth() / 2.0F + 10.0F;
+        float baseY = mc.getWindow().getScaledHeight() / 2.0F + 10.0F;
         String targetName = displayName(living) + (living.isBaby() ? " (Baby)" : "");
         float width = Math.max(Fonts.harmony.getWidth(targetName, 0.4F) + 10.0F, 60.0F);
 
@@ -151,7 +151,7 @@ public class TargetInfo extends Module {
         Fonts.harmony.render(event.getStack(), targetName, x + 5.0F, y + 6.0F, Color.WHITE, true, 0.35F);
         Fonts.harmony.render(event.getStack(), getHealthText(living), x + 5.0F, y + 17.0F, Color.WHITE, true, 0.35F);
         Fonts.harmony.setAlpha(1.0F);
-        event.getStack().popPose();
+        event.getStack().pop();
     }
 
     @EventTarget
@@ -213,8 +213,8 @@ public class TargetInfo extends Module {
         float healthBarWidth = Math.max(statusWidth + nameWidth + 35.0F - healthTextWidth, 65.0F);
         float width = ROUNDED_EDGE + ROUNDED_FACE_SIZE + ROUNDED_EDGE + healthBarWidth + ROUNDED_INDENT + healthTextWidth + ROUNDED_EDGE;
         float height = ROUNDED_FACE_SIZE + ROUNDED_EDGE * 2.0F;
-        float baseX = mc.getWindow().getGuiScaledWidth() / 2.0F + 10.0F;
-        float baseY = mc.getWindow().getGuiScaledHeight() / 2.0F + 10.0F;
+        float baseX = mc.getWindow().getScaledWidth() / 2.0F + 10.0F;
+        float baseY = mc.getWindow().getScaledHeight() / 2.0F + 10.0F;
 
         this.dragManager.update(baseX, baseY, width, height);
         float x = this.dragManager.getX(baseX);
@@ -246,8 +246,8 @@ public class TargetInfo extends Module {
         int accentTop = getRoundedAccent(y);
         int accentBottom = getRoundedAccent(y + height);
 
-        PoseStack stack = event.getStack();
-        stack.pushPose();
+        MatrixStack stack = event.getStack();
+        stack.push();
         stack.translate(x + width / 2.0F, y + height / 2.0F, 0.0F);
         stack.scale(scale, scale, 1.0F);
         stack.translate(-(x + width / 2.0F), -(y + height / 2.0F), 0.0F);
@@ -262,7 +262,7 @@ public class TargetInfo extends Module {
         drawRoundedGradientRect(stack, textX, barY, Math.min(healthBarWidth, this.roundedHealthWidth), 6.0F, 3.0F, accentBottom, accentTop);
         font.render(stack, healthText, textX + healthBarWidth + ROUNDED_INDENT, barY - 1.0F, new Color(accentTop, true), true, healthScale);
 
-        stack.popPose();
+        stack.pop();
     }
 
     private float updateRoundedScale(boolean opening) {
@@ -284,16 +284,16 @@ public class TargetInfo extends Module {
     }
 
     private void renderRoundedHead(EventRender2D event, LivingEntity living, float x, float y, float size, float hurtTime) {
-        PoseStack stack = event.getStack();
+        MatrixStack stack = event.getStack();
         RenderUtils.drawRoundedRect(stack, x - 1.0F, y + 2.0F, size + 2.0F, size + 2.0F, 9.0F, new Color(0, 0, 0, 80).getRGB());
         StencilUtils.write(false);
         RenderUtils.drawRoundedRect(stack, x, y, size, size, 8.0F, Color.WHITE.getRGB());
         StencilUtils.erase(true);
 
-        if (living instanceof AbstractClientPlayer player) {
-            boolean upsideDown = LivingEntityRenderer.isEntityUpsideDown(player);
-            boolean hasHat = player.isModelPartShown(PlayerModelPart.HAT);
-            PlayerFaceRenderer.draw(event.getGuiGraphics(), player.getSkin().texture(), (int) x, (int) y, (int) size, hasHat, upsideDown);
+        if (living instanceof AbstractClientPlayerEntity player) {
+            boolean upsideDown = LivingEntityRenderer.shouldFlipUpsideDown(player);
+            boolean hasHat = player.isPartVisible(PlayerModelPart.HAT);
+            PlayerSkinDrawer.draw(event.getGuiGraphics(), player.getSkinTextures().texture(), (int) x, (int) y, (int) size, hasHat, upsideDown);
         } else {
             RenderUtils.drawRoundedRect(stack, x, y, size, size, 8.0F, new Color(35, 35, 35, 255).getRGB());
             String first = living.getName().getString().isEmpty() ? "?" : living.getName().getString().substring(0, 1);
@@ -326,15 +326,15 @@ public class TargetInfo extends Module {
     }
 
     private static boolean isValidTarget(LivingEntity living) {
-        if (living == null || mc.player == null || mc.level == null) {
+        if (living == null || mc.player == null || mc.world == null) {
             return false;
         }
 
-        if (living == mc.player || living.level() != mc.level || living.isRemoved() || !living.isAlive() || living.isDeadOrDying() || living.getHealth() <= 0.0F) {
+        if (living == mc.player || living.getWorld() != mc.world || living.isRemoved() || !living.isAlive() || living.isDead() || living.getHealth() <= 0.0F) {
             return false;
         }
 
-        for (Entity entity : mc.level.entitiesForRendering()) {
+        for (Entity entity : mc.world.getEntities()) {
             if (entity == living) {
                 return true;
             }
@@ -351,7 +351,7 @@ public class TargetInfo extends Module {
     }
 
     private static boolean isCurrentLookTarget(Entity entity) {
-        return mc.hitResult instanceof EntityHitResult hitResult && hitResult.getEntity() == entity;
+        return mc.crosshairTarget instanceof EntityHitResult hitResult && hitResult.getEntity() == entity;
     }
 
     private static String getRoundedStatus(LivingEntity living) {
@@ -377,7 +377,7 @@ public class TargetInfo extends Module {
         return Fonts.axiforma_regular != null ? Fonts.axiforma_regular : Fonts.harmony;
     }
 
-    private static void drawRoundedGradientRect(PoseStack stack, float x, float y, float width, float height, float radius, int leftColor, int rightColor) {
+    private static void drawRoundedGradientRect(MatrixStack stack, float x, float y, float width, float height, float radius, int leftColor, int rightColor) {
         if (width <= 0.0F || height <= 0.0F) return;
         StencilUtils.write(false);
         RenderUtils.drawRoundedRect(stack, x, y, width, height, radius, Color.WHITE.getRGB());

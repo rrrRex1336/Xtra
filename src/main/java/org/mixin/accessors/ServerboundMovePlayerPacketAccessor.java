@@ -1,11 +1,11 @@
 package org.mixin.accessors;
 
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(ServerboundMovePlayerPacket.class)
+@Mixin(PlayerMoveC2SPacket.class)
 public interface ServerboundMovePlayerPacketAccessor {
 
    @Accessor("x")
@@ -17,18 +17,18 @@ public interface ServerboundMovePlayerPacketAccessor {
    @Accessor("z")
    double getZ();
 
-   @Accessor("yRot")
+   @Accessor("yaw")
    @Mutable
    void setYRot(float yRot);
 
-   @Accessor("yRot")
+   @Accessor("yaw")
    float getYRot();
 
-   @Accessor("xRot")
+   @Accessor("pitch")
    @Mutable
    void setXRot(float xRot);
 
-   @Accessor("xRot")
+   @Accessor("pitch")
    float getXRot();
 
    @Accessor("onGround")
@@ -38,9 +38,9 @@ public interface ServerboundMovePlayerPacketAccessor {
    @Mutable
    void setOnGround(boolean onGround);
 
-   @Accessor("hasPos")
+   @Accessor("changePosition")
    boolean hasPos();
 
-   @Accessor("hasRot")
+   @Accessor("changeLook")
    boolean hasRot();
 }

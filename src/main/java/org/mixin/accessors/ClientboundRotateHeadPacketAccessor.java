@@ -1,14 +1,14 @@
 package org.mixin.accessors;
 
-import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
+import net.minecraft.network.packet.s2c.play.EntitySetHeadYawS2CPacket;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin({ClientboundRotateHeadPacket.class})
+@Mixin({EntitySetHeadYawS2CPacket.class})
 public interface ClientboundRotateHeadPacketAccessor {
-   @Accessor("entityId")
+   @Accessor("entity")
    int getEntityId();
 
-   @Accessor("yHeadRot")
+   @Accessor("headYaw")
    byte getYHeadRot();
 }

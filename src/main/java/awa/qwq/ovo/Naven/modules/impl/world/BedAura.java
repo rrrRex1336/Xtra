@@ -18,20 +18,19 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import awa.qwq.ovo.Naven.values.impl.ModeValue;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
-import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.block.BedBlock;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BedPart;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
-
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.block.BedBlock;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.enums.BedPart;
+import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 
 @ModuleInfo(
         name = "BedAura",
@@ -112,7 +111,7 @@ public class BedAura extends Module {
     public void onDisable() {
         super.onDisable();
         if (isBreaking) {
-            mc.options.keyAttack.setDown(false);
+            mc.options.attackKey.setPressed(false);
         }
         reset();
         RotationManager.active = false;
@@ -131,7 +130,7 @@ public class BedAura extends Module {
     @EventTarget(3)
     public void onPreTick(EventRunTicks event) {
         if (event.type() != EventType.PRE) return;
-        if (mc.player == null || mc.level == null) return;
+        if (mc.player == null || mc.world == null) return;
 
         findNearestBed();
         updateWorkingStatus();
@@ -165,7 +164,7 @@ public class BedAura extends Module {
     }
 
     private void findNearestBed() {
-        BlockPos playerPos = mc.player.blockPosition();
+        BlockPos playerPos = mc.player.getBlockPos();
         double range = breakRange.getCurrentValue();
         double bestDistance = range + 1;
         BlockPos bestBed = null;
@@ -175,14 +174,14 @@ public class BedAura extends Module {
         for (int x = -searchRange; x <= searchRange; x++) {
             for (int y = -searchRange; y <= searchRange; y++) {
                 for (int z = -searchRange; z <= searchRange; z++) {
-                    BlockPos pos = playerPos.offset(x, y, z);
-                    double realDistance = Math.sqrt(playerPos.distSqr(pos));
+                    BlockPos pos = playerPos.add(x, y, z);
+                    double realDistance = Math.sqrt(playerPos.getSquaredDistance(pos));
                     if (realDistance > range) continue;
 
-                    BlockState state = mc.level.getBlockState(pos);
-                    if (isBed(state) && state.getValue(BedBlock.PART) == BedPart.FOOT) {
-                        Vec3 bedCenter = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-                        double centerDistance = mc.player.getEyePosition().distanceTo(bedCenter);
+                    BlockState state = mc.world.getBlockState(pos);
+                    if (isBed(state) && state.get(BedBlock.PART) == BedPart.FOOT) {
+                        Vec3d bedCenter = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+                        double centerDistance = mc.player.getEyePos().distanceTo(bedCenter);
 
                         if (centerDistance < bestDistance) {
                             bestDistance = centerDistance;
@@ -212,7 +211,7 @@ public class BedAura extends Module {
         }
 
         working = true;
-        if (currentBreakPos != null && mc.level.getBlockState(currentBreakPos).isAir()) {
+        if (currentBreakPos != null && mc.world.getBlockState(currentBreakPos).isAir()) {
             currentBreakPos = null;
             legitTargetBlock = null;
         }
@@ -224,13 +223,13 @@ public class BedAura extends Module {
 
 
     private double calculateBreakTime(BlockPos pos) {
-        if (mc.level == null || mc.player == null) return 0.5;
+        if (mc.world == null || mc.player == null) return 0.5;
 
-        BlockState state = mc.level.getBlockState(pos);
-        float hardness = state.getDestroySpeed(mc.level, pos);
+        BlockState state = mc.world.getBlockState(pos);
+        float hardness = state.getHardness(mc.world, pos);
         if (hardness <= 0.0f) hardness = 0.0001f;
 
-        float destroySpeed = mc.player.getDestroySpeed(state);
+        float destroySpeed = mc.player.getBlockBreakingSpeed(state);
         float relativeHardness = destroySpeed / hardness / 30f;
         if (relativeHardness <= 0.0f) relativeHardness = 0.0001f;
 
@@ -238,20 +237,20 @@ public class BedAura extends Module {
     }
 
     private boolean canHitBedDirectly(BlockPos bedFoot) {
-        if (mc.player == null || mc.level == null) return false;
-        Vec3 eyePos = mc.player.getEyePosition(1.0F);
-        BlockState state = mc.level.getBlockState(bedFoot);
+        if (mc.player == null || mc.world == null) return false;
+        Vec3d eyePos = mc.player.getCameraPosVec(1.0F);
+        BlockState state = mc.world.getBlockState(bedFoot);
         if (!(state.getBlock() instanceof BedBlock)) return false;
-        Direction facing = state.getValue(BedBlock.FACING);
-        boolean isHead = state.getValue(BedBlock.PART) == BedPart.HEAD;
-        BlockPos otherPart = isHead ? bedFoot.relative(facing.getOpposite()) : bedFoot.relative(facing);
+        Direction facing = state.get(BedBlock.FACING);
+        boolean isHead = state.get(BedBlock.PART) == BedPart.HEAD;
+        BlockPos otherPart = isHead ? bedFoot.offset(facing.getOpposite()) : bedFoot.offset(facing);
         List<BlockPos> parts = List.of(bedFoot, otherPart);
         for (BlockPos part : parts) {
             for (double dx = 0.0; dx <= 1.0; dx += 0.5) {
                 for (double dy = 0.0; dy <= 1.0; dy += 0.5) {
                     for (double dz = 0.0; dz <= 1.0; dz += 0.5) {
-                        Vec3 point = new Vec3(part.getX() + dx, part.getY() + dy, part.getZ() + dz);
-                        BlockHitResult hit = mc.level.clip(new ClipContext(eyePos, point, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
+                        Vec3d point = new Vec3d(part.getX() + dx, part.getY() + dy, part.getZ() + dz);
+                        BlockHitResult hit = mc.world.raycast(new RaycastContext(eyePos, point, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
                         if (hit.getType() == BlockHitResult.Type.BLOCK && hit.getBlockPos().equals(part)) {
                             return true;
                         }
@@ -262,27 +261,27 @@ public class BedAura extends Module {
         return false;
     }
 
-    private Vec3 getBestHitPoint(BlockPos bedFoot) {
-        if (mc.player == null || mc.level == null) return Vec3.atCenterOf(bedFoot);
-        Vec3 eyePos = mc.player.getEyePosition(1.0F);
-        BlockState state = mc.level.getBlockState(bedFoot);
-        if (!(state.getBlock() instanceof BedBlock)) return Vec3.atCenterOf(bedFoot);
+    private Vec3d getBestHitPoint(BlockPos bedFoot) {
+        if (mc.player == null || mc.world == null) return Vec3d.ofCenter(bedFoot);
+        Vec3d eyePos = mc.player.getCameraPosVec(1.0F);
+        BlockState state = mc.world.getBlockState(bedFoot);
+        if (!(state.getBlock() instanceof BedBlock)) return Vec3d.ofCenter(bedFoot);
 
-        Direction facing = state.getValue(BedBlock.FACING);
-        boolean isHead = state.getValue(BedBlock.PART) == BedPart.HEAD;
-        BlockPos otherPart = isHead ? bedFoot.relative(facing.getOpposite()) : bedFoot.relative(facing);
+        Direction facing = state.get(BedBlock.FACING);
+        boolean isHead = state.get(BedBlock.PART) == BedPart.HEAD;
+        BlockPos otherPart = isHead ? bedFoot.offset(facing.getOpposite()) : bedFoot.offset(facing);
         List<BlockPos> parts = List.of(bedFoot, otherPart);
 
-        Vec3 bestPoint = null;
+        Vec3d bestPoint = null;
         double bestDist = Double.MAX_VALUE;
         for (BlockPos part : parts) {
             for (double dx = 0.0; dx <= 1.0; dx += 0.5) {
                 for (double dy = 0.0; dy <= 1.0; dy += 0.5) {
                     for (double dz = 0.0; dz <= 1.0; dz += 0.5) {
-                        Vec3 point = new Vec3(part.getX() + dx, part.getY() + dy, part.getZ() + dz);
-                        BlockHitResult hit = mc.level.clip(new ClipContext(eyePos, point, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
+                        Vec3d point = new Vec3d(part.getX() + dx, part.getY() + dy, part.getZ() + dz);
+                        BlockHitResult hit = mc.world.raycast(new RaycastContext(eyePos, point, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
                         if (hit.getType() == BlockHitResult.Type.BLOCK && hit.getBlockPos().equals(part)) {
-                            double dist = eyePos.distanceToSqr(point);
+                            double dist = eyePos.squaredDistanceTo(point);
                             if (dist < bestDist) {
                                 bestDist = dist;
                                 bestPoint = point;
@@ -292,23 +291,23 @@ public class BedAura extends Module {
                 }
             }
         }
-        return bestPoint != null ? bestPoint : Vec3.atCenterOf(bedFoot);
+        return bestPoint != null ? bestPoint : Vec3d.ofCenter(bedFoot);
     }
 
     private void evaluateTarget() {
         if (targetBed == null) return;
-        if (mc.level == null) return;
+        if (mc.world == null) return;
         if (canHitBedDirectly(targetBed)) {
             currentBreakPos = targetBed;
             legitTargetBlock = null;
             return;
         }
-        BlockState bedState = mc.level.getBlockState(targetBed);
+        BlockState bedState = mc.world.getBlockState(targetBed);
         if (!(bedState.getBlock() instanceof BedBlock)) return;
 
-        Direction facing = bedState.getValue(BedBlock.FACING);
-        boolean isHead = bedState.getValue(BedBlock.PART) == BedPart.HEAD;
-        BlockPos otherPart = isHead ? targetBed.relative(facing.getOpposite()) : targetBed.relative(facing);
+        Direction facing = bedState.get(BedBlock.FACING);
+        boolean isHead = bedState.get(BedBlock.PART) == BedPart.HEAD;
+        BlockPos otherPart = isHead ? targetBed.offset(facing.getOpposite()) : targetBed.offset(facing);
 
         List<BlockPos> bedParts = new ArrayList<>();
         bedParts.add(targetBed);
@@ -319,8 +318,8 @@ public class BedAura extends Module {
 
         for (BlockPos bedPart : bedParts) {
             for (Direction dir : directions) {
-                BlockPos offsetPos = bedPart.relative(dir);
-                BlockState offsetState = mc.level.getBlockState(offsetPos);
+                BlockPos offsetPos = bedPart.offset(dir);
+                BlockState offsetState = mc.world.getBlockState(offsetPos);
                 if (offsetState.isAir()) {
                     hasAir = true;
                     break;
@@ -349,10 +348,10 @@ public class BedAura extends Module {
         BlockPos bestBlock = null;
 
         for (BlockPos blockPos : solidBlocks) {
-            BlockState blockState = mc.level.getBlockState(blockPos);
-            if (blockState.getDestroySpeed(mc.level, blockPos) < 0) continue;
+            BlockState blockState = mc.world.getBlockState(blockPos);
+            if (blockState.getHardness(mc.world, blockPos) < 0) continue;
 
-            double distance = mc.player.getEyePosition().distanceToSqr(Vec3.atCenterOf(blockPos));
+            double distance = mc.player.getEyePos().squaredDistanceTo(Vec3d.ofCenter(blockPos));
 
             if (isPacketMode) {
                 double time = calculateBreakTime(blockPos);
@@ -388,7 +387,7 @@ public class BedAura extends Module {
         updateTargetRotation();
 
         if (combatAuraActive && allowKillAura.getCurrentValue()) {
-            mc.options.keyAttack.setDown(false);
+            mc.options.attackKey.setPressed(false);
             if (canBreak()) {
                 startPacketBreaking(true);
             }
@@ -398,19 +397,19 @@ public class BedAura extends Module {
         if (breakMode.isCurrentMode("Legit")) {
             if (!isBreaking) {
                 isBreaking = true;
-                mc.options.keyAttack.setDown(true);
+                mc.options.attackKey.setPressed(true);
             }
             return;
         }
 
-        mc.options.keyAttack.setDown(false);
+        mc.options.attackKey.setPressed(false);
         if (canBreak()) {
             startPacketBreaking(false);
         }
     }
 
     private void stopBreaking() {
-        mc.options.keyAttack.setDown(false);
+        mc.options.attackKey.setPressed(false);
         isBreaking = false;
         lastBreakTime = System.currentTimeMillis();
         currentBreakPos = null;
@@ -428,15 +427,15 @@ public class BedAura extends Module {
         if (mc.player == null || currentBreakPos == null || bedRotations == null) return;
         Direction direction = getBreakDirection(currentBreakPos);
         if (sendRotationPacket) {
-            NetworkUtils.sendPacketNoEvent(new ServerboundMovePlayerPacket.Rot(bedRotations.x, bedRotations.y, mc.player.onGround()));
+            NetworkUtils.sendPacketNoEvent(new PlayerMoveC2SPacket.LookAndOnGround(bedRotations.x, bedRotations.y, mc.player.isOnGround()));
         }
-        NetworkUtils.sendPacketNoEvent(new ServerboundPlayerActionPacket(
-                ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK,
+        NetworkUtils.sendPacketNoEvent(new PlayerActionC2SPacket(
+                PlayerActionC2SPacket.Action.START_DESTROY_BLOCK,
                 currentBreakPos,
                 direction
         ));
-        NetworkUtils.sendPacketNoEvent(new ServerboundPlayerActionPacket(
-                ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK,
+        NetworkUtils.sendPacketNoEvent(new PlayerActionC2SPacket(
+                PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK,
                 currentBreakPos,
                 direction
         ));
@@ -445,31 +444,31 @@ public class BedAura extends Module {
     }
 
     private Direction getBreakDirection(BlockPos pos) {
-        if (mc.player == null || mc.level == null) return Direction.UP;
+        if (mc.player == null || mc.world == null) return Direction.UP;
 
-        Vec3 eyePos = mc.player.getEyePosition(1.0F);
-        Vec3 targetPos = isBed(mc.level.getBlockState(pos))
+        Vec3d eyePos = mc.player.getCameraPosVec(1.0F);
+        Vec3d targetPos = isBed(mc.world.getBlockState(pos))
                 ? getBestHitPoint(pos)
-                : Vec3.atCenterOf(pos);
-        BlockHitResult hit = mc.level.clip(new ClipContext(
+                : Vec3d.ofCenter(pos);
+        BlockHitResult hit = mc.world.raycast(new RaycastContext(
                 eyePos,
                 targetPos,
-                ClipContext.Block.COLLIDER,
-                ClipContext.Fluid.NONE,
+                RaycastContext.ShapeType.COLLIDER,
+                RaycastContext.FluidHandling.NONE,
                 mc.player
         ));
-        return hit.getBlockPos().equals(pos) ? hit.getDirection() : Direction.UP;
+        return hit.getBlockPos().equals(pos) ? hit.getSide() : Direction.UP;
     }
 
     private void updateTargetRotation() {
         BlockPos target = currentBreakPos != null ? currentBreakPos : targetBed;
         if (target == null) return;
 
-        Vec3 targetCenter;
-        if (isBed(mc.level.getBlockState(target))) {
+        Vec3d targetCenter;
+        if (isBed(mc.world.getBlockState(target))) {
             targetCenter = getBestHitPoint(target);
         } else {
-            targetCenter = new Vec3(target.getX() + 0.5, target.getY() + 0.6, target.getZ() + 0.5);
+            targetCenter = new Vec3d(target.getX() + 0.5, target.getY() + 0.6, target.getZ() + 0.5);
         }
 
         Vector2f rotations = RotationUtils.getRotations(targetCenter);
@@ -506,8 +505,8 @@ public class BedAura extends Module {
 
     private boolean canReach(BlockPos pos) {
         if (mc.player == null) return false;
-        Vec3 eyePos = mc.player.getEyePosition();
-        Vec3 targetCenter = Vec3.atCenterOf(pos);
+        Vec3d eyePos = mc.player.getEyePos();
+        Vec3d targetCenter = Vec3d.ofCenter(pos);
         double distance = eyePos.distanceTo(targetCenter);
         return distance <= breakRange.getCurrentValue();
     }
@@ -554,11 +553,11 @@ public class BedAura extends Module {
     }
 
     private boolean canSeeBlock(BlockPos pos) {
-        if (mc.player == null || mc.level == null) return false;
-        Vec3 eyePos = mc.player.getEyePosition(1.0F);
-        Vec3 blockCenter = Vec3.atCenterOf(pos);
-        BlockHitResult result = mc.level.clip(new ClipContext(eyePos, blockCenter,
-                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
+        if (mc.player == null || mc.world == null) return false;
+        Vec3d eyePos = mc.player.getCameraPosVec(1.0F);
+        Vec3d blockCenter = Vec3d.ofCenter(pos);
+        BlockHitResult result = mc.world.raycast(new RaycastContext(eyePos, blockCenter,
+                RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
         return result.getBlockPos().equals(pos);
     }
 }

@@ -1,7 +1,7 @@
 package awa.qwq.ovo.Naven.events.impl;
 
 import awa.qwq.ovo.Naven.events.api.events.callables.EventCancellable;
-import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.packet.Packet;
 
 public class EventPositionItem extends EventCancellable {
    private Packet<?> packet;

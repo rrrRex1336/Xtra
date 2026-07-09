@@ -12,17 +12,17 @@ import awa.qwq.ovo.Naven.values.ValueBuilder;
 import awa.qwq.ovo.Naven.values.impl.BooleanValue;
 import awa.qwq.ovo.Naven.values.impl.FloatValue;
 import lombok.Getter;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.level.material.Fluids;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.block.BlockState;
+import net.minecraft.fluid.FluidState;
+import net.minecraft.fluid.Fluids;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 
 @ModuleInfo(
         name = "AutoMLG",
@@ -111,7 +111,7 @@ public class AutoMLG extends Module {
     @Override
     public void onDisable() {
         if (mc.player != null && this.slotToRestore != null) {
-            mc.player.getInventory().selected = this.slotToRestore;
+            mc.player.getInventory().selectedSlot = this.slotToRestore;
         }
         this.targetRotation = null;
         this.rotation = false;
@@ -135,7 +135,7 @@ public class AutoMLG extends Module {
 
     @EventTarget
     public void onTick(EventRunTicks event) {
-        if (event.getType() != EventType.PRE || mc.player == null || mc.level == null || mc.gameMode == null) {
+        if (event.getType() != EventType.PRE || mc.player == null || mc.world == null || mc.interactionManager == null) {
             return;
         }
 
@@ -144,9 +144,9 @@ public class AutoMLG extends Module {
         this.placingWater = false;
         this.collectingWater = this.recoveryActive;
 
-        if (mc.player.onGround()
+        if (mc.player.isOnGround()
                 || mc.player.getAbilities().flying
-                || mc.player.isInWaterRainOrBubble()
+                || mc.player.isWet()
                 || mc.player.isInLava()) {
             this.accumulatedFall = 0.0F;
         } else {
@@ -168,7 +168,7 @@ public class AutoMLG extends Module {
         }
 
         if (this.slotToRestore != null) {
-            mc.player.getInventory().selected = this.slotToRestore;
+            mc.player.getInventory().selectedSlot = this.slotToRestore;
             this.slotToRestore = null;
         }
 
@@ -177,7 +177,7 @@ public class AutoMLG extends Module {
             return;
         }
 
-        if (mc.player.onGround() || this.accumulatedFall <= 0.0F) {
+        if (mc.player.isOnGround() || this.accumulatedFall <= 0.0F) {
             this.waterPlaced = false;
             this.readyToPlace = false;
         }
@@ -202,7 +202,7 @@ public class AutoMLG extends Module {
             if (this.waterBucketSlot == null) {
                 int bucketSlot = -1;
                 for (int i = 0; i < 9; ++i) {
-                    ItemStack stack = mc.player.getInventory().getItem(i);
+                    ItemStack stack = mc.player.getInventory().getStack(i);
                     if (!stack.isEmpty() && stack.getItem() == Items.BUCKET) {
                         bucketSlot = i;
                         break;
@@ -219,7 +219,7 @@ public class AutoMLG extends Module {
                 this.waterBucketSlot = bucketSlot;
             }
 
-            ItemStack bucketStack = mc.player.getInventory().getItem(this.waterBucketSlot);
+            ItemStack bucketStack = mc.player.getInventory().getStack(this.waterBucketSlot);
             if (bucketStack.getItem() == Items.WATER_BUCKET) {
                 this.recoveryActive = false;
                 this.collectingWater = false;
@@ -239,8 +239,8 @@ public class AutoMLG extends Module {
                 return;
             }
 
-            FluidState fluidState = mc.level.getFluidState(this.placedWaterPos);
-            if (!(fluidState.getType() == Fluids.WATER && fluidState.isSource())) {
+            FluidState fluidState = mc.world.getFluidState(this.placedWaterPos);
+            if (!(fluidState.getFluid() == Fluids.WATER && fluidState.isStill())) {
                 this.recoveryActive = false;
                 this.collectingWater = false;
                 this.waterBucketSlot = null;
@@ -249,8 +249,8 @@ public class AutoMLG extends Module {
                 return;
             }
 
-            Vec3 eyesPos = mc.player.getEyePosition(1.0F);
-            Vec3 blockCenter = Vec3.atCenterOf(this.placedWaterPos);
+            Vec3d eyesPos = mc.player.getCameraPosVec(1.0F);
+            Vec3d blockCenter = Vec3d.ofCenter(this.placedWaterPos);
             double diffX = blockCenter.x - eyesPos.x;
             double diffY = blockCenter.y - eyesPos.y;
             double diffZ = blockCenter.z - eyesPos.z;
@@ -259,10 +259,10 @@ public class AutoMLG extends Module {
             float pitch = (float) -Math.toDegrees(Math.atan2(diffY, diffXZ));
             Vector2f recoveryRotation = new Vector2f(yaw, pitch);
 
-            Vec3 eyePos = mc.player.getEyePosition(1.0F);
-            Vec3 direction = Vec3.directionFromRotation(recoveryRotation.getY(), recoveryRotation.getX());
-            Vec3 endPos = eyePos.add(direction.scale(4.5D));
-            BlockHitResult hit = mc.level.clip(new ClipContext(eyePos, endPos, ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, mc.player));
+            Vec3d eyePos = mc.player.getCameraPosVec(1.0F);
+            Vec3d direction = Vec3d.fromPolar(recoveryRotation.getY(), recoveryRotation.getX());
+            Vec3d endPos = eyePos.add(direction.multiply(4.5D));
+            BlockHitResult hit = mc.world.raycast(new RaycastContext(eyePos, endPos, RaycastContext.ShapeType.OUTLINE, RaycastContext.FluidHandling.SOURCE_ONLY, mc.player));
 
             if (hit.getType() == HitResult.Type.MISS || !hit.getBlockPos().equals(this.placedWaterPos)) {
                 this.recoveryActive = false;
@@ -279,20 +279,20 @@ public class AutoMLG extends Module {
                 RotationManager.active = true;
             }
             if (this.waterBucketSlot >= 0 && this.waterBucketSlot <= 8) {
-                this.slotToRestore = mc.player.getInventory().selected;
-                mc.player.getInventory().selected = this.waterBucketSlot;
+                this.slotToRestore = mc.player.getInventory().selectedSlot;
+                mc.player.getInventory().selectedSlot = this.waterBucketSlot;
             }
-            float originalYaw = mc.player.getYRot();
-            float originalPitch = mc.player.getXRot();
+            float originalYaw = mc.player.getYaw();
+            float originalPitch = mc.player.getPitch();
             if (recoveryRotation != null) {
-                mc.player.setYRot(recoveryRotation.getX());
-                mc.player.setXRot(recoveryRotation.getY());
+                mc.player.setYaw(recoveryRotation.getX());
+                mc.player.setPitch(recoveryRotation.getY());
             }
-            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-            mc.player.swing(InteractionHand.MAIN_HAND);
+            mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+            mc.player.swingHand(Hand.MAIN_HAND);
             if (recoveryRotation != null) {
-                mc.player.setYRot(originalYaw);
-                mc.player.setXRot(originalPitch);
+                mc.player.setYaw(originalYaw);
+                mc.player.setPitch(originalPitch);
             }
             return;
         }
@@ -306,7 +306,7 @@ public class AutoMLG extends Module {
 
             int bucketSlot = -1;
             for (int i = 0; i < 9; ++i) {
-                ItemStack stack = mc.player.getInventory().getItem(i);
+                ItemStack stack = mc.player.getInventory().getStack(i);
                 if (!stack.isEmpty() && stack.getItem() == Items.BUCKET) {
                     bucketSlot = i;
                     break;
@@ -315,7 +315,7 @@ public class AutoMLG extends Module {
 
             if (bucketSlot >= 0) {
                 int waterBucketSlotLocal = bucketSlot;
-                BlockPos playerPos = BlockPos.containing(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+                BlockPos playerPos = BlockPos.ofFloored(mc.player.getX(), mc.player.getY(), mc.player.getZ());
                 BlockPos closestPos = null;
                 double closestDistSq = Double.POSITIVE_INFINITY;
                 int radius = 4;
@@ -323,13 +323,13 @@ public class AutoMLG extends Module {
                 for (int dy = -1; dy <= 1; ++dy) {
                     for (int dx = -radius; dx <= radius; ++dx) {
                         for (int dz = -radius; dz <= radius; ++dz) {
-                            BlockPos candidatePos = playerPos.offset(dx, dy, dz);
-                            FluidState fluidStateCheck = mc.level.getFluidState(candidatePos);
-                            if (!(fluidStateCheck.getType() == Fluids.WATER && fluidStateCheck.isSource())) {
+                            BlockPos candidatePos = playerPos.add(dx, dy, dz);
+                            FluidState fluidStateCheck = mc.world.getFluidState(candidatePos);
+                            if (!(fluidStateCheck.getFluid() == Fluids.WATER && fluidStateCheck.isStill())) {
                                 continue;
                             }
 
-                            double distSq = mc.player.position().distanceToSqr(
+                            double distSq = mc.player.getPos().squaredDistanceTo(
                                     candidatePos.getX() + 0.5D,
                                     candidatePos.getY() + 0.5D,
                                     candidatePos.getZ() + 0.5D
@@ -337,8 +337,8 @@ public class AutoMLG extends Module {
                             if (distSq >= closestDistSq) {
                                 continue;
                             }
-                            Vec3 eyesPosRot = mc.player.getEyePosition(1.0F);
-                            Vec3 blockCenterRot = Vec3.atCenterOf(candidatePos);
+                            Vec3d eyesPosRot = mc.player.getCameraPosVec(1.0F);
+                            Vec3d blockCenterRot = Vec3d.ofCenter(candidatePos);
                             double diffXRot = blockCenterRot.x - eyesPosRot.x;
                             double diffYRot = blockCenterRot.y - eyesPosRot.y;
                             double diffZRot = blockCenterRot.z - eyesPosRot.z;
@@ -346,10 +346,10 @@ public class AutoMLG extends Module {
                             float yawRot = (float) Math.toDegrees(Math.atan2(diffZRot, diffXRot)) - 90.0F;
                             float pitchRot = (float) -Math.toDegrees(Math.atan2(diffYRot, diffXZRot));
                             Vector2f bucketRotation = new Vector2f(yawRot, pitchRot);
-                            Vec3 eyePosRay = mc.player.getEyePosition(1.0F);
-                            Vec3 directionRay = Vec3.directionFromRotation(bucketRotation.getY(), bucketRotation.getX());
-                            Vec3 endPosRay = eyePosRay.add(directionRay.scale(4.5D));
-                            BlockHitResult hit = mc.level.clip(new ClipContext(eyePosRay, endPosRay, ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, mc.player));
+                            Vec3d eyePosRay = mc.player.getCameraPosVec(1.0F);
+                            Vec3d directionRay = Vec3d.fromPolar(bucketRotation.getY(), bucketRotation.getX());
+                            Vec3d endPosRay = eyePosRay.add(directionRay.multiply(4.5D));
+                            BlockHitResult hit = mc.world.raycast(new RaycastContext(eyePosRay, endPosRay, RaycastContext.ShapeType.OUTLINE, RaycastContext.FluidHandling.SOURCE_ONLY, mc.player));
 
                             if (hit.getType() == HitResult.Type.MISS || !hit.getBlockPos().equals(candidatePos)) {
                                 continue;
@@ -362,8 +362,8 @@ public class AutoMLG extends Module {
                 }
 
                 if (closestPos != null) {
-                    Vec3 eyesPosFinal = mc.player.getEyePosition(1.0F);
-                    Vec3 blockCenterFinal = Vec3.atCenterOf(closestPos);
+                    Vec3d eyesPosFinal = mc.player.getCameraPosVec(1.0F);
+                    Vec3d blockCenterFinal = Vec3d.ofCenter(closestPos);
                     double diffXFinal = blockCenterFinal.x - eyesPosFinal.x;
                     double diffYFinal = blockCenterFinal.y - eyesPosFinal.y;
                     double diffZFinal = blockCenterFinal.z - eyesPosFinal.z;
@@ -381,20 +381,20 @@ public class AutoMLG extends Module {
                         RotationManager.active = true;
                     }
                     if (bucketSlot >= 0 && bucketSlot <= 8) {
-                        this.slotToRestore = mc.player.getInventory().selected;
-                        mc.player.getInventory().selected = bucketSlot;
+                        this.slotToRestore = mc.player.getInventory().selectedSlot;
+                        mc.player.getInventory().selectedSlot = bucketSlot;
                     }
-                    float originalYawUse = mc.player.getYRot();
-                    float originalPitchUse = mc.player.getXRot();
+                    float originalYawUse = mc.player.getYaw();
+                    float originalPitchUse = mc.player.getPitch();
                     if (bucketRotation != null) {
-                        mc.player.setYRot(bucketRotation.getX());
-                        mc.player.setXRot(bucketRotation.getY());
+                        mc.player.setYaw(bucketRotation.getX());
+                        mc.player.setPitch(bucketRotation.getY());
                     }
-                    mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-                    mc.player.swing(InteractionHand.MAIN_HAND);
+                    mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+                    mc.player.swingHand(Hand.MAIN_HAND);
                     if (bucketRotation != null) {
-                        mc.player.setYRot(originalYawUse);
-                        mc.player.setXRot(originalPitchUse);
+                        mc.player.setYaw(originalYawUse);
+                        mc.player.setPitch(originalPitchUse);
                     }
 
                     this.postActionCooldown = 8;
@@ -404,11 +404,11 @@ public class AutoMLG extends Module {
             }
         }
 
-        if (this.waterPlaced && !this.readyToPlace && mc.player.getDeltaMovement().y < 0.0D) {
-            Vec3 startPos = new Vec3(mc.player.getX(), mc.player.getBoundingBox().minY, mc.player.getZ());
-            Vec3 endPos = startPos.add(0.0D, -2.5D, 0.0D);
-            BlockHitResult hit = mc.level.clip(new ClipContext(startPos, endPos, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
-            double distance = hit.getType() == HitResult.Type.MISS ? Double.POSITIVE_INFINITY : startPos.y - hit.getLocation().y;
+        if (this.waterPlaced && !this.readyToPlace && mc.player.getVelocity().y < 0.0D) {
+            Vec3d startPos = new Vec3d(mc.player.getX(), mc.player.getBoundingBox().minY, mc.player.getZ());
+            Vec3d endPos = startPos.add(0.0D, -2.5D, 0.0D);
+            BlockHitResult hit = mc.world.raycast(new RaycastContext(startPos, endPos, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+            double distance = hit.getType() == HitResult.Type.MISS ? Double.POSITIVE_INFINITY : startPos.y - hit.getPos().y;
 
             if (distance > 0.0D && distance <= 1.05D) {
                 this.readyToPlace = true;
@@ -421,7 +421,7 @@ public class AutoMLG extends Module {
 
         int slot = -1;
         for (int i = 0; i < 9; ++i) {
-            ItemStack stack = mc.player.getInventory().getItem(i);
+            ItemStack stack = mc.player.getInventory().getStack(i);
             if (!stack.isEmpty() && stack.getItem() == Items.WATER_BUCKET) {
                 slot = i;
                 break;
@@ -432,21 +432,21 @@ public class AutoMLG extends Module {
             return;
         }
 
-        if (mc.player.getDeltaMovement().y >= 0.0D) {
+        if (mc.player.getVelocity().y >= 0.0D) {
             return;
         }
 
-        Vec3 startPosGround = new Vec3(mc.player.getX(), mc.player.getBoundingBox().minY, mc.player.getZ());
-        Vec3 endPosGround = startPosGround.add(0.0D, -30.0D, 0.0D);
-        BlockHitResult hitGround = mc.level.clip(new ClipContext(startPosGround, endPosGround, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
-        double distanceGround = hitGround.getType() == HitResult.Type.MISS ? Double.POSITIVE_INFINITY : startPosGround.y - hitGround.getLocation().y;
+        Vec3d startPosGround = new Vec3d(mc.player.getX(), mc.player.getBoundingBox().minY, mc.player.getZ());
+        Vec3d endPosGround = startPosGround.add(0.0D, -30.0D, 0.0D);
+        BlockHitResult hitGround = mc.world.raycast(new RaycastContext(startPosGround, endPosGround, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+        double distanceGround = hitGround.getType() == HitResult.Type.MISS ? Double.POSITIVE_INFINITY : startPosGround.y - hitGround.getPos().y;
 
         if (distanceGround == Double.POSITIVE_INFINITY) {
             return;
         }
 
         double simulatedDrop = 0.0D;
-        double simulatedVelocity = mc.player.getDeltaMovement().y;
+        double simulatedVelocity = mc.player.getVelocity().y;
         int ticksToGround = 999;
         for (int i = 1; i <= 20; ++i) {
             simulatedDrop += simulatedVelocity;
@@ -462,18 +462,18 @@ public class AutoMLG extends Module {
         }
 
         if (this.solidCheck.getCurrentValue()) {
-            BlockPos blockPos = BlockPos.containing(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-            BlockPos below1 = blockPos.below();
-            BlockPos below2 = blockPos.below(2);
-            BlockState blockState1 = mc.level.getBlockState(below1);
-            boolean hasCollision1 = !blockState1.getCollisionShape(mc.level, below1).isEmpty();
-            boolean noMenu1 = blockState1.getMenuProvider(mc.level, below1) == null;
+            BlockPos blockPos = BlockPos.ofFloored(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+            BlockPos below1 = blockPos.down();
+            BlockPos below2 = blockPos.down(2);
+            BlockState blockState1 = mc.world.getBlockState(below1);
+            boolean hasCollision1 = !blockState1.getCollisionShape(mc.world, below1).isEmpty();
+            boolean noMenu1 = blockState1.createScreenHandlerFactory(mc.world, below1) == null;
             boolean solidBelow = (hasCollision1 && noMenu1);
 
             if (!solidBelow) {
-                BlockState blockState2 = mc.level.getBlockState(below2);
-                boolean hasCollision2 = !blockState2.getCollisionShape(mc.level, below2).isEmpty();
-                boolean noMenu2 = blockState2.getMenuProvider(mc.level, below2) == null;
+                BlockState blockState2 = mc.world.getBlockState(below2);
+                boolean hasCollision2 = !blockState2.getCollisionShape(mc.world, below2).isEmpty();
+                boolean noMenu2 = blockState2.createScreenHandlerFactory(mc.world, below2) == null;
                 solidBelow = (hasCollision2 && noMenu2);
             }
 
@@ -482,11 +482,11 @@ public class AutoMLG extends Module {
             }
         }
 
-        Vector2f downRotation = new Vector2f(mc.player.getYRot(), 90.0F);
-        Vec3 eyePosSolid = mc.player.getEyePosition(1.0F);
-        Vec3 directionSolid = Vec3.directionFromRotation(downRotation.getY(), downRotation.getX());
-        Vec3 endPosSolid = eyePosSolid.add(directionSolid.scale(5.0D));
-        BlockHitResult hitSolid = mc.level.clip(new ClipContext(eyePosSolid, endPosSolid, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
+        Vector2f downRotation = new Vector2f(mc.player.getYaw(), 90.0F);
+        Vec3d eyePosSolid = mc.player.getCameraPosVec(1.0F);
+        Vec3d directionSolid = Vec3d.fromPolar(downRotation.getY(), downRotation.getX());
+        Vec3d endPosSolid = eyePosSolid.add(directionSolid.multiply(5.0D));
+        BlockHitResult hitSolid = mc.world.raycast(new RaycastContext(eyePosSolid, endPosSolid, RaycastContext.ShapeType.OUTLINE, RaycastContext.FluidHandling.NONE, mc.player));
 
         if (hitSolid.getType() == HitResult.Type.MISS) {
             return;
@@ -499,21 +499,21 @@ public class AutoMLG extends Module {
             RotationManager.active = true;
         }
         if (slot >= 0 && slot <= 8) {
-            this.slotToRestore = mc.player.getInventory().selected;
-            mc.player.getInventory().selected = slot;
+            this.slotToRestore = mc.player.getInventory().selectedSlot;
+            mc.player.getInventory().selectedSlot = slot;
         }
 
-        float originalYawPlace = mc.player.getYRot();
-        float originalPitchPlace = mc.player.getXRot();
+        float originalYawPlace = mc.player.getYaw();
+        float originalPitchPlace = mc.player.getPitch();
         if (downRotation != null) {
-            mc.player.setYRot(downRotation.getX());
-            mc.player.setXRot(downRotation.getY());
+            mc.player.setYaw(downRotation.getX());
+            mc.player.setPitch(downRotation.getY());
         }
-        mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+        mc.player.swingHand(Hand.MAIN_HAND);
         if (downRotation != null) {
-            mc.player.setYRot(originalYawPlace);
-            mc.player.setXRot(originalPitchPlace);
+            mc.player.setYaw(originalYawPlace);
+            mc.player.setPitch(originalPitchPlace);
         }
 
         this.waterPlaced = true;
@@ -522,8 +522,8 @@ public class AutoMLG extends Module {
         this.recoveryDelay = 1;
         this.recoveryCountdown = this.recoveryActive ? 2 : 0;
         this.waterBucketSlot = null;
-        BlockHitResult hitPlacement = mc.level.clip(new ClipContext(eyePosSolid, endPosSolid, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
-        this.placedWaterPos = hitPlacement.getType() == HitResult.Type.MISS ? null : hitPlacement.getBlockPos().relative(hitPlacement.getDirection());
+        BlockHitResult hitPlacement = mc.world.raycast(new RaycastContext(eyePosSolid, endPosSolid, RaycastContext.ShapeType.OUTLINE, RaycastContext.FluidHandling.NONE, mc.player));
+        this.placedWaterPos = hitPlacement.getType() == HitResult.Type.MISS ? null : hitPlacement.getBlockPos().offset(hitPlacement.getSide());
         this.above = this.placedWaterPos;
     }
 
@@ -540,8 +540,8 @@ public class AutoMLG extends Module {
     }
 
     public Vector2f calculateLookAt(BlockPos pos) {
-        Vec3 eyesPos = mc.player.getEyePosition(1.0F);
-        Vec3 blockCenter = Vec3.atCenterOf(pos);
+        Vec3d eyesPos = mc.player.getCameraPosVec(1.0F);
+        Vec3d blockCenter = Vec3d.ofCenter(pos);
         double diffX = blockCenter.x - eyesPos.x;
         double diffY = blockCenter.y - eyesPos.y;
         double diffZ = blockCenter.z - eyesPos.z;
