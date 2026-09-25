@@ -101,7 +101,7 @@ public class Naven {
          Module.refreshMinecraft();
          new Naven();
       } catch (Exception var1) {
-         System.err.println("[Naven] Client load failed: " + var1.getMessage());
+         System.err.println("[Xtra] Client load failed: " + var1.getMessage());
       }
    }
 
