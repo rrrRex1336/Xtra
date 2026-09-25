@@ -92,6 +92,7 @@ publishing {
 	repositories {
 	}
 }
+
 task exportDeps(type: Copy) {
 	from configurations.runtimeClasspath
 	into 'build/exported-deps'

@@ -29,8 +29,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class Naven {
 
-   public static final String CLIENT_NAME = "Naven-Modern";
-   public static final String CLIENT_DISPLAY_NAME = "Naven";
+   public static final String CLIENT_NAME = "Xtra";
+   public static final String CLIENT_DISPLAY_NAME = "Xtra+";
    private static Naven instance;
    public static boolean isReady;
    private final EventManager eventManager;
@@ -100,16 +100,6 @@ public class Naven {
          mc = MinecraftClient.getInstance();
          Module.refreshMinecraft();
          new Naven();
-         System.out.println();
-         System.out.println("   ███╗   ██╗ █████╗ ██╗   ██╗███████╗███╗   ██╗");
-         System.out.println("   ████╗  ██║██╔══██╗██║   ██║██╔════╝████╗  ██║");
-         System.out.println("   ██╔██╗ ██║███████║██║   ██║█████╗  ██╔██╗ ██║");
-         System.out.println("   ██║╚██╗██║██╔══██║╚██╗ ██╔╝██╔══╝  ██║╚██╗██║");
-         System.out.println("   ██║ ╚████║██║  ██║ ╚████╔╝ ███████╗██║ ╚████║");
-         System.out.println("   ╚═╝  ╚═══╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝");
-         System.out.println();
-         System.out.println("五月的雨落下时，总是轻的、密的、带着草木破土的腥甜。有人说这是暮春的眼泪，我却觉得那是夏天在敲门——不急不缓，只为唤醒沉睡的种子。而总有阴云堆积的时刻。天低沉得像要塌下来，这时我就想起另一句誓言：愿做破云的那缕曦光。不是轰然的烈日，而是轻轻拨开厚重，一线、一丝，却足够让世界重新看见轮廓。林妍璃”——名字是咒语，也是方向。若五月无雨，我便成雨；若云层不散，我便成光。滋养与照亮，本就是同一颗心发出的两种温度。");
-
       } catch (Exception var1) {
          System.err.println("[Naven] Client load failed: " + var1.getMessage());
       }
