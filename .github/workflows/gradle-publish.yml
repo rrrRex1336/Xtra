@@ -9,9 +9,9 @@ name: Gradle Package
 
 on:
   push:
-    branches: [master]
+    branches: [ master ]
   release:
-    types: [created]
+    types: [ created ]
 
 jobs:
   build:
@@ -23,7 +23,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up JDK 17
+
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
@@ -37,8 +38,14 @@ jobs:
     - name: Build with Gradle
       run: ./gradlew build
 
-    # The USERNAME and TOKEN need to correspond to the credentials environment variables used in
-    # the publishing section of your build.gradle
+    # 上传构建产物到 GitHub Actions 页面（会在 Artifacts 列表显示）
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gradle-build-output
+        path: build/libs/*.jar  # 如有需要可修改路径或文件后缀，例如 build/libs/
+
+    # 发布到 GitHub Packages（需在 build.gradle 中配置了 publish 任务）
     - name: Publish to GitHub Packages
       run: ./gradlew publish
       env:
