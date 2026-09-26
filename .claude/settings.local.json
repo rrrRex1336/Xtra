@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew compileJava -q)",
+      "Bash(./gradlew compileJava --stacktrace)",
+      "Bash(java -version)",
+      "Bash(./gradlew -version)"
+    ]
+  }
+}

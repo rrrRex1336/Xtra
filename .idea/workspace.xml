@@ -4,13 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1c4ace27-cef1-44a4-9e05-bbcb58791b79" name="更改" comment="哈哈哈哈哈">
-      <change beforePath="$PROJECT_DIR$/.idea/gradle.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/gradle.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/mixin/MixinPacketThreadUtils.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/mixin/MixinPacketThreadUtils.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/org/mixin/MixinPacketUtils.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/org/mixin/MixinPacketUtils.java" afterDir="false" />
-    </list>
+    <list default="true" id="1c4ace27-cef1-44a4-9e05-bbcb58791b79" name="更改" comment="哈哈哈哈哈能用了" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -245,7 +239,15 @@
       <option name="project" value="LOCAL" />
       <updated>1790391698057</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="哈哈哈哈哈能用了">
+      <option name="closed" value="true" />
+      <created>1790430687413</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1790430687413</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -253,6 +255,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="哈哈哈哈哈" />
-    <option name="LAST_COMMIT_MESSAGE" value="哈哈哈哈哈" />
+    <MESSAGE value="哈哈哈哈哈能用了" />
+    <option name="LAST_COMMIT_MESSAGE" value="哈哈哈哈哈能用了" />
   </component>
 </project>
